@@ -2,16 +2,19 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import {
   emptyInquiryForm,
   InquiryFormFields,
 } from "@/components/inquiries/inquiry-form-fields";
 import { formatFriendlyDate } from "@/lib/datetime/format";
 import { createInquiryAction } from "@/lib/inquiries/actions";
-import { inquiryStageLabel } from "@/lib/inquiries/stages";
+import {
+  inquiryStageLabel,
+  workflowDepartmentLabel,
+} from "@/lib/inquiries/stages";
 import type { InquiryCreateInput, InquiryView } from "@/lib/inquiries/types";
-import { workflowDepartmentLabel } from "@/lib/inquiries/validate";
+import { useServerState } from "@/lib/react/use-server-state";
 
 type InquiriesListPanelProps = {
   orgCode: string;
@@ -31,17 +34,13 @@ export function InquiriesListPanel({
   allowCreate = true,
 }: InquiriesListPanelProps) {
   const router = useRouter();
-  const [items, setItems] = useState(initialInquiries);
+  const [items, setItems] = useServerState(initialInquiries);
   const [editorOpen, setEditorOpen] = useState(false);
   const [form, setForm] = useState<InquiryCreateInput>(emptyInquiryForm());
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [createSuccess, setCreateSuccess] = useState(false);
   const [created, setCreated] = useState<InquiryView | null>(null);
-
-  useEffect(() => {
-    setItems(initialInquiries);
-  }, [initialInquiries]);
 
   function openCreate() {
     setForm(emptyInquiryForm());

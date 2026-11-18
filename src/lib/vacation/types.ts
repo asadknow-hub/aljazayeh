@@ -1,3 +1,5 @@
+import { appDateValue } from "@/lib/datetime/format";
+
 export const LEAVE_TYPES = [
   { value: "annual", label: "Annual Leave" },
   { value: "sick", label: "Sick Leave" },
@@ -54,17 +56,9 @@ export function vacationDayCountLabel(count: number): string {
 
 export type VacationListFilter = "active" | "completed" | "rejected";
 
-function todayIsoDate(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 export function vacationListBucket(
   item: Pick<VacationRequestView, "status" | "endDate">,
-  today = todayIsoDate(),
+  today = appDateValue(),
 ): VacationListFilter {
   if (item.status === "rejected") return "rejected";
   if (item.status === "pending") return "active";

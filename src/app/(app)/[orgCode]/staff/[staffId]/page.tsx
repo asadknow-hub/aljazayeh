@@ -1,8 +1,6 @@
 import { notFound } from "next/navigation";
 import { StaffDetailClient } from "@/app/(app)/[orgCode]/staff/[staffId]/staff-detail-client";
-import { getSession } from "@/lib/auth/session";
-import { isReservedOrgCode, normalizeOrgCode } from "@/lib/org/code";
-import { resolveOrganizationForUser } from "@/lib/org/queries";
+import { firstParam, loadOrgPage } from "@/lib/org/page";
 import { getStaffForUser } from "@/lib/staff/queries";
 import {
   isStaffDetailSection,
@@ -12,38 +10,18 @@ import { listStaffVacationRequestsForUser } from "@/lib/vacation/queries";
 
 export const instant = false;
 
-type StaffDetailSearch = {
-  section?: string | string[];
-};
-
 export default async function StaffDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ orgCode: string; staffId: string }>;
-  searchParams: Promise<StaffDetailSearch>;
+  searchParams: Promise<{ section?: string | string[] }>;
 }) {
-  const session = await getSession();
-  if (!session) {
-    notFound();
-  }
-
-  const { orgCode: rawCode, staffId } = await params;
-  const orgCode = normalizeOrgCode(rawCode);
-
-  if (!orgCode || isReservedOrgCode(orgCode) || !staffId) {
-    notFound();
-  }
-
-  const org = await resolveOrganizationForUser(session.userId, orgCode);
-  if (!org) {
-    notFound();
-  }
+  const { orgCode, staffId } = await params;
+  const { session, org } = await loadOrgPage(orgCode);
 
   const staff = await getStaffForUser(session.userId, org.code, staffId);
-  if (!staff) {
-    notFound();
-  }
+  if (!staff) notFound();
 
   const vacations = await listStaffVacationRequestsForUser(
     session.userId,
@@ -51,16 +29,14 @@ export default async function StaffDetailPage({
     staffId,
   );
 
-  const query = await searchParams;
-  const rawSection = Array.isArray(query.section)
-    ? query.section[0]
-    : query.section;
-  const initialSection: StaffDetailSection =
-    rawSection && isStaffDetailSection(rawSection) ? rawSection : "profile";
+  const section = firstParam((await searchParams).section);
+  const initialSection: StaffDetailSection = isStaffDetailSection(section)
+    ? section
+    : "profile";
 
   return (
     <StaffDetailClient
-      org={{ id: org.id, name: org.name, code: org.code }}
+      org={org}
       initialStaff={staff}
       initialVacations={vacations}
       initialSection={initialSection}

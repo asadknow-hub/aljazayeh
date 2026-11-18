@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { usePageTitle } from "@/components/providers/page-title-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
@@ -56,7 +56,7 @@ type StaffDetailClientProps = {
 export function StaffDetailClient({
   org,
   initialStaff,
-  initialVacations,
+  initialVacations: vacations,
   initialSection,
 }: StaffDetailClientProps) {
   usePageTitle(initialStaff.fullName);
@@ -64,14 +64,9 @@ export function StaffDetailClient({
   const { showToast } = useToast();
 
   const [staff, setStaff] = useState(initialStaff);
-  const [vacations, setVacations] = useState(initialVacations);
   const [vacationFilter, setVacationFilter] =
     useState<VacationListFilter>("active");
   const [section, setSection] = useState<StaffDetailSection>(initialSection);
-
-  useEffect(() => {
-    setVacations(initialVacations);
-  }, [initialVacations]);
   const [profile, setProfile] = useState<StaffProfileInput>({
     fullName: initialStaff.fullName,
     email: initialStaff.email,

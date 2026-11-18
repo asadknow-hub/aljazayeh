@@ -1,38 +1,16 @@
 import "server-only";
 
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { withTenantContext } from "@/db/client";
-import { memberships, organizations, visitorLogs } from "@/db/schema";
+import { visitorLogs } from "@/db/schema";
 import { createStarterInquiryInTx } from "@/lib/inquiries/queries";
-import { normalizeOrgCode } from "@/lib/org/code";
+import { resolveOrg } from "@/lib/org/resolve";
 import type {
   VisitorLogInput,
   VisitorLogView,
   VisitorPurpose,
 } from "@/lib/visitors/types";
 import { normalizeVisitorLogInput } from "@/lib/visitors/validate";
-
-async function resolveOrgId(
-  tx: Parameters<Parameters<typeof withTenantContext>[1]>[0],
-  userId: string,
-  orgCode: string,
-) {
-  const code = normalizeOrgCode(orgCode);
-  const [org] = await tx
-    .select({ id: organizations.id, code: organizations.code })
-    .from(organizations)
-    .innerJoin(
-      memberships,
-      and(
-        eq(memberships.organizationId, organizations.id),
-        eq(memberships.userId, userId),
-      ),
-    )
-    .where(eq(organizations.code, code))
-    .limit(1);
-
-  return org ?? null;
-}
 
 function toView(row: typeof visitorLogs.$inferSelect): VisitorLogView {
   return {
@@ -54,7 +32,7 @@ export async function listVisitorLogsForUser(
   orgCode: string,
 ): Promise<VisitorLogView[]> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) return [];
 
     const rows = await tx
@@ -75,7 +53,7 @@ export async function createVisitorLogForUser(
   const normalized = normalizeVisitorLogInput(input);
 
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) {
       throw new Error("Company not found.");
     }

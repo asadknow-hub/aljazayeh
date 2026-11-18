@@ -13,7 +13,3 @@ function required(name: string): string {
 export function getDatabaseUrl(): string {
   return required("DATABASE_URL");
 }
-
-export function getAuthSecret(): string {
-  return required("AUTH_SECRET");
-}

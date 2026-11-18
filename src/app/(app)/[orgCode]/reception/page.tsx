@@ -1,8 +1,5 @@
-import { notFound } from "next/navigation";
 import { ReceptionClient } from "@/app/(app)/[orgCode]/reception/reception-client";
-import { getSession } from "@/lib/auth/session";
-import { isReservedOrgCode, normalizeOrgCode } from "@/lib/org/code";
-import { resolveOrganizationForUser } from "@/lib/org/queries";
+import { firstParam, loadOrgPage } from "@/lib/org/page";
 import {
   isReceptionSection,
   type ReceptionSection,
@@ -13,33 +10,14 @@ import { listVisitorLogsForUser } from "@/lib/visitors/queries";
 
 export const instant = false;
 
-type ReceptionSearch = {
-  section?: string | string[];
-};
-
 export default async function ReceptionPage({
   params,
   searchParams,
 }: {
   params: Promise<{ orgCode: string }>;
-  searchParams: Promise<ReceptionSearch>;
+  searchParams: Promise<{ section?: string | string[] }>;
 }) {
-  const session = await getSession();
-  if (!session) {
-    notFound();
-  }
-
-  const { orgCode: rawCode } = await params;
-  const orgCode = normalizeOrgCode(rawCode);
-
-  if (!orgCode || isReservedOrgCode(orgCode)) {
-    notFound();
-  }
-
-  const org = await resolveOrganizationForUser(session.userId, orgCode);
-  if (!org) {
-    notFound();
-  }
+  const { session, org } = await loadOrgPage((await params).orgCode);
 
   const [staff, vacations, visitors] = await Promise.all([
     listStaffForUser(session.userId, org.code),
@@ -47,16 +25,14 @@ export default async function ReceptionPage({
     listVisitorLogsForUser(session.userId, org.code),
   ]);
 
-  const query = await searchParams;
-  const rawSection = Array.isArray(query.section)
-    ? query.section[0]
-    : query.section;
-  const initialSection: ReceptionSection =
-    rawSection && isReceptionSection(rawSection) ? rawSection : "vacation";
+  const section = firstParam((await searchParams).section);
+  const initialSection: ReceptionSection = isReceptionSection(section)
+    ? section
+    : "vacation";
 
   return (
     <ReceptionClient
-      org={{ id: org.id, name: org.name, code: org.code }}
+      org={org}
       staffOptions={staff.map((item) => ({
         id: item.id,
         fullName: item.fullName,

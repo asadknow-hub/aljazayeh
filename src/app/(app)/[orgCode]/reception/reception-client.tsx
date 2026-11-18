@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { usePageTitle } from "@/components/providers/page-title-provider";
 import { DurationCalendar } from "@/components/vacation/duration-calendar";
 import {
@@ -9,6 +9,7 @@ import {
   formatVacationDuration,
 } from "@/lib/datetime/format";
 import { VisitorsPanel } from "@/app/(app)/[orgCode]/reception/visitors-panel";
+import { useServerState } from "@/lib/react/use-server-state";
 import { createVacationRequestAction } from "@/lib/vacation/actions";
 import {
   RECEPTION_SECTIONS,
@@ -78,7 +79,7 @@ export function ReceptionClient({
   const router = useRouter();
 
   const [section, setSection] = useState<ReceptionSection>(initialSection);
-  const [vacations, setVacations] = useState(initialVacations);
+  const [vacations, setVacations] = useServerState(initialVacations);
   const [listFilter, setListFilter] = useState<VacationListFilter>("active");
   const [editorOpen, setEditorOpen] = useState(false);
   const [createSuccess, setCreateSuccess] = useState(false);
@@ -89,10 +90,6 @@ export function ReceptionClient({
   const [durationOpen, setDurationOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-
-  useEffect(() => {
-    setVacations(initialVacations);
-  }, [initialVacations]);
 
   const activeStaff = useMemo(
     () => staffOptions.filter((item) => item.status !== "inactive"),

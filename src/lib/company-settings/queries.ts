@@ -1,9 +1,8 @@
 import "server-only";
 
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { withTenantContext } from "@/db/client";
 import {
-  memberships,
   organizationSettings,
   organizations,
   users,
@@ -17,7 +16,7 @@ import type {
   CompanySettingsView,
 } from "@/lib/company-settings/types";
 import { normalizeCompanySettingsInput } from "@/lib/company-settings/validate";
-import { normalizeOrgCode } from "@/lib/org/code";
+import { resolveOrg } from "@/lib/org/resolve";
 
 const emptySettings = {
   telephoneNumber: "",
@@ -35,25 +34,8 @@ export async function getCompanySettingsForUser(
   userId: string,
   orgCode: string,
 ): Promise<CompanySettingsView | null> {
-  const code = normalizeOrgCode(orgCode);
-
   return withTenantContext(userId, async (tx) => {
-    const [org] = await tx
-      .select({
-        id: organizations.id,
-        name: organizations.name,
-        code: organizations.code,
-      })
-      .from(organizations)
-      .innerJoin(
-        memberships,
-        and(
-          eq(memberships.organizationId, organizations.id),
-          eq(memberships.userId, userId),
-        ),
-      )
-      .where(eq(organizations.code, code))
-      .limit(1);
+    const org = await resolveOrg(tx, userId, orgCode);
 
     if (!org) return null;
 
@@ -104,25 +86,10 @@ export async function saveCompanySettingsForUser(
   orgCode: string,
   input: CompanySettingsInput,
 ): Promise<CompanySettingsView> {
-  const code = normalizeOrgCode(orgCode);
   const normalized = normalizeCompanySettingsInput(input);
 
   return withTenantContext(userId, async (tx) => {
-    const [org] = await tx
-      .select({
-        id: organizations.id,
-        code: organizations.code,
-      })
-      .from(organizations)
-      .innerJoin(
-        memberships,
-        and(
-          eq(memberships.organizationId, organizations.id),
-          eq(memberships.userId, userId),
-        ),
-      )
-      .where(eq(organizations.code, code))
-      .limit(1);
+    const org = await resolveOrg(tx, userId, orgCode);
 
     if (!org) {
       throw new Error("Company not found.");

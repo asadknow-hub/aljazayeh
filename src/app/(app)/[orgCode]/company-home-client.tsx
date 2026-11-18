@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { DepartmentIcon } from "@/components/departments/department-icons";
 import { usePageTitle } from "@/components/providers/page-title-provider";
 import { useToast } from "@/components/providers/toast-provider";
@@ -14,6 +14,7 @@ import {
   DEPARTMENTS,
   departmentPath,
 } from "@/lib/departments/catalog";
+import { useServerState } from "@/lib/react/use-server-state";
 import {
   approveVacationRequestAction,
   rejectVacationRequestAction,
@@ -39,13 +40,9 @@ export function CompanyHomeClient({
   usePageTitle("Select Department");
   const router = useRouter();
   const { showToast } = useToast();
-  const [items, setItems] = useState(pendingVacations);
+  const [items, setItems] = useServerState(pendingVacations);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setItems(pendingVacations);
-  }, [pendingVacations]);
 
   async function onApprove(id: string) {
     setError(null);

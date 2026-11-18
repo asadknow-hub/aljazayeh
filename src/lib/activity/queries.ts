@@ -1,44 +1,20 @@
 import "server-only";
 
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { withTenantContext } from "@/db/client";
 import {
-  memberships,
-  organizations,
   staffActivityLogs,
   staffMembers,
 } from "@/db/schema";
 import type { StaffActivityLogView } from "@/lib/activity/types";
-import { normalizeOrgCode } from "@/lib/org/code";
-
-async function resolveOrgId(
-  tx: Parameters<Parameters<typeof withTenantContext>[1]>[0],
-  userId: string,
-  orgCode: string,
-) {
-  const code = normalizeOrgCode(orgCode);
-  const [org] = await tx
-    .select({ id: organizations.id, code: organizations.code })
-    .from(organizations)
-    .innerJoin(
-      memberships,
-      and(
-        eq(memberships.organizationId, organizations.id),
-        eq(memberships.userId, userId),
-      ),
-    )
-    .where(eq(organizations.code, code))
-    .limit(1);
-
-  return org ?? null;
-}
+import { resolveOrg } from "@/lib/org/resolve";
 
 export async function listStaffActivityLogsForUser(
   userId: string,
   orgCode: string,
 ): Promise<StaffActivityLogView[]> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) return [];
 
     const rows = await tx

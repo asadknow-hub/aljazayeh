@@ -9,8 +9,6 @@ import {
   inquiryStageApprovals,
   inquiryStageEvents,
   inquiryWorkflowSettings,
-  memberships,
-  organizations,
   staffDepartmentAssignments,
   staffMembers,
   users,
@@ -27,7 +25,6 @@ import {
   isInquiryStageKey,
   isInquiryWorkflowDepartmentKey,
   type InquiryApprovalRoleKey,
-  type InquiryStageKey,
   type InquiryWorkflowDepartmentKey,
   type InquiryWorkflowMap,
 } from "@/lib/inquiries/stages";
@@ -43,29 +40,7 @@ import {
   normalizeInquiryCreateInput,
   normalizeInquiryWorkflowMap,
 } from "@/lib/inquiries/validate";
-import { normalizeOrgCode } from "@/lib/org/code";
-
-async function resolveOrgId(
-  tx: DbTransaction,
-  userId: string,
-  orgCode: string,
-) {
-  const code = normalizeOrgCode(orgCode);
-  const [org] = await tx
-    .select({ id: organizations.id, code: organizations.code })
-    .from(organizations)
-    .innerJoin(
-      memberships,
-      and(
-        eq(memberships.organizationId, organizations.id),
-        eq(memberships.userId, userId),
-      ),
-    )
-    .where(eq(organizations.code, code))
-    .limit(1);
-
-  return org ?? null;
-}
+import { resolveOrg } from "@/lib/org/resolve";
 
 async function ensureWorkflowRows(tx: DbTransaction, organizationId: string) {
   const existing = await tx
@@ -196,7 +171,7 @@ export async function getInquiryWorkflowMapForUser(
   orgCode: string,
 ): Promise<InquiryWorkflowMap | null> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) return null;
     return loadWorkflowMap(tx, org.id);
   });
@@ -210,7 +185,7 @@ export async function saveInquiryWorkflowMapForUser(
   const map = normalizeInquiryWorkflowMap(input);
 
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) throw new Error("Company not found.");
 
     await ensureWorkflowRows(tx, org.id);
@@ -466,7 +441,7 @@ export async function listInquiriesForUser(
   orgCode: string,
 ): Promise<InquiryView[]> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) return [];
 
     const rows = await tx
@@ -525,7 +500,7 @@ export async function getInquiryForUser(
   inquiryId: string,
 ): Promise<InquiryView | null> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) return null;
 
     const [row] = await tx
@@ -565,7 +540,7 @@ export async function addInquiryCommentForUser(
   }
 
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) throw new Error("Company not found.");
 
     const [existing] = await tx
@@ -650,7 +625,7 @@ export async function createInquiryForUser(
   const normalized = normalizeInquiryCreateInput(input);
 
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) throw new Error("Company not found.");
 
     const map = await loadWorkflowMap(tx, org.id);
@@ -713,7 +688,7 @@ export async function updateInquiryForUser(
   const normalized = normalizeInquiryCreateInput(input);
 
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) throw new Error("Company not found.");
 
     const [existing] = await tx
@@ -771,7 +746,7 @@ export async function listAssignableStaffForDepartment(
   departmentKey: InquiryWorkflowDepartmentKey,
 ): Promise<{ id: string; fullName: string; jobTitle: string }[]> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) return [];
 
     const rows = await tx
@@ -814,7 +789,7 @@ export async function assignInquiryForUser(
   staffId: string,
 ): Promise<InquiryView> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) throw new Error("Company not found.");
 
     const [existing] = await tx
@@ -886,7 +861,7 @@ export async function approveInquiryStageForUser(
   inquiryId: string,
 ): Promise<InquiryView> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) throw new Error("Company not found.");
 
     const [existing] = await tx
@@ -985,7 +960,7 @@ export async function moveInquiryStageForUser(
   direction: "previous" | "next",
 ): Promise<InquiryView> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) throw new Error("Company not found.");
 
     const [existing] = await tx

@@ -22,11 +22,25 @@ import {
   INQUIRY_APPROVAL_ROLES,
   INQUIRY_STAGES,
   inquiryStageLabel,
+  workflowDepartmentLabel,
 } from "@/lib/inquiries/stages";
 import type { InquiryCreateInput, InquiryView } from "@/lib/inquiries/types";
-import { workflowDepartmentLabel } from "@/lib/inquiries/validate";
 
 type StaffOption = { id: string; fullName: string; jobTitle: string };
+
+function formFromInquiry(inquiry: InquiryView): InquiryCreateInput {
+  return {
+    customerName: inquiry.customerName,
+    contact: inquiry.contact,
+    deliveryExpectedOn: inquiry.deliveryExpectedOn,
+    notes: inquiry.notes,
+    lineItems: inquiry.lineItems.map((item) => ({
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+    })),
+  };
+}
 
 type InquiryDetailClientProps = {
   orgCode: string;
@@ -42,17 +56,7 @@ export function InquiryDetailClient({
   const router = useRouter();
   const { showToast } = useToast();
   const [inquiry, setInquiry] = useState(initialInquiry);
-  const [form, setForm] = useState<InquiryCreateInput>({
-    customerName: initialInquiry.customerName,
-    contact: initialInquiry.contact,
-    deliveryExpectedOn: initialInquiry.deliveryExpectedOn,
-    notes: initialInquiry.notes,
-    lineItems: initialInquiry.lineItems.map((item) => ({
-      description: item.description,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-    })),
-  });
+  const [form, setForm] = useState(() => formFromInquiry(initialInquiry));
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
   const [assignStaffId, setAssignStaffId] = useState(
     initialInquiry.assignedStaffId ?? "",
@@ -63,21 +67,14 @@ export function InquiryDetailClient({
 
   const locked = !inquiry.assignedStaffId;
 
-  useEffect(() => {
+  // A fresh copy from the server replaces local edits.
+  const [seenInitial, setSeenInitial] = useState(initialInquiry);
+  if (seenInitial !== initialInquiry) {
+    setSeenInitial(initialInquiry);
     setInquiry(initialInquiry);
-    setForm({
-      customerName: initialInquiry.customerName,
-      contact: initialInquiry.contact,
-      deliveryExpectedOn: initialInquiry.deliveryExpectedOn,
-      notes: initialInquiry.notes,
-      lineItems: initialInquiry.lineItems.map((item) => ({
-        description: item.description,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-      })),
-    });
+    setForm(formFromInquiry(initialInquiry));
     setAssignStaffId(initialInquiry.assignedStaffId ?? "");
-  }, [initialInquiry]);
+  }
 
   useEffect(() => {
     let cancelled = false;

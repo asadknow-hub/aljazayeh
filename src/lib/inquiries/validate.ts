@@ -3,7 +3,6 @@ import {
   isInquiryApprovalRoleKey,
   isInquiryWorkflowDepartmentKey,
   type InquiryStageKey,
-  type InquiryWorkflowDepartmentKey,
   type InquiryWorkflowMap,
   type InquiryWorkflowStageConfig,
 } from "@/lib/inquiries/stages";
@@ -112,13 +111,4 @@ export function assertAdjacentStageMove(
   if (fromIndex < 0 || toIndex < 0 || Math.abs(fromIndex - toIndex) !== 1) {
     throw new Error("Stage can only move to the previous or next step.");
   }
-}
-
-export function workflowDepartmentLabel(
-  key: InquiryWorkflowDepartmentKey,
-): string {
-  if (key === "sales") return "Sales";
-  if (key === "admin") return "Admin";
-  if (key === "engineering") return "Engineering Department";
-  return "Accounts";
 }

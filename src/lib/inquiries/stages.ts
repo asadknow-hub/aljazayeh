@@ -60,14 +60,18 @@ export function isInquiryWorkflowDepartmentKey(
   return INQUIRY_WORKFLOW_DEPARTMENTS.some((dept) => dept.key === value);
 }
 
+export function workflowDepartmentLabel(
+  key: InquiryWorkflowDepartmentKey,
+): string {
+  return (
+    INQUIRY_WORKFLOW_DEPARTMENTS.find((dept) => dept.key === key)?.label ?? key
+  );
+}
+
 export function isInquiryApprovalRoleKey(
   value: string,
 ): value is InquiryApprovalRoleKey {
   return INQUIRY_APPROVAL_ROLES.some((role) => role.key === value);
-}
-
-export function isInvoiceStageKey(value: string): value is InvoiceStageKey {
-  return (INVOICE_STAGE_KEYS as readonly string[]).includes(value);
 }
 
 export function inquiryStageLabel(key: string): string {

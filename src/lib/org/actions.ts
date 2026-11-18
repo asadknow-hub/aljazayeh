@@ -5,15 +5,9 @@ import { requireSession } from "@/lib/auth/session";
 import {
   createOrganizationForUser,
   isOrganizationCodeAvailable,
-  listUserOrganizations,
   setDefaultOrganizationForUser,
 } from "@/lib/org/queries";
 import { normalizeOrgCode, slugCode } from "@/lib/org/code";
-
-export async function getMyOrganizationsAction() {
-  const session = await requireSession();
-  return listUserOrganizations(session.userId);
-}
 
 export async function checkOrgCodeAvailableAction(code: string) {
   await requireSession();

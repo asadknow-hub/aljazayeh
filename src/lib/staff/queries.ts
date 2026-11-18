@@ -3,8 +3,6 @@ import "server-only";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { withTenantContext } from "@/db/client";
 import {
-  memberships,
-  organizations,
   staffDepartmentAssignments,
   staffMembers,
 } from "@/db/schema";
@@ -13,7 +11,7 @@ import {
   isAssignableDepartmentKey,
   type StaffRoleKey,
 } from "@/lib/departments/catalog";
-import { normalizeOrgCode } from "@/lib/org/code";
+import { resolveOrg } from "@/lib/org/resolve";
 import type {
   StaffContractInput,
   StaffInput,
@@ -28,28 +26,6 @@ import {
   normalizeStaffProfileInput,
   normalizeStaffSalaryInput,
 } from "@/lib/staff/validate";
-
-async function resolveOrgId(
-  tx: Parameters<Parameters<typeof withTenantContext>[1]>[0],
-  userId: string,
-  orgCode: string,
-) {
-  const code = normalizeOrgCode(orgCode);
-  const [org] = await tx
-    .select({ id: organizations.id, code: organizations.code })
-    .from(organizations)
-    .innerJoin(
-      memberships,
-      and(
-        eq(memberships.organizationId, organizations.id),
-        eq(memberships.userId, userId),
-      ),
-    )
-    .where(eq(organizations.code, code))
-    .limit(1);
-
-  return org ?? null;
-}
 
 function toView(
   row: typeof staffMembers.$inferSelect,
@@ -113,7 +89,7 @@ export async function listStaffForUser(
   orgCode: string,
 ): Promise<StaffView[]> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) return [];
 
     const rows = await tx
@@ -137,7 +113,7 @@ export async function getStaffForUser(
   staffId: string,
 ): Promise<StaffView | null> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) return null;
 
     const [row] = await tx
@@ -166,7 +142,7 @@ export async function createStaffForUser(
   const normalized = normalizeStaffInput(input);
 
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) {
       throw new Error("Company not found.");
     }
@@ -221,15 +197,6 @@ export async function createStaffForUser(
   });
 }
 
-export async function updateStaffForUser(
-  userId: string,
-  orgCode: string,
-  staffId: string,
-  input: StaffInput,
-): Promise<StaffView> {
-  return updateStaffProfileForUser(userId, orgCode, staffId, input);
-}
-
 export async function updateStaffProfileForUser(
   userId: string,
   orgCode: string,
@@ -239,7 +206,7 @@ export async function updateStaffProfileForUser(
   const normalized = normalizeStaffProfileInput(input);
 
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) {
       throw new Error("Company not found.");
     }
@@ -307,7 +274,7 @@ export async function updateStaffSalaryForUser(
   const normalized = normalizeStaffSalaryInput(input);
 
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) {
       throw new Error("Company not found.");
     }
@@ -348,7 +315,7 @@ export async function updateStaffContractForUser(
   const normalized = normalizeStaffContractInput(input);
 
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) {
       throw new Error("Company not found.");
     }
@@ -386,7 +353,7 @@ export async function deleteStaffForUser(
   staffId: string,
 ): Promise<void> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) {
       throw new Error("Company not found.");
     }

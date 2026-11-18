@@ -11,11 +11,7 @@ import {
   approveInquiryStageForUser,
   assignInquiryForUser,
   createInquiryForUser,
-  getInquiryForUser,
-  getInquiryWorkflowMapForUser,
   listAssignableStaffForDepartment,
-  listInquiriesForUser,
-  listInvoiceQueueForUser,
   moveInquiryStageForUser,
   saveInquiryWorkflowMapForUser,
   updateInquiryForUser,
@@ -43,11 +39,6 @@ function revalidateInquiryPaths(orgCode: string, inquiryId?: string) {
   }
 }
 
-export async function getInquiryWorkflowMapAction(orgCode: string) {
-  const session = await requireSession();
-  return getInquiryWorkflowMapForUser(session.userId, orgCode);
-}
-
 export async function saveInquiryWorkflowMapAction(
   orgCode: string,
   input: InquiryWorkflowMap,
@@ -60,24 +51,6 @@ export async function saveInquiryWorkflowMapAction(
   );
   revalidateInquiryPaths(orgCode);
   return saved;
-}
-
-export async function listInquiriesAction(orgCode: string) {
-  const session = await requireSession();
-  return listInquiriesForUser(session.userId, orgCode);
-}
-
-export async function listInvoiceQueueAction(
-  orgCode: string,
-  departmentKey: InquiryWorkflowDepartmentKey,
-) {
-  const session = await requireSession();
-  return listInvoiceQueueForUser(session.userId, orgCode, departmentKey);
-}
-
-export async function getInquiryAction(orgCode: string, inquiryId: string) {
-  const session = await requireSession();
-  return getInquiryForUser(session.userId, orgCode, inquiryId);
 }
 
 export async function createInquiryAction(

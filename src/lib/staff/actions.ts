@@ -6,7 +6,6 @@ import { normalizeOrgCode } from "@/lib/org/code";
 import {
   createStaffForUser,
   deleteStaffForUser,
-  listStaffForUser,
   updateStaffContractForUser,
   updateStaffProfileForUser,
   updateStaffSalaryForUser,
@@ -28,32 +27,11 @@ function revalidateStaff(orgCode: string, staffId?: string) {
   }
 }
 
-export async function listStaffAction(orgCode: string) {
-  const session = await requireSession();
-  return listStaffForUser(session.userId, orgCode);
-}
-
 export async function createStaffAction(orgCode: string, input: StaffInput) {
   const session = await requireSession();
   const created = await createStaffForUser(session.userId, orgCode, input);
   revalidateStaff(orgCode, created.id);
   return created;
-}
-
-export async function updateStaffAction(
-  orgCode: string,
-  staffId: string,
-  input: StaffInput,
-) {
-  const session = await requireSession();
-  const updated = await updateStaffProfileForUser(
-    session.userId,
-    orgCode,
-    staffId,
-    input,
-  );
-  revalidateStaff(orgCode, staffId);
-  return updated;
 }
 
 export async function updateStaffProfileAction(

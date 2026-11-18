@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import {
-  useEffect,
   useMemo,
   useState,
   type FormEvent,
@@ -33,20 +32,10 @@ type ProfileSettingsClientProps = {
 };
 
 function LoginActivityWhen({ iso }: { iso: string }) {
-  const [label, setLabel] = useState<string | null>(null);
-
-  useEffect(() => {
-    const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) {
-      setLabel(iso);
-      return;
-    }
-    setLabel(formatFriendlyDateTime(date));
-  }, [iso]);
-
+  const date = new Date(iso);
   return (
-    <time dateTime={iso} suppressHydrationWarning>
-      {label ?? "—"}
+    <time dateTime={iso}>
+      {Number.isNaN(date.getTime()) ? iso : formatFriendlyDateTime(date)}
     </time>
   );
 }

@@ -3,13 +3,11 @@ import "server-only";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { withTenantContext } from "@/db/client";
 import {
-  memberships,
-  organizations,
   staffMembers,
   vacationRequests,
 } from "@/db/schema";
 import { insertStaffActivityLog } from "@/lib/activity/record";
-import { normalizeOrgCode } from "@/lib/org/code";
+import { resolveOrg } from "@/lib/org/resolve";
 import {
   leaveTypeLabel,
   parseSelectedDatesJson,
@@ -19,28 +17,6 @@ import {
   type VacationStatus,
 } from "@/lib/vacation/types";
 import { normalizeVacationRequestInput } from "@/lib/vacation/validate";
-
-async function resolveOrgId(
-  tx: Parameters<Parameters<typeof withTenantContext>[1]>[0],
-  userId: string,
-  orgCode: string,
-) {
-  const code = normalizeOrgCode(orgCode);
-  const [org] = await tx
-    .select({ id: organizations.id, code: organizations.code })
-    .from(organizations)
-    .innerJoin(
-      memberships,
-      and(
-        eq(memberships.organizationId, organizations.id),
-        eq(memberships.userId, userId),
-      ),
-    )
-    .where(eq(organizations.code, code))
-    .limit(1);
-
-  return org ?? null;
-}
 
 function toView(
   row: typeof vacationRequests.$inferSelect,
@@ -75,7 +51,7 @@ export async function listPendingVacationRequestsForUser(
   orgCode: string,
 ): Promise<VacationRequestView[]> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) return [];
 
     const rows = await tx
@@ -105,7 +81,7 @@ export async function listOrgVacationRequestsForUser(
   orgCode: string,
 ): Promise<VacationRequestView[]> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) return [];
 
     const rows = await tx
@@ -134,7 +110,7 @@ export async function listStaffVacationRequestsForUser(
   staffId: string,
 ): Promise<VacationRequestView[]> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) return [];
 
     const [staff] = await tx
@@ -177,7 +153,7 @@ export async function createVacationRequestForUser(
   const normalized = normalizeVacationRequestInput(input);
 
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) {
       throw new Error("Company not found.");
     }
@@ -255,7 +231,7 @@ export async function reviewVacationRequestForUser(
   reviewNote = "",
 ): Promise<VacationRequestView> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) {
       throw new Error("Company not found.");
     }

@@ -6,31 +6,40 @@ import { InquiriesListPanel } from "@/components/inquiries/inquiries-list-panel"
 import { InvoiceQueuePanel } from "@/components/inquiries/invoice-queue-panel";
 import { usePageTitle } from "@/components/providers/page-title-provider";
 import {
-  DEPT_WORKFLOW_SECTIONS,
-  type DeptWorkflowSection,
-} from "@/lib/departments/shell-sections";
+  DEPARTMENT_SECTIONS,
+  type DepartmentSection,
+} from "@/lib/departments/sections";
+import {
+  workflowDepartmentLabel,
+  type InquiryWorkflowDepartmentKey,
+} from "@/lib/inquiries/stages";
 import type { InquiryView } from "@/lib/inquiries/types";
 
-type AccountsClientProps = {
-  org: { id: string; name: string; code: string };
-  initialSection: DeptWorkflowSection;
+type DepartmentWorkspaceProps = {
+  org: { name: string; code: string };
+  departmentKey: InquiryWorkflowDepartmentKey;
+  initialSection: DepartmentSection;
   inquiries: InquiryView[];
   invoiceQueue: InquiryView[];
 };
 
-export function AccountsClient({
+export function DepartmentWorkspace({
   org,
+  departmentKey,
   initialSection,
   inquiries,
   invoiceQueue,
-}: AccountsClientProps) {
-  usePageTitle("Accounts");
-  const router = useRouter();
-  const [section, setSection] = useState<DeptWorkflowSection>(initialSection);
+}: DepartmentWorkspaceProps) {
+  const label = workflowDepartmentLabel(departmentKey);
+  const basePath = `/${org.code}/${departmentKey}`;
 
-  function selectSection(next: DeptWorkflowSection) {
+  usePageTitle(label);
+  const router = useRouter();
+  const [section, setSection] = useState<DepartmentSection>(initialSection);
+
+  function selectSection(next: DepartmentSection) {
     setSection(next);
-    router.replace(`/${org.code}/accounts?section=${next}`, { scroll: false });
+    router.replace(`${basePath}?section=${next}`, { scroll: false });
   }
 
   return (
@@ -39,12 +48,12 @@ export function AccountsClient({
         <aside className="sticky top-12 z-10 flex h-[calc(100dvh-3rem)] w-44 shrink-0 flex-col overflow-y-auto border-r border-zinc-200 bg-white sm:w-56">
           <div className="border-b border-zinc-200 px-3 py-3">
             <p className="truncate font-display text-sm font-semibold text-zinc-900">
-              Accounts
+              {label}
             </p>
             <p className="mt-0.5 truncate text-xs text-zinc-500">{org.name}</p>
           </div>
           <nav className="flex flex-col gap-0.5 p-2 sm:p-3">
-            {DEPT_WORKFLOW_SECTIONS.map((item) => {
+            {DEPARTMENT_SECTIONS.map((item) => {
               const active = item.key === section;
               return (
                 <button
@@ -69,14 +78,14 @@ export function AccountsClient({
             <InquiriesListPanel
               orgCode={org.code}
               initialInquiries={inquiries}
-              detailBasePath={`/${org.code}/accounts/inquiries`}
-              allowCreate={false}
+              detailBasePath={`${basePath}/inquiries`}
+              allowCreate={departmentKey === "admin"}
             />
           ) : null}
           {section === "invoice" ? (
             <InvoiceQueuePanel
-              departmentLabel="Accounts"
-              detailBasePath={`/${org.code}/accounts/inquiries`}
+              departmentLabel={label}
+              detailBasePath={`${basePath}/inquiries`}
               initialInquiries={invoiceQueue}
             />
           ) : null}

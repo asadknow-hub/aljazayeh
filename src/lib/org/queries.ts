@@ -17,10 +17,8 @@ import {
   users,
 } from "@/db/schema";
 import { INQUIRY_STAGES } from "@/lib/inquiries/stages";
-import {
-  assertValidOrgCode,
-  normalizeOrgCode,
-} from "@/lib/org/code";
+import { assertValidOrgCode } from "@/lib/org/code";
+import { resolveOrg } from "@/lib/org/resolve";
 
 export type OrgListItem = {
   id: string;
@@ -96,27 +94,7 @@ export async function resolveOrganizationForUser(
   userId: string,
   orgCode: string,
 ) {
-  const code = normalizeOrgCode(orgCode);
-  return withTenantContext(userId, async (tx) => {
-    const [org] = await tx
-      .select({
-        id: organizations.id,
-        name: organizations.name,
-        code: organizations.code,
-      })
-      .from(organizations)
-      .innerJoin(
-        memberships,
-        and(
-          eq(memberships.organizationId, organizations.id),
-          eq(memberships.userId, userId),
-        ),
-      )
-      .where(eq(organizations.code, code))
-      .limit(1);
-
-    return org ?? null;
-  });
+  return withTenantContext(userId, (tx) => resolveOrg(tx, userId, orgCode));
 }
 
 export async function isOrganizationCodeAvailable(

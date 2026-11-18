@@ -6,9 +6,6 @@ import { normalizeOrgCode } from "@/lib/org/code";
 import type { VacationRequestInput } from "@/lib/vacation/types";
 import {
   createVacationRequestForUser,
-  listOrgVacationRequestsForUser,
-  listPendingVacationRequestsForUser,
-  listStaffVacationRequestsForUser,
   reviewVacationRequestForUser,
 } from "@/lib/vacation/queries";
 
@@ -21,24 +18,6 @@ function revalidateVacation(orgCode: string, staffId?: string) {
   if (staffId) {
     revalidatePath(`/${code}/staff/${staffId}`);
   }
-}
-
-export async function listPendingVacationRequestsAction(orgCode: string) {
-  const session = await requireSession();
-  return listPendingVacationRequestsForUser(session.userId, orgCode);
-}
-
-export async function listOrgVacationRequestsAction(orgCode: string) {
-  const session = await requireSession();
-  return listOrgVacationRequestsForUser(session.userId, orgCode);
-}
-
-export async function listStaffVacationRequestsAction(
-  orgCode: string,
-  staffId: string,
-) {
-  const session = await requireSession();
-  return listStaffVacationRequestsForUser(session.userId, orgCode, staffId);
 }
 
 export async function createVacationRequestAction(
