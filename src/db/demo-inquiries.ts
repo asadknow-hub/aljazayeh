@@ -17,6 +17,7 @@ import {
   type InquiryWorkflowDepartmentKey,
 } from "@/lib/inquiries/stages";
 import type { InquiryLineItemInput } from "@/lib/inquiries/types";
+import { UserError } from "@/lib/errors";
 
 type Person = { userId: string; staffId: string };
 
@@ -263,19 +264,34 @@ export async function loadDemoInquiries(
       details: `${demo.title}. Drawing to follow from the customer.`,
     };
 
-    const created = await createInquiryForUser(
-      handlers.admin.userId,
-      orgCode,
-      { fields: inquiryFields, lineItems },
-    );
-    const id = created.id;
-
-    if (demo.lostBecause) {
-      await closeInquiryForUser(ownerId, orgCode, id, demo.lostBecause);
-      continue;
+    // If the company's own settings get in the way (a step handled by a
+    // department with no demo person), the inquiry stays where it got to.
+    try {
+      const created = await createInquiryForUser(
+        handlers.admin.userId,
+        orgCode,
+        { fields: inquiryFields, lineItems },
+      );
+      if (demo.lostBecause) {
+        await closeInquiryForUser(ownerId, orgCode, created.id, demo.lostBecause);
+      } else {
+        await advance(demo, created.id, inquiryFields);
+      }
+    } catch (error) {
+      if (!(error instanceof UserError)) throw error;
+      console.log(`  ${demo.title}: stopped early (${error.message})`);
     }
+  }
 
-    // Work through the steps up to the one this inquiry is left at.
+  console.log(`Demo inquiries loaded: ${DEMO_INQUIRIES.length}.`);
+
+  /** Work through the steps up to the one this inquiry is left at. */
+  async function advance(
+    demo: DemoInquiry,
+    id: string,
+    inquiryFields: Record<string, string>,
+  ) {
+    if (!handlers.admin || !approver) return;
     const stopAt =
       demo.reach === "done"
         ? INQUIRY_STAGES.length
@@ -332,6 +348,4 @@ export async function loadDemoInquiries(
       );
     }
   }
-
-  console.log(`Demo inquiries loaded: ${DEMO_INQUIRIES.length}.`);
 }
