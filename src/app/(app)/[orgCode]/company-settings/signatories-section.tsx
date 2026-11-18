@@ -39,11 +39,11 @@ export function SignatoriesSection({
 
   return (
     <>
-      <div className="border-b border-zinc-200 px-4 py-3 sm:px-5">
-        <h2 className="font-display text-base font-semibold text-zinc-900">
+      <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
+        <h2 className="font-display text-base font-semibold text-slate-900">
           Signatories
         </h2>
-        <p className="mt-1 text-sm text-zinc-600">
+        <p className="mt-1 text-sm text-slate-600">
           The company&apos;s forms are signed by position. Choose who signs for
           each one. Only active staff with a login can be chosen; each of them
           sets their own signature and PIN under Account.
@@ -56,14 +56,14 @@ export function SignatoriesSection({
             key={position.key}
             className="grid grid-cols-1 items-center gap-1.5 sm:grid-cols-[14rem_1fr]"
           >
-            <span className="text-sm font-medium text-zinc-800">
+            <span className="text-sm font-medium text-slate-800">
               {position.label}
             </span>
             <select
               value={position.staffId}
               disabled={savingKey !== null}
               onChange={(event) => assign(position.key, event.target.value)}
-              className="max-w-sm border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-header"
+              className="field max-w-sm"
             >
               <option value="">Nobody yet</option>
               {initial.candidates.map((staff) => (
@@ -77,7 +77,7 @@ export function SignatoriesSection({
         ))}
 
         {initial.candidates.length === 0 ? (
-          <p className="text-sm text-zinc-600">
+          <p className="text-sm text-slate-600">
             Nobody has a login yet. Create logins under Staff first.
           </p>
         ) : null}

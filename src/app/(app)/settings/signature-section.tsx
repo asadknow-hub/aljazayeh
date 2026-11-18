@@ -14,9 +14,9 @@ import {
 import type { SigningProfile } from "@/lib/signoffs/credentials";
 
 const inputClass =
-  "w-full max-w-xs border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-header";
+  "field w-full max-w-xs";
 const buttonClass =
-  "bg-header px-3 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control disabled:cursor-not-allowed disabled:opacity-45";
+  "btn btn-primary";
 
 /** Account → Signature: the signature and PIN used to approve documents. */
 export function SignatureSection({ initial }: { initial: SigningProfile }) {
@@ -69,10 +69,10 @@ export function SignatureSection({ initial }: { initial: SigningProfile }) {
   return (
     <div className="flex flex-col gap-8">
       <section>
-        <h3 className="font-display text-sm font-semibold text-zinc-900">
+        <h3 className="font-display text-sm font-semibold text-slate-900">
           Your signature
         </h3>
-        <p className="mt-1 text-sm text-zinc-600">
+        <p className="mt-1 text-sm text-slate-600">
           Placed on every document you approve, with your name and the date.
         </p>
 
@@ -82,13 +82,13 @@ export function SignatureSection({ initial }: { initial: SigningProfile }) {
             <img
               src={saved}
               alt="Your saved signature"
-              className="h-24 border border-zinc-300 bg-white px-3 py-2"
+              className="h-24 border border-slate-300 bg-white px-3 py-2 rounded-lg"
             />
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => setReplacing(true)}
-                className="border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+                className="btn btn-secondary"
               >
                 Replace
               </button>
@@ -96,7 +96,7 @@ export function SignatureSection({ initial }: { initial: SigningProfile }) {
                 type="button"
                 disabled={pending}
                 onClick={() => saveSignature(null)}
-                className="border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-45"
+                className="border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-45 rounded-lg"
               >
                 Remove
               </button>
@@ -105,7 +105,7 @@ export function SignatureSection({ initial }: { initial: SigningProfile }) {
         ) : (
           <div className="mt-3 flex flex-col items-start gap-3">
             <SignaturePad onChange={setDraft} />
-            <label className="text-sm text-zinc-600">
+            <label className="text-sm text-slate-600">
               or upload a picture of it:{" "}
               <input
                 type="file"
@@ -136,7 +136,7 @@ export function SignatureSection({ initial }: { initial: SigningProfile }) {
                     setReplacing(false);
                     setDraft(null);
                   }}
-                  className="border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+                  className="btn btn-secondary"
                 >
                   Keep current
                 </button>
@@ -146,11 +146,11 @@ export function SignatureSection({ initial }: { initial: SigningProfile }) {
         )}
       </section>
 
-      <section className="border-t border-zinc-200 pt-6">
-        <h3 className="font-display text-sm font-semibold text-zinc-900">
+      <section className="border-t border-slate-200 pt-6">
+        <h3 className="font-display text-sm font-semibold text-slate-900">
           Approval PIN
         </h3>
-        <p className="mt-1 text-sm text-zinc-600">
+        <p className="mt-1 text-sm text-slate-600">
           {pinLocked
             ? "Your PIN is locked after too many wrong attempts. Set a new one."
             : hasPin
@@ -159,7 +159,7 @@ export function SignatureSection({ initial }: { initial: SigningProfile }) {
         </p>
         <div className="mt-3 flex flex-col gap-3">
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-zinc-700">
+            <span className="text-sm font-medium text-slate-700">
               Your login password
             </span>
             <input
@@ -171,7 +171,7 @@ export function SignatureSection({ initial }: { initial: SigningProfile }) {
             />
           </label>
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-zinc-700">New PIN</span>
+            <span className="text-sm font-medium text-slate-700">New PIN</span>
             <input
               type="password"
               inputMode="numeric"
@@ -185,7 +185,7 @@ export function SignatureSection({ initial }: { initial: SigningProfile }) {
             />
           </label>
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-zinc-700">
+            <span className="text-sm font-medium text-slate-700">
               New PIN again
             </span>
             <input

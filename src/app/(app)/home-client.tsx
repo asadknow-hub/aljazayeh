@@ -47,13 +47,13 @@ export function HomeClient() {
                   tabIndex={0}
                   onClick={() => openCompany(org.code)}
                   onKeyDown={(event) => onCardKeyDown(event, org.code)}
-                  className="flex min-h-36 cursor-pointer flex-col justify-between border border-zinc-300 bg-white p-4 text-left transition hover:border-zinc-400 hover:bg-zinc-50"
+                  className="flex min-h-36 cursor-pointer flex-col justify-between border border-slate-300 bg-white p-4 text-left transition hover:border-slate-400 hover:bg-slate-50 rounded-lg"
                 >
-                  <span className="font-mono text-[11px] tracking-wide text-zinc-500">
+                  <span className="font-mono text-[11px] tracking-wide text-slate-500">
                     {org.code}
                   </span>
 
-                  <p className="mt-3 font-display text-base font-semibold text-zinc-900">
+                  <p className="mt-3 font-display text-base font-semibold text-slate-900">
                     {org.name}
                   </p>
 
@@ -61,14 +61,14 @@ export function HomeClient() {
                     type="button"
                     aria-pressed={isDefault}
                     onClick={(event) => toggleDefault(event, org.id, isDefault)}
-                    className="mt-4 inline-flex items-center gap-2 self-start text-[11px] text-zinc-600 transition hover:text-zinc-900"
+                    className="mt-4 inline-flex items-center gap-2 self-start text-[11px] text-slate-600 transition hover:text-slate-900"
                   >
                     <span
                       className={[
-                        "flex h-5 w-5 shrink-0 items-center justify-center border",
+                        "flex h-5 w-5 shrink-0 items-center justify-center border rounded-lg",
                         isDefault
                           ? "border-emerald-600 bg-emerald-50 text-emerald-700"
-                          : "border-zinc-300 bg-white text-transparent",
+                          : "border-slate-300 bg-white text-transparent",
                       ].join(" ")}
                       aria-hidden
                     >
@@ -96,7 +96,7 @@ export function HomeClient() {
         <button
           type="button"
           onClick={() => setAddOpen(true)}
-          className="flex min-h-36 flex-col items-center justify-center gap-2 border border-dashed border-zinc-400 bg-white text-zinc-700 transition hover:border-header hover:bg-zinc-50 hover:text-header"
+          className="flex min-h-36 flex-col items-center justify-center gap-2 border border-dashed border-slate-400 bg-white text-slate-700 transition hover:border-primary hover:bg-slate-50 hover:text-primary rounded-lg"
         >
           <span className="text-3xl leading-none font-light" aria-hidden>
             +
@@ -107,7 +107,7 @@ export function HomeClient() {
       </div>
 
       {organizations.length === 0 && !canCreateOrganizations ? (
-        <p className="mt-6 text-sm text-zinc-600">
+        <p className="mt-6 text-sm text-slate-600">
           Your login is not linked to an active staff record in any company.
           Ask your administrator.
         </p>

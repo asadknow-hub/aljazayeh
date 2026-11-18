@@ -18,6 +18,15 @@ import {
 import { formatFriendlyDate } from "@/lib/datetime/format";
 import { useServerState } from "@/lib/react/use-server-state";
 
+/** Each mark has its own colour, so a day can be read at a glance. */
+const MARK_COLORS: Record<AttendanceStatus, string> = {
+  present: "border-emerald-600 bg-emerald-600 text-white",
+  absent: "border-red-600 bg-red-600 text-white",
+  half_day: "border-amber-500 bg-amber-500 text-white",
+  md: "border-sky-600 bg-sky-600 text-white",
+  off: "border-slate-500 bg-slate-500 text-white",
+};
+
 type AttendancePanelProps = {
   orgCode: string;
   /** Today's date in Dubai; later dates cannot be marked. */
@@ -70,10 +79,10 @@ export function AttendancePanel({
     <div className="w-full max-w-4xl">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-display text-xl font-semibold text-zinc-900">
+          <h2 className="font-display text-xl font-semibold text-slate-900">
             Attendance
           </h2>
-          <p className="mt-1 text-sm text-zinc-600">
+          <p className="mt-1 text-sm text-slate-600">
             {formatFriendlyDate(day.date)}
             {day.weeklyOff ? " · weekly day off" : ""}
           </p>
@@ -88,19 +97,19 @@ export function AttendancePanel({
               if (event.target.value) void changeDate(event.target.value);
             }}
             aria-label="Date"
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-header"
+            className="field"
           />
           <Link
             href={`/${orgCode}/reception/attendance?month=${day.date.slice(0, 7)}`}
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+            className="btn btn-secondary"
           >
             Monthly sheet
           </Link>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border border-zinc-300 bg-white px-4 py-3">
-        <p className="text-sm text-zinc-700">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border border-slate-300 bg-white px-4 py-3 rounded-lg">
+        <p className="text-sm text-slate-700">
           {unmarked.length === 0
             ? "Everyone is marked for this day."
             : `${unmarked.length} not marked yet.`}
@@ -116,7 +125,7 @@ export function AttendancePanel({
               })),
             )
           }
-          className="bg-header px-3 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control disabled:cursor-not-allowed disabled:opacity-45"
+          className="btn btn-primary"
         >
           Mark the rest {fillLabel}
         </button>
@@ -133,10 +142,10 @@ export function AttendancePanel({
         if (rows.length === 0) return null;
         return (
           <section key={group.key} className="mt-5">
-            <h3 className="font-display text-sm font-semibold text-zinc-900">
+            <h3 className="font-display text-sm font-semibold text-slate-900">
               {group.label} ({rows.length})
             </h3>
-            <ul className="mt-2 divide-y divide-zinc-200 border border-zinc-300 bg-white">
+            <ul className="card mt-2 divide-y divide-slate-200">
               {rows.map((row) => (
                 <AttendanceRow
                   key={row.staffId}
@@ -151,7 +160,7 @@ export function AttendancePanel({
       })}
 
       {day.rows.length === 0 ? (
-        <p className="mt-5 border border-zinc-300 bg-white px-4 py-5 text-sm text-zinc-600">
+        <p className="mt-5 border border-slate-300 bg-white px-4 py-5 text-sm text-slate-600 rounded-lg">
           No staff yet. Add people under Staff first.
         </p>
       ) : null}
@@ -173,10 +182,10 @@ function AttendanceRow({
   return (
     <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5">
       <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-zinc-900">
+        <p className="truncate text-sm font-medium text-slate-900">
           {row.fullName}
         </p>
-        <p className="truncate text-xs text-zinc-500">
+        <p className="truncate text-xs text-slate-500">
           {[
             row.jobTitle,
             row.derived && !row.status && DERIVED_LABEL[row.derived],
@@ -202,10 +211,10 @@ function AttendanceRow({
               // Pressing the current mark again clears it.
               onClick={() => onMark(active ? "" : status.key)}
               className={[
-                "min-w-11 border px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-45",
+                "min-w-11 border px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 rounded-lg",
                 active
-                  ? "border-header bg-header text-header-fg"
-                  : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100",
+                  ? MARK_COLORS[status.key]
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100",
               ].join(" ")}
             >
               {status.code}

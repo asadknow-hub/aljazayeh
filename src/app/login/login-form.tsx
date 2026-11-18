@@ -16,24 +16,24 @@ export function LoginForm() {
       {next ? <input type="hidden" name="next" value={next} /> : null}
 
       <label className="flex flex-col gap-1.5 text-left">
-        <span className="text-sm font-medium text-zinc-700">Username</span>
+        <span className="field-label">Username</span>
         <input
           name="username"
           type="text"
           autoComplete="username"
           required
-          className="h-11 rounded-md border border-zinc-300 bg-white px-3 text-zinc-950 outline-none transition focus:border-zinc-500"
+          className="field h-11"
         />
       </label>
 
       <label className="flex flex-col gap-1.5 text-left">
-        <span className="text-sm font-medium text-zinc-700">Password</span>
+        <span className="field-label">Password</span>
         <input
           name="password"
           type="password"
           autoComplete="current-password"
           required
-          className="h-11 rounded-md border border-zinc-300 bg-white px-3 text-zinc-950 outline-none transition focus:border-zinc-500"
+          className="field h-11"
         />
       </label>
 
@@ -46,7 +46,7 @@ export function LoginForm() {
       <button
         type="submit"
         disabled={pending}
-        className="mt-1 h-11 rounded-md bg-zinc-900 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:opacity-60"
+        className="btn btn-primary mt-1 h-11"
       >
         {pending ? "Signing in…" : "Sign in"}
       </button>

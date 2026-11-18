@@ -20,9 +20,9 @@ type StaffLoginSectionProps = {
 };
 
 const inputClass =
-  "w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-header";
+  "field w-full";
 const buttonClass =
-  "bg-header px-3 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control disabled:cursor-not-allowed disabled:opacity-45";
+  "btn btn-primary";
 
 /** Lets a company administrator give a staff member access to the system. */
 export function StaffLoginSection({
@@ -80,7 +80,7 @@ export function StaffLoginSection({
 
   if (!viewer.canManageCompany) {
     return (
-      <p className="text-sm text-zinc-600">
+      <p className="text-sm text-slate-600">
         {staff.loginUsername
           ? `Signs in as ${staff.loginUsername}. `
           : "No login yet. "}
@@ -92,7 +92,7 @@ export function StaffLoginSection({
   return (
     <div className="flex max-w-md flex-col gap-5">
       {staff.status !== "active" ? (
-        <p className="border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p className="border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 rounded-lg">
           This person is Inactive, so they cannot sign in. Set their status to
           Active on the Profile tab to give access back.
         </p>
@@ -101,14 +101,14 @@ export function StaffLoginSection({
       {staff.loginUsername ? (
         <>
           <div>
-            <p className="text-sm text-zinc-600">Signs in as</p>
-            <p className="mt-0.5 text-sm font-medium text-zinc-900">
+            <p className="text-sm text-slate-600">Signs in as</p>
+            <p className="mt-0.5 text-sm font-medium text-slate-900">
               {staff.loginUsername}
             </p>
           </div>
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-zinc-700">
+            <span className="text-sm font-medium text-slate-700">
               Set a new password
             </span>
             <input
@@ -119,7 +119,7 @@ export function StaffLoginSection({
               placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
               className={inputClass}
             />
-            <span className="text-xs text-zinc-500">
+            <span className="text-xs text-slate-500">
               Tell them the new password; they can change it under their own
               Account page.
             </span>
@@ -135,7 +135,7 @@ export function StaffLoginSection({
             </button>
           </div>
 
-          <label className="flex items-start gap-2 border-t border-zinc-200 pt-4">
+          <label className="flex items-start gap-2 border-t border-slate-200 pt-4">
             <input
               type="checkbox"
               checked={staff.isAdmin}
@@ -144,10 +144,10 @@ export function StaffLoginSection({
               className="mt-0.5"
             />
             <span>
-              <span className="block text-sm font-medium text-zinc-900">
+              <span className="block text-sm font-medium text-slate-900">
                 Company administrator
               </span>
-              <span className="block text-sm text-zinc-600">
+              <span className="block text-sm text-slate-600">
                 Can change company settings, manage logins and do everything
                 in this company.
                 {isSelf ? " You cannot remove this from yourself." : ""}
@@ -157,13 +157,13 @@ export function StaffLoginSection({
         </>
       ) : (
         <>
-          <p className="text-sm text-zinc-600">
+          <p className="text-sm text-slate-600">
             This person cannot sign in yet. Give them a username and a first
             password. What they can see depends on their departments on the
             Profile tab.
           </p>
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-zinc-700">Username</span>
+            <span className="text-sm font-medium text-slate-700">Username</span>
             <input
               type="text"
               autoComplete="off"
@@ -174,7 +174,7 @@ export function StaffLoginSection({
             />
           </label>
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-zinc-700">
+            <span className="text-sm font-medium text-slate-700">
               First password
             </span>
             <input

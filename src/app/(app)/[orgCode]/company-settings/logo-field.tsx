@@ -36,7 +36,7 @@ export function LogoField({
 
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-[12px] font-medium text-zinc-700">
+      <span className="field-label">
         Logo on printed forms
       </span>
       <div className="flex flex-wrap items-center gap-3">
@@ -45,10 +45,10 @@ export function LogoField({
           <img
             src={logo}
             alt="Company logo"
-            className="h-16 border border-zinc-300 bg-white p-1"
+            className="card h-16 p-1"
           />
         ) : (
-          <span className="text-sm text-zinc-500">No logo yet.</span>
+          <span className="text-sm text-slate-500">No logo yet.</span>
         )}
         <input
           type="file"
@@ -66,7 +66,7 @@ export function LogoField({
             type="button"
             disabled={pending}
             onClick={() => save(async () => null)}
-            className="border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-45"
+            className="btn btn-secondary btn-sm"
           >
             Remove
           </button>

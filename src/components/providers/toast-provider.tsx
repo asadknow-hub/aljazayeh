@@ -44,7 +44,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           key={toast.id}
           role="status"
           aria-live="polite"
-          className="fixed bottom-4 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 border border-emerald-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-md"
+          className="fixed bottom-4 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 border border-emerald-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-md rounded-lg"
         >
           <svg
             viewBox="0 0 24 24"

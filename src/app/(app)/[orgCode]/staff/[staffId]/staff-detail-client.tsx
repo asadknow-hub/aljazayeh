@@ -252,12 +252,12 @@ export function StaffDetailClient({
   return (
     <main className="relative flex min-h-0 flex-1 flex-col">
       <div className="pointer-events-none fixed top-14 right-4 z-30 sm:right-6">
-        <div className="pointer-events-auto flex items-center gap-2 border border-zinc-200 bg-white px-2 py-1.5 shadow-sm">
+        <div className="pointer-events-auto flex items-center gap-2 border border-slate-200 bg-white px-2 py-1.5 shadow-sm rounded-lg">
           <button
             type="button"
             onClick={onCancel}
             disabled={pending}
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-45"
+            className="btn btn-secondary"
           >
             Cancel
           </button>
@@ -265,7 +265,7 @@ export function StaffDetailClient({
             type="submit"
             form="staff-detail-form"
             disabled={!canSave}
-            className="bg-header px-3 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control disabled:cursor-not-allowed disabled:opacity-45"
+            className="btn btn-primary"
           >
             {pending ? "Saving…" : "Save"}
           </button>
@@ -273,12 +273,12 @@ export function StaffDetailClient({
       </div>
 
       <div className="flex min-h-0 flex-1 items-start">
-        <aside className="sticky top-12 z-10 flex h-[calc(100dvh-3rem)] w-44 shrink-0 flex-col overflow-y-auto border-r border-zinc-200 bg-white sm:w-56">
-          <div className="border-b border-zinc-200 px-3 py-3">
-            <p className="truncate font-display text-sm font-semibold text-zinc-900">
+        <aside className="sticky top-12 z-10 flex h-[calc(100dvh-3rem)] w-44 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-white sm:w-56">
+          <div className="border-b border-slate-200 px-3 py-3">
+            <p className="truncate font-display text-sm font-semibold text-slate-900">
               {staff.fullName}
             </p>
-            <p className="mt-0.5 truncate text-xs text-zinc-500">
+            <p className="mt-0.5 truncate text-xs text-slate-500">
               {staff.jobTitle || "Staff member"}
             </p>
           </div>
@@ -291,10 +291,10 @@ export function StaffDetailClient({
                   type="button"
                   onClick={() => selectSection(item)}
                   className={[
-                    "px-3 py-2 text-left text-sm transition",
+                    "cursor-pointer rounded-lg px-3 py-2 text-left text-sm transition-colors",
                     active
-                      ? "bg-header text-header-fg"
-                      : "text-zinc-700 hover:bg-zinc-100",
+                      ? "bg-primary text-white"
+                      : "text-slate-700 hover:bg-slate-100",
                   ].join(" ")}
                 >
                   {SECTION_LABELS[item]}
@@ -308,7 +308,7 @@ export function StaffDetailClient({
           <form
             id="staff-detail-form"
             onSubmit={onSave}
-            className="w-full max-w-3xl border border-zinc-300 bg-white"
+            className="card w-full max-w-3xl"
           >
             {section === "profile" ? (
               <SectionShell
@@ -317,7 +317,7 @@ export function StaffDetailClient({
               >
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <label className="flex flex-col gap-1.5 sm:col-span-2">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Full name
                     </span>
                     <input
@@ -328,11 +328,11 @@ export function StaffDetailClient({
                           fullName: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Email
                     </span>
                     <input
@@ -344,11 +344,11 @@ export function StaffDetailClient({
                           email: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Phone
                     </span>
                     <input
@@ -359,11 +359,11 @@ export function StaffDetailClient({
                           phone: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Home country contact number
                     </span>
                     <input
@@ -374,11 +374,11 @@ export function StaffDetailClient({
                           homeCountryContact: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Passport number
                     </span>
                     <input
@@ -389,12 +389,12 @@ export function StaffDetailClient({
                           passportNumber: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
-                      Job title
+                    <span className="field-label">
+                      Profession
                     </span>
                     <input
                       value={profile.jobTitle}
@@ -404,11 +404,11 @@ export function StaffDetailClient({
                           jobTitle: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Employee code
                     </span>
                     <input
@@ -419,11 +419,11 @@ export function StaffDetailClient({
                           employeeCode: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Joining date
                     </span>
                     <input
@@ -435,11 +435,11 @@ export function StaffDetailClient({
                           joinedOn: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Status
                     </span>
                     <select
@@ -450,7 +450,7 @@ export function StaffDetailClient({
                           status: event.target.value as StaffStatus,
                         }))
                       }
-                      className="border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     >
                       {STAFF_STATUSES.map((item) => (
                         <option key={item.value} value={item.value}>
@@ -460,7 +460,7 @@ export function StaffDetailClient({
                     </select>
                   </label>
                   <label className="flex flex-col gap-1.5 sm:col-span-2">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Notes
                     </span>
                     <textarea
@@ -472,18 +472,18 @@ export function StaffDetailClient({
                         }))
                       }
                       rows={3}
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <fieldset className="sm:col-span-2">
-                    <legend className="text-[12px] font-medium text-zinc-700">
+                    <legend className="field-label">
                       Departments <span className="text-red-600">*</span>
                     </legend>
                     <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {STAFF_ASSIGNABLE_ROLES.map((role) => (
                         <label
                           key={role.key}
-                          className="flex cursor-pointer items-center gap-2 border border-zinc-200 px-3 py-2 text-sm"
+                          className="flex cursor-pointer items-center gap-2 border border-slate-200 px-3 py-2 text-sm rounded-lg"
                         >
                           <input
                             type="checkbox"
@@ -507,7 +507,7 @@ export function StaffDetailClient({
               >
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Salary amount
                     </span>
                     <input
@@ -519,11 +519,11 @@ export function StaffDetailClient({
                         }))
                       }
                       inputMode="decimal"
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Currency
                     </span>
                     <input
@@ -534,11 +534,11 @@ export function StaffDetailClient({
                           salaryCurrency: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Pay frequency
                     </span>
                     <select
@@ -549,7 +549,7 @@ export function StaffDetailClient({
                           payFrequency: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     >
                       <option value="monthly">Monthly</option>
                       <option value="weekly">Weekly</option>
@@ -558,7 +558,7 @@ export function StaffDetailClient({
                     </select>
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Last salary paid on
                     </span>
                     <input
@@ -570,11 +570,11 @@ export function StaffDetailClient({
                           lastSalaryPaidOn: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5 sm:col-span-2">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Notes
                     </span>
                     <textarea
@@ -586,7 +586,7 @@ export function StaffDetailClient({
                         }))
                       }
                       rows={3}
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                 </div>
@@ -600,7 +600,7 @@ export function StaffDetailClient({
               >
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <label className="flex flex-col gap-1.5 sm:col-span-2">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Title
                     </span>
                     <input
@@ -611,11 +611,11 @@ export function StaffDetailClient({
                           contractTitle: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Status
                     </span>
                     <select
@@ -626,7 +626,7 @@ export function StaffDetailClient({
                           contractStatus: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     >
                       <option value="active">Active</option>
                       <option value="probation">Probation</option>
@@ -635,7 +635,7 @@ export function StaffDetailClient({
                     </select>
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Start date
                     </span>
                     <input
@@ -647,11 +647,11 @@ export function StaffDetailClient({
                           contractStartDate: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       End date
                     </span>
                     <input
@@ -663,11 +663,11 @@ export function StaffDetailClient({
                           contractEndDate: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5 sm:col-span-2">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Notes
                     </span>
                     <textarea
@@ -679,7 +679,7 @@ export function StaffDetailClient({
                         }))
                       }
                       rows={3}
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                 </div>
@@ -696,10 +696,10 @@ export function StaffDetailClient({
                     type="button"
                     onClick={() => setVacationFilter("active")}
                     className={[
-                      "border px-3 py-1.5 text-sm font-medium transition",
+                      "border px-3 py-1.5 text-sm font-medium transition rounded-lg",
                       vacationFilter === "active"
-                        ? "border-header bg-header text-header-fg"
-                        : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50",
+                        ? "border-primary bg-primary text-white"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
                     ].join(" ")}
                   >
                     Active
@@ -708,10 +708,10 @@ export function StaffDetailClient({
                     type="button"
                     onClick={() => setVacationFilter("completed")}
                     className={[
-                      "border px-3 py-1.5 text-sm font-medium transition",
+                      "border px-3 py-1.5 text-sm font-medium transition rounded-lg",
                       vacationFilter === "completed"
-                        ? "border-header bg-header text-header-fg"
-                        : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50",
+                        ? "border-primary bg-primary text-white"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
                     ].join(" ")}
                   >
                     Completed vacations
@@ -720,10 +720,10 @@ export function StaffDetailClient({
                     type="button"
                     onClick={() => setVacationFilter("rejected")}
                     className={[
-                      "border px-3 py-1.5 text-sm font-medium transition",
+                      "border px-3 py-1.5 text-sm font-medium transition rounded-lg",
                       vacationFilter === "rejected"
-                        ? "border-header bg-header text-header-fg"
-                        : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50",
+                        ? "border-primary bg-primary text-white"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
                     ].join(" ")}
                   >
                     Rejected
@@ -731,7 +731,7 @@ export function StaffDetailClient({
                 </div>
 
                 {visibleVacations.length === 0 ? (
-                  <p className="text-sm text-zinc-600">
+                  <p className="text-sm text-slate-600">
                     {vacationFilter === "active"
                       ? "No active vacations."
                       : vacationFilter === "completed"
@@ -739,20 +739,20 @@ export function StaffDetailClient({
                         : "No rejected vacation requests."}
                   </p>
                 ) : (
-                  <ul className="divide-y divide-zinc-200 border border-zinc-200">
+                  <ul className="divide-y divide-slate-200 border border-slate-200 rounded-lg">
                     {visibleVacations.map((item) => (
                       <li key={item.id} className="px-3 py-3">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-medium text-zinc-900">
+                          <p className="text-sm font-medium text-slate-900">
                             {leaveTypeLabel(item.leaveType)}
                           </p>
-                          <span className="text-xs font-medium text-zinc-500">
+                          <span className="text-xs font-medium text-slate-500">
                             {vacationFilter === "completed"
                               ? "Completed"
                               : vacationStatusLabel(item.status)}
                           </span>
                         </div>
-                        <p className="mt-1 text-sm text-zinc-600">
+                        <p className="mt-1 text-sm text-slate-600">
                           {formatLeavePeriod(
                             item.startDate,
                             item.endDate,
@@ -761,16 +761,16 @@ export function StaffDetailClient({
                         </p>
                         <Link
                           href={`/${org.code}/leave/${item.id}`}
-                          className="mt-1 inline-block text-xs font-medium text-header underline-offset-2 hover:underline"
+                          className="mt-1 inline-block text-xs font-medium text-primary underline-offset-2 hover:underline"
                         >
                           Open leave form
                         </Link>
                         {item.reason ? (
-                          <p className="mt-1 text-sm text-zinc-600">
+                          <p className="mt-1 text-sm text-slate-600">
                             Reason: {item.reason}
                           </p>
                         ) : null}
-                        <p className="mt-1 text-xs text-zinc-500">
+                        <p className="mt-1 text-xs text-slate-500">
                           Created{" "}
                           {formatFriendlyDateTime(new Date(item.createdAt))}
                         </p>
@@ -800,11 +800,11 @@ export function StaffDetailClient({
                 title="Actions"
                 description="Administrative actions for this staff record."
               >
-                <div className="border border-red-200 px-3 py-3">
-                  <p className="text-sm font-medium text-zinc-900">
+                <div className="border border-red-200 px-3 py-3 rounded-lg">
+                  <p className="text-sm font-medium text-slate-900">
                     Delete staff
                   </p>
-                  <p className="mt-1 text-sm text-zinc-600">
+                  <p className="mt-1 text-sm text-slate-600">
                     Only for records created by mistake. Someone who has a
                     login or any history is set to Inactive on the Profile tab
                     instead.
@@ -813,7 +813,7 @@ export function StaffDetailClient({
                     type="button"
                     onClick={() => setDeleteOpen(true)}
                     disabled={pending || deletePending}
-                    className="mt-3 border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-45"
+                    className="mt-3 border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-45 rounded-lg"
                   >
                     Delete staff
                   </button>
@@ -822,7 +822,7 @@ export function StaffDetailClient({
             ) : null}
 
             {error ? (
-              <div className="border-t border-zinc-200 px-4 py-3 text-sm text-red-700 sm:px-5">
+              <div className="border-t border-slate-200 px-4 py-3 text-sm text-red-700 sm:px-5">
                 {error}
               </div>
             ) : null}
@@ -855,11 +855,11 @@ function SectionShell({
 }) {
   return (
     <>
-      <div className="border-b border-zinc-200 px-4 py-3 sm:px-5">
-        <h2 className="font-display text-base font-semibold text-zinc-900">
+      <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
+        <h2 className="font-display text-base font-semibold text-slate-900">
           {title}
         </h2>
-        <p className="mt-1 text-sm text-zinc-600">{description}</p>
+        <p className="mt-1 text-sm text-slate-600">{description}</p>
       </div>
       <div className="px-4 py-4 sm:px-5">{children}</div>
     </>

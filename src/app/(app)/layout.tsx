@@ -40,7 +40,7 @@ async function AuthenticatedApp({ children }: { children: React.ReactNode }) {
 
 function AppShellFallback() {
   return (
-    <div className="flex min-h-full flex-1 items-center justify-center text-sm text-zinc-500">
+    <div className="flex min-h-full flex-1 items-center justify-center text-sm text-slate-500">
       Loading…
     </div>
   );

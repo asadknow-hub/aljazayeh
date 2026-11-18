@@ -98,20 +98,20 @@ function PasswordField({
 
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-[12px] font-medium text-zinc-700">{label}</span>
+      <span className="field-label">{label}</span>
       <span className="relative block">
         <input
           type={visible ? "text" : "password"}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           autoComplete={autoComplete}
-          className="w-full border border-zinc-300 py-2 pr-10 pl-3 text-sm outline-none focus:border-header"
+          className="field w-full pr-10 pl-3"
         />
         <button
           type="button"
           onClick={() => setVisible((current) => !current)}
           aria-label={visible ? `Hide ${label}` : `Show ${label}`}
-          className="absolute top-1/2 right-2 -translate-y-1/2 p-1 text-zinc-500 transition hover:text-zinc-800"
+          className="absolute top-1/2 right-2 -translate-y-1/2 p-1 text-slate-500 transition hover:text-slate-800"
         >
           <EyeIcon open={visible} />
         </button>
@@ -277,12 +277,12 @@ export function ProfileSettingsClient({
   return (
     <main className="relative flex min-h-0 flex-1 flex-col">
       <div className="pointer-events-none fixed top-14 right-4 z-30 sm:right-6">
-        <div className="pointer-events-auto flex items-center gap-2 border border-zinc-200 bg-white px-2 py-1.5 shadow-sm">
+        <div className="pointer-events-auto flex items-center gap-2 border border-slate-200 bg-white px-2 py-1.5 shadow-sm rounded-lg">
           <button
             type="button"
             onClick={onCancel}
             disabled={pending}
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:border-zinc-400 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-45"
+            className="btn btn-secondary hover:border-slate-400"
           >
             Cancel
           </button>
@@ -290,7 +290,7 @@ export function ProfileSettingsClient({
             type="submit"
             form="profile-settings-form"
             disabled={!canSave}
-            className="bg-header px-3 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control disabled:cursor-not-allowed disabled:opacity-45"
+            className="btn btn-primary"
           >
             {pending ? "Saving…" : "Save"}
           </button>
@@ -298,7 +298,7 @@ export function ProfileSettingsClient({
       </div>
 
       <div className="flex min-h-0 flex-1 items-start">
-        <aside className="sticky top-12 z-10 flex h-[calc(100dvh-3rem)] w-44 shrink-0 flex-col overflow-y-auto border-r border-zinc-200 bg-white sm:w-56">
+        <aside className="sticky top-12 z-10 flex h-[calc(100dvh-3rem)] w-44 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-white sm:w-56">
           <nav className="flex flex-col gap-0.5 p-2 sm:p-3">
             {PROFILE_SECTION_META.map((item) => {
               const active = item.id === section;
@@ -308,10 +308,10 @@ export function ProfileSettingsClient({
                   type="button"
                   onClick={() => selectSection(item.id)}
                   className={[
-                    "px-3 py-2 text-left text-sm transition",
+                    "cursor-pointer rounded-lg px-3 py-2 text-left text-sm transition-colors",
                     active
-                      ? "bg-header text-header-fg"
-                      : "text-zinc-700 hover:bg-zinc-100",
+                      ? "bg-primary text-white"
+                      : "text-slate-700 hover:bg-slate-100",
                   ].join(" ")}
                 >
                   {item.label}
@@ -325,7 +325,7 @@ export function ProfileSettingsClient({
           <form
             id="profile-settings-form"
             onSubmit={onSave}
-            className="w-full max-w-3xl border border-zinc-300 bg-white"
+            className="card w-full max-w-3xl"
           >
             {section === "account" ? (
               <SectionShell
@@ -334,32 +334,32 @@ export function ProfileSettingsClient({
               >
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-8">
                   <div className="flex max-w-sm flex-col gap-3">
-                    <p className="text-sm font-medium text-zinc-900">
+                    <p className="text-sm font-medium text-slate-900">
                       Account
                     </p>
                     <label className="flex flex-col gap-1.5">
-                      <span className="text-[12px] font-medium text-zinc-700">
+                      <span className="field-label">
                         Full name
                       </span>
                       <input
                         value={fullName}
                         onChange={(event) => setFullName(event.target.value)}
                         autoComplete="name"
-                        className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                        className="field"
                       />
                     </label>
                     <label className="flex flex-col gap-1.5">
-                      <span className="text-[12px] font-medium text-zinc-700">
+                      <span className="field-label">
                         Login username
                       </span>
                       <input
                         value={identity.username}
                         readOnly
-                        className="border border-zinc-200 bg-zinc-50 px-3 py-2 font-mono text-sm text-zinc-600 outline-none"
+                        className="border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-600 outline-none rounded-lg"
                       />
                     </label>
                     <label className="flex flex-col gap-1.5">
-                      <span className="text-[12px] font-medium text-zinc-700">
+                      <span className="field-label">
                         Email
                       </span>
                       <input
@@ -367,17 +367,17 @@ export function ProfileSettingsClient({
                         value={email}
                         onChange={(event) => setEmail(event.target.value)}
                         autoComplete="email"
-                        className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                        className="field"
                       />
                     </label>
                   </div>
 
-                  <div className="flex max-w-sm flex-col gap-3 sm:border-l sm:border-zinc-200 sm:pl-8">
+                  <div className="flex max-w-sm flex-col gap-3 sm:border-l sm:border-slate-200 sm:pl-8">
                     <div>
-                      <p className="text-sm font-medium text-zinc-900">
+                      <p className="text-sm font-medium text-slate-900">
                         Password
                       </p>
-                      <p className="mt-1 text-xs text-zinc-500">
+                      <p className="mt-1 text-xs text-slate-500">
                         Leave blank to keep your current password.
                       </p>
                     </div>
@@ -406,7 +406,7 @@ export function ProfileSettingsClient({
                       type="button"
                       onClick={onSavePassword}
                       disabled={!canSavePassword}
-                      className="self-start bg-header px-3 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control disabled:cursor-not-allowed disabled:opacity-45"
+                      className="btn btn-primary self-start"
                     >
                       {passwordPending ? "Saving…" : "Save password"}
                     </button>
@@ -430,14 +430,14 @@ export function ProfileSettingsClient({
                 description="Recent successful sign-ins for this account."
               >
                 {loginActivity.length === 0 ? (
-                  <p className="text-sm text-zinc-600">
+                  <p className="text-sm text-slate-600">
                     No login activity recorded yet.
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[36rem] border-collapse text-left text-sm">
                       <thead>
-                        <tr className="border-b border-zinc-200 text-[11px] tracking-wide text-zinc-500 uppercase">
+                        <tr className="border-b border-slate-200 text-[11px] tracking-wide text-slate-500 uppercase">
                           <th className="px-2 py-2 font-medium">When</th>
                           <th className="px-2 py-2 font-medium">IP</th>
                           <th className="px-2 py-2 font-medium">Device</th>
@@ -448,20 +448,20 @@ export function ProfileSettingsClient({
                         {loginActivity.map((item) => (
                           <tr
                             key={item.id}
-                            className="border-b border-zinc-100 align-top"
+                            className="border-b border-slate-100 align-top"
                           >
-                            <td className="px-2 py-2 whitespace-nowrap text-zinc-800">
+                            <td className="px-2 py-2 whitespace-nowrap text-slate-800">
                               <LoginActivityWhen iso={item.occurredAt} />
                             </td>
-                            <td className="px-2 py-2 font-mono text-[12px] text-zinc-600">
+                            <td className="px-2 py-2 font-mono text-[12px] text-slate-600">
                               {item.ipAddress || "—"}
                             </td>
-                            <td className="px-2 py-2 text-zinc-600">
+                            <td className="px-2 py-2 text-slate-600">
                               <span className="line-clamp-2">
                                 {item.userAgent || "—"}
                               </span>
                             </td>
-                            <td className="px-2 py-2 text-zinc-700">
+                            <td className="px-2 py-2 text-slate-700">
                               {item.success ? "Success" : "Failed"}
                             </td>
                           </tr>
@@ -480,7 +480,7 @@ export function ProfileSettingsClient({
               >
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Amount
                     </span>
                     <input
@@ -492,11 +492,11 @@ export function ProfileSettingsClient({
                         }))
                       }
                       inputMode="decimal"
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Currency
                     </span>
                     <input
@@ -507,11 +507,11 @@ export function ProfileSettingsClient({
                           currency: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Pay frequency
                     </span>
                     <select
@@ -522,7 +522,7 @@ export function ProfileSettingsClient({
                           payFrequency: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     >
                       <option value="monthly">Monthly</option>
                       <option value="weekly">Weekly</option>
@@ -531,7 +531,7 @@ export function ProfileSettingsClient({
                     </select>
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Effective from
                     </span>
                     <input
@@ -543,11 +543,11 @@ export function ProfileSettingsClient({
                           effectiveFrom: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5 sm:col-span-2">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Notes
                     </span>
                     <textarea
@@ -559,7 +559,7 @@ export function ProfileSettingsClient({
                         }))
                       }
                       rows={3}
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                 </div>
@@ -573,7 +573,7 @@ export function ProfileSettingsClient({
               >
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <label className="flex flex-col gap-1.5 sm:col-span-2">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Title
                     </span>
                     <input
@@ -585,11 +585,11 @@ export function ProfileSettingsClient({
                         }))
                       }
                       placeholder="Employment contract"
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Status
                     </span>
                     <select
@@ -600,7 +600,7 @@ export function ProfileSettingsClient({
                           status: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     >
                       <option value="active">Active</option>
                       <option value="probation">Probation</option>
@@ -609,7 +609,7 @@ export function ProfileSettingsClient({
                     </select>
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Start date
                     </span>
                     <input
@@ -621,11 +621,11 @@ export function ProfileSettingsClient({
                           startDate: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       End date
                     </span>
                     <input
@@ -637,11 +637,11 @@ export function ProfileSettingsClient({
                           endDate: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5 sm:col-span-2">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Notes
                     </span>
                     <textarea
@@ -653,7 +653,7 @@ export function ProfileSettingsClient({
                         }))
                       }
                       rows={3}
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                 </div>
@@ -666,17 +666,17 @@ export function ProfileSettingsClient({
                 description="Account actions for this signed-in user."
               >
                 <div className="space-y-3">
-                  <div className="border border-zinc-200 px-3 py-3">
-                    <p className="text-sm font-medium text-zinc-900">
+                  <div className="border border-slate-200 px-3 py-3 rounded-lg">
+                    <p className="text-sm font-medium text-slate-900">
                       Sign out
                     </p>
-                    <p className="mt-1 text-sm text-zinc-600">
+                    <p className="mt-1 text-sm text-slate-600">
                       End this session and return to the login screen.
                     </p>
                     <form action={logout} className="mt-3">
                       <button
                         type="submit"
-                        className="border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50"
+                        className="btn btn-secondary text-slate-800"
                       >
                         Sign out now
                       </button>
@@ -687,7 +687,7 @@ export function ProfileSettingsClient({
             ) : null}
 
             {error ? (
-              <div className="border-t border-zinc-200 px-4 py-3 text-sm text-red-700 sm:px-5">
+              <div className="border-t border-slate-200 px-4 py-3 text-sm text-red-700 sm:px-5">
                 {error}
               </div>
             ) : null}
@@ -709,11 +709,11 @@ function SectionShell({
 }) {
   return (
     <>
-      <div className="border-b border-zinc-200 px-4 py-3 sm:px-5">
-        <h2 className="font-display text-base font-semibold text-zinc-900">
+      <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
+        <h2 className="font-display text-base font-semibold text-slate-900">
           {title}
         </h2>
-        <p className="mt-1 text-sm text-zinc-600">{description}</p>
+        <p className="mt-1 text-sm text-slate-600">{description}</p>
       </div>
       <div className="px-4 py-4 sm:px-5">{children}</div>
     </>

@@ -80,13 +80,13 @@ export function SignaturePad({
         onPointerUp={end}
         onPointerLeave={end}
         aria-label="Draw your signature"
-        className="w-full max-w-md touch-none border border-dashed border-zinc-400 bg-white"
+        className="w-full max-w-md touch-none border border-dashed border-slate-400 bg-white rounded-lg"
       />
       <button
         type="button"
         onClick={clear}
         disabled={empty}
-        className="border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-45"
+        className="btn btn-secondary btn-sm"
       >
         Clear
       </button>
