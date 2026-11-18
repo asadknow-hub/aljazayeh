@@ -5,9 +5,9 @@ import { can } from "@/lib/access/access";
 import { getAttendanceSheetForUser } from "@/lib/attendance/queries";
 import {
   isAttendanceGroup,
-  isIsoMonth,
   type AttendanceGroup,
 } from "@/lib/attendance/types";
+import { isIsoMonth } from "@/lib/datetime/calendar";
 import { appDateValue } from "@/lib/datetime/format";
 import { firstParam, loadOrgPage } from "@/lib/org/page";
 

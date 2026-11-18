@@ -1,5 +1,6 @@
 export const PROFILE_SECTIONS = [
   "account",
+  "signature",
   "login-activity",
   "salary",
   "contract",
@@ -15,6 +16,7 @@ export type ProfileSectionMeta = {
 
 export const PROFILE_SECTION_META: ProfileSectionMeta[] = [
   { id: "account", label: "Account" },
+  { id: "signature", label: "Signature" },
   { id: "login-activity", label: "Login activity" },
   { id: "salary", label: "Salary" },
   { id: "contract", label: "Contract" },

@@ -99,10 +99,10 @@ All rules are in [`src/lib/access/access.ts`](src/lib/access/access.ts).
 
 | Area | Who |
 | --- | --- |
-| Company settings, inquiry settings, creating logins, making administrators | Company administrator |
+| Company settings, inquiry settings, signatories, creating logins, making administrators | Company administrator |
 | Staff directory incl. salary and contracts, All Logs | Administrator, Management |
 | Reception (visitors, raising leave requests) | Administrator, Management, Reception |
-| Approving / rejecting leave | Administrator, Management |
+| Signing a leave request | The holder of each signing position, in order |
 | A department workspace (Admin, Sales, Accounts, Engineering) | That department, Administrator, Management |
 | Seeing every inquiry | Administrator, Management, Admin department |
 | Working an inquiry (edit, comment, move) | The department that owns its current stage, Administrator |
@@ -146,8 +146,8 @@ After selecting a company, the home screen is **Select Department** with tiles:
 | All Logs | `/{code}/all-logs` | Built |
 | Company Settings | `/{code}/company-settings` | Built |
 
-Each person sees only the tiles they may open. Below them, **My Tasks** shows pending vacation
-approvals to Management and administrators.
+Each person sees only the tiles they may open. Below them, **My Tasks** lists the documents
+waiting for that person's signature.
 
 Staff can also be tagged with assignable roles that are **not** home tiles: `management`, `workers` (plus the operational departments).
 
@@ -216,13 +216,31 @@ Purposes include: inquiry, progress update, general visit, interview.
 
 If purpose = **Inquiry**, the system creates a starter inquiry in the same transaction and links visitor ↔ inquiry both ways.
 
-### 6.5 Vacation & My Tasks
+### 6.5 Leave requests, signatures and My Tasks
 
-- Leave types: annual, sick, emergency, other
-- Selected weekdays + day count
-- Status: pending → approved / rejected
-- Company home My Tasks lets management approve/reject pending requests
-- Reviews are reflected in All Logs
+Built from the company's paper "Leave Request Application".
+
+- Reception raises a request for an employee: first and last day, type, reason, and the optional
+  office-use fields. The employee's details (designation, contacts, passport, joining date) come
+  from their staff record; day count, return date, working duration and last return are worked out.
+- The request is a **form** (`/{code}/leave/{id}`) laid out like the paper one. What is on screen
+  is what prints: two A4 pages with the letterhead.
+- It is **signed in order**: Prepared By (whoever raised it), Foreman, Accountant, CEO & Managing
+  Partner, Managing Director. Each signer sees it under **My Tasks** on the company home when it
+  is their turn, opens it, and approves or rejects with their **approval PIN**. Approving stamps
+  their saved signature, name and the date into their box. A rejection needs a reason and ends
+  the request.
+- When the last box is signed the leave is approved and shows as VACATION on the attendance sheet.
+- Workers have no login; the "Signature of Employee" box is signed on the printed form.
+
+**Signatures and PIN** — each person saves their signature once under Account → Signature (drawn
+on screen or uploaded) and chooses a 4–6 digit PIN. Five wrong PINs lock it until a new one is
+set. A signed form keeps the signature as it was at signing.
+
+**Signatories** — Company Settings → Signatories says who holds each signing position (Admin,
+Foreman, Purchaser, Accountant, CEO & Managing Partner, Managing Director). The chain of each
+document type is defined in [`src/lib/signoffs/chains.ts`](src/lib/signoffs/chains.ts); adding a
+form to the system means adding its chain there.
 
 ### 6.6 All Logs
 
@@ -362,6 +380,7 @@ sessions when a password changes (sessions currently last 12 hours).
 | Company | `organizations`, `organization_settings` |
 | Staff and access | `staff_members` (login link, administrator flag), `staff_department_assignments` |
 | Reception / leave | `attendance_records`, `visitor_logs`, `vacation_requests` |
+| Sign-offs | `signatory_positions`, `document_signoffs` (append-only) |
 | Activity | `staff_activity_logs` |
 | Inquiry CRM | `inquiry_workflow_settings`, `inquiries`, `inquiry_line_items`, `inquiry_stage_events`, `inquiry_comments`, `inquiry_stage_approvals` |
 
@@ -412,8 +431,9 @@ Env essentials:
 - Documents behind the pipeline stages (quotation, LPO, job card, delivery note, invoices, receipt)
   with numbering, VAT and printing. Stages are status only today.
 - Per-company workflows: the nine stages are the same for every company.
-- Labour card (daily in/out, overtime and the monthly pay summary), the full leave application
-  form with its sign-offs, and employee notices / fines.
+- The other signed forms: employee notices / fines, medical amounts, petty cash, material
+  requests and verbal work approvals. They reuse the leave request's sign-off mechanism.
+- Labour card (daily in/out, overtime and the monthly pay summary).
 - Personal Salary / Contract under Account duplicate the HR record and will be replaced by a
   read-only view of it.
 - Login throttling and session revocation (see section 8).

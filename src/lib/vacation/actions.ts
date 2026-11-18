@@ -3,9 +3,10 @@
 import { runAction } from "@/lib/actions/result";
 import { revalidateCompanyPages } from "@/lib/actions/revalidate";
 import { requireSession } from "@/lib/auth/session";
+import type { SignoffDecision } from "@/lib/signoffs/chains";
 import {
   createVacationRequestForUser,
-  reviewVacationRequestForUser,
+  signVacationRequestForUser,
 } from "@/lib/vacation/queries";
 import type { VacationRequestInput } from "@/lib/vacation/types";
 
@@ -25,20 +26,20 @@ export async function createVacationRequestAction(
   });
 }
 
-export async function reviewVacationRequestAction(
+export async function signVacationRequestAction(
   orgCode: string,
   requestId: string,
-  decision: "approved" | "rejected",
+  input: { pin: string; decision: SignoffDecision; remarks: string },
 ) {
   return runAction(async () => {
     const session = await requireSession();
-    const updated = await reviewVacationRequestForUser(
+    const status = await signVacationRequestForUser(
       session.userId,
       orgCode,
       requestId,
-      decision,
+      input,
     );
     revalidateCompanyPages();
-    return updated;
+    return status;
   });
 }

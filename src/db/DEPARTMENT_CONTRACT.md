@@ -47,6 +47,13 @@ Never edit a migration that has been applied to a database with real data; add a
   Clients call them through `unwrap(...)`.
 - Add a test in `tests/` for every permission rule and workflow rule.
 
-## 6. Routing
+## 6. Forms that are signed
+
+- A document that ends in signature boxes gets a chain in `src/lib/signoffs/chains.ts`.
+- Raise it with `assertChainStaffed` + `signAsPreparer`; sign it with `verifyApprovalPin` (before
+  the transaction) and `signNextStep`. `src/lib/vacation/queries.ts` is the reference.
+- Its page shows the form as it prints (`Letterhead`, `SignoffBoxes`) with a `SignPanel` above it.
+
+## 7. Routing
 
 - Pages live under `src/app/(app)/[orgCode]/...` and start with `loadOrgPage()` (`src/lib/org/page.ts`).

@@ -6,6 +6,8 @@ export type StaffProfileInput = {
   fullName: string;
   email: string;
   phone: string;
+  homeCountryContact: string;
+  passportNumber: string;
   jobTitle: string;
   employeeCode: string;
   /** First working day as YYYY-MM-DD, or empty if not recorded. */

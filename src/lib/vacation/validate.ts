@@ -1,64 +1,52 @@
-import type { LeaveType, VacationRequestInput } from "@/lib/vacation/types";
+import { daysInclusive, isIsoDate } from "@/lib/datetime/calendar";
 import { UserError } from "@/lib/errors";
+import { LEAVE_TYPES, type VacationRequestInput } from "@/lib/vacation/types";
 
-const LEAVE_TYPE_SET = new Set<LeaveType>([
-  "annual",
-  "sick",
-  "emergency",
-  "other",
-]);
-
-function clean(value: string): string {
-  return value.trim();
-}
-
-function isIsoDate(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
-
-export type NormalizedVacationRequest = VacationRequestInput & {
-  startDate: string;
-  endDate: string;
+export type NormalizedVacationRequest = Omit<
+  VacationRequestInput,
+  "leaveAvailableDays"
+> & {
   dayCount: number;
+  leaveAvailableDays: number | null;
 };
 
 export function normalizeVacationRequestInput(
   input: VacationRequestInput,
 ): NormalizedVacationRequest {
-  const staffId = clean(input.staffId);
+  const staffId = input.staffId.trim();
   if (!staffId) {
     throw new UserError("Select an employee.");
   }
 
-  const selectedDates = Array.from(
-    new Set(
-      (input.selectedDates ?? [])
-        .map((value) => clean(value))
-        .filter((value) => isIsoDate(value)),
-    ),
-  ).sort();
-
-  if (selectedDates.length === 0) {
-    throw new UserError("Select at least one vacation day.");
+  if (!isIsoDate(input.startDate) || !isIsoDate(input.endDate)) {
+    throw new UserError("Select the first and last day of the leave.");
+  }
+  if (input.endDate < input.startDate) {
+    throw new UserError("The last day cannot be before the first day.");
   }
 
-  const leaveType = input.leaveType;
-  if (!LEAVE_TYPE_SET.has(leaveType)) {
+  if (!LEAVE_TYPES.some((type) => type.value === input.leaveType)) {
     throw new UserError("Select a leave type.");
   }
-
-  const reason = clean(input.reason);
-  if (leaveType === "other" && !reason) {
+  const reason = input.reason.trim();
+  if (input.leaveType === "other" && !reason) {
     throw new UserError("Enter a reason for Other leave.");
+  }
+
+  const available = input.leaveAvailableDays.trim();
+  if (available && !/^\d{1,3}$/.test(available)) {
+    throw new UserError("Leave available must be a number of days.");
   }
 
   return {
     staffId,
-    selectedDates,
-    leaveType,
+    startDate: input.startDate,
+    endDate: input.endDate,
+    dayCount: daysInclusive(input.startDate, input.endDate),
+    leaveType: input.leaveType,
     reason,
-    startDate: selectedDates[0]!,
-    endDate: selectedDates[selectedDates.length - 1]!,
-    dayCount: selectedDates.length,
+    jobHandledBy: input.jobHandledBy.trim(),
+    leaveAvailableDays: available ? Number(available) : null,
+    officeComments: input.officeComments.trim(),
   };
 }

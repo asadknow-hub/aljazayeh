@@ -9,6 +9,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import postgres from "postgres";
+import { leaveInput, makeSoleSignatory } from "./helpers";
 import { getAdminDatabaseUrl, getAppDatabaseUrl } from "@/db/admin-env";
 import { authenticateUser } from "@/lib/auth/authenticate";
 import { saveCompanySettingsForUser } from "@/lib/company-settings/queries";
@@ -39,11 +40,7 @@ import {
   updateStaffSalaryForUser,
 } from "@/lib/staff/queries";
 import type { StaffRoleKey } from "@/lib/departments/catalog";
-import {
-  createVacationRequestForUser,
-  listPendingVacationRequestsForUser,
-  reviewVacationRequestForUser,
-} from "@/lib/vacation/queries";
+import { createVacationRequestForUser } from "@/lib/vacation/queries";
 import {
   createVisitorLogForUser,
   listVisitorLogsForUser,
@@ -70,6 +67,8 @@ async function addPerson(
     fullName: name,
     email: "",
     phone: "",
+    homeCountryContact: "",
+    passportNumber: "",
     jobTitle: "",
     employeeCode: "",
     joinedOn: "",
@@ -195,6 +194,7 @@ describe("who can do what", () => {
     facebookUrl: "",
     adminName: "",
     adminEmail: "",
+    nameArabic: "",
     attendanceSheetNotes: "",
   };
   const salary = {
@@ -244,44 +244,24 @@ describe("who can do what", () => {
     await denied(setStaffAdminForUser(userId, ORG, people.mona.staffId, true));
   });
 
-  test("reception logs visitors and raises leave; only management decides it", async () => {
-    const leave = await createVacationRequestForUser(people.ravi.userId, ORG, {
-      staffId: people.sara.staffId,
-      selectedDates: ["2030-01-07", "2030-01-08"],
-      leaveType: "annual",
-      reason: "",
-    });
+  test("reception logs visitors and raises leave; other staff cannot", async () => {
+    await makeSoleSignatory(owner, ORG, people.mona);
+    const leave = await createVacationRequestForUser(
+      people.ravi.userId,
+      ORG,
+      leaveInput(people.sara.staffId, "2030-01-07", "2030-01-08"),
+    );
     assert.equal(leave.dayCount, 2);
+    assert.equal(leave.returnDate, "2030-01-09");
 
     await denied(
-      reviewVacationRequestForUser(
-        people.ravi.userId,
+      createVacationRequestForUser(
+        people.sara.userId,
         ORG,
-        leave.id,
-        "approved",
+        leaveInput(people.sara.staffId, "2030-02-01", "2030-02-01"),
       ),
     );
-    await denied(
-      createVacationRequestForUser(people.sara.userId, ORG, {
-        staffId: people.sara.staffId,
-        selectedDates: ["2030-02-01"],
-        leaveType: "annual",
-        reason: "",
-      }),
-    );
     assert.deepEqual(await listVisitorLogsForUser(people.sara.userId, ORG), []);
-    assert.deepEqual(
-      await listPendingVacationRequestsForUser(people.ravi.userId, ORG),
-      [],
-    );
-
-    const reviewed = await reviewVacationRequestForUser(
-      people.mona.userId,
-      ORG,
-      leave.id,
-      "approved",
-    );
-    assert.equal(reviewed.status, "approved");
   });
 });
 
@@ -291,6 +271,8 @@ describe("logins", () => {
       fullName: "Temp",
       email: "",
       phone: "",
+      homeCountryContact: "",
+      passportNumber: "",
       jobTitle: "",
       employeeCode: "",
       joinedOn: "",
@@ -528,6 +510,8 @@ describe("inquiry pipeline", () => {
       fullName: staff.fullName,
       email: staff.email,
       phone: staff.phone,
+      homeCountryContact: staff.homeCountryContact,
+      passportNumber: staff.passportNumber,
       jobTitle: staff.jobTitle,
       employeeCode: staff.employeeCode,
       joinedOn: staff.joinedOn,

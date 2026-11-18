@@ -2,9 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
+import { LogoField } from "@/app/(app)/[orgCode]/company-settings/logo-field";
+import { SignatoriesSection } from "@/app/(app)/[orgCode]/company-settings/signatories-section";
 import { useOrganizations } from "@/components/providers/org-provider";
 import { usePageTitle } from "@/components/providers/page-title-provider";
 import { useToast } from "@/components/providers/toast-provider";
+import type { SignatoriesView } from "@/lib/signoffs/queries";
 import { saveCompanySettingsAction } from "@/lib/company-settings/actions";
 import type { CompanySettingsView } from "@/lib/company-settings/types";
 import { saveInquiryWorkflowMapAction } from "@/lib/inquiries/actions";
@@ -23,7 +26,7 @@ import { unwrap } from "@/lib/actions/result";
 
 type FieldKey = Exclude<
   keyof CompanySettingsView,
-  "organizationId" | "organizationCode"
+  "organizationId" | "organizationCode" | "logoImage"
 >;
 
 const EDITABLE_KEYS: FieldKey[] = [
@@ -37,6 +40,7 @@ const EDITABLE_KEYS: FieldKey[] = [
   "facebookUrl",
   "adminName",
   "adminEmail",
+  "nameArabic",
   "attendanceSheetNotes",
 ];
 
@@ -137,17 +141,19 @@ const ADMIN_FIELDS: FieldConfig[] = [
   },
 ];
 
-type SettingsSection = "company" | "inquiry-settings";
+type SettingsSection = "company" | "inquiry-settings" | "signatories";
 
 type CompanySettingsClientProps = {
   initialSettings: CompanySettingsView;
   initialWorkflow: InquiryWorkflowMap;
+  initialSignatories: SignatoriesView;
   initialSection?: SettingsSection;
 };
 
 export function CompanySettingsClient({
   initialSettings,
   initialWorkflow,
+  initialSignatories,
   initialSection = "company",
 }: CompanySettingsClientProps) {
   usePageTitle("Company Settings");
@@ -171,7 +177,11 @@ export function CompanySettingsClient({
     () => !workflowEqual(workflow, savedWorkflow),
     [workflow, savedWorkflow],
   );
-  const isDirty = section === "company" ? companyDirty : workflowDirty;
+  // Signatories save as they are chosen; the other sections use Save.
+  const isDirty =
+    section === "company"
+      ? companyDirty
+      : section === "inquiry-settings" && workflowDirty;
   const canSave = isDirty && !pending;
 
   function selectSection(next: SettingsSection) {
@@ -222,6 +232,7 @@ export function CompanySettingsClient({
           facebookUrl: form.facebookUrl,
           adminName: form.adminName,
           adminEmail: form.adminEmail,
+          nameArabic: form.nameArabic,
           attendanceSheetNotes: form.attendanceSheetNotes,
         }));
         setForm(next);
@@ -291,6 +302,7 @@ export function CompanySettingsClient({
               [
                 { key: "company", label: "Company" },
                 { key: "inquiry-settings", label: "Inquiry Settings" },
+                { key: "signatories", label: "Signatories" },
               ] as const
             ).map((item) => {
               const active = item.key === section;
@@ -394,7 +406,24 @@ export function CompanySettingsClient({
                   </p>
                 </div>
 
-                <div className="px-4 py-4 sm:px-5">
+                <div className="flex flex-col gap-4 px-4 py-4 sm:px-5">
+                  <LogoField
+                    orgCode={form.organizationCode}
+                    initialLogo={form.logoImage}
+                  />
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[12px] font-medium text-zinc-700">
+                      Company name in Arabic
+                    </span>
+                    <input
+                      dir="rtl"
+                      value={form.nameArabic}
+                      onChange={(event) =>
+                        updateField("nameArabic", event.target.value)
+                      }
+                      className="max-w-sm border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-header"
+                    />
+                  </label>
                   <label className="flex flex-col gap-1.5">
                     <span className="text-[12px] font-medium text-zinc-700">
                       Notes under the attendance sheet (one per line)
@@ -411,6 +440,11 @@ export function CompanySettingsClient({
                   </label>
                 </div>
               </>
+            ) : section === "signatories" ? (
+              <SignatoriesSection
+                orgCode={form.organizationCode}
+                initial={initialSignatories}
+              />
             ) : (
               <>
                 <div className="border-b border-zinc-200 px-4 py-3 sm:px-5">

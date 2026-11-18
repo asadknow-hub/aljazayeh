@@ -1,8 +1,8 @@
 import { CompanyHomeClient } from "@/app/(app)/[orgCode]/company-home-client";
-import { can, canOpenTile } from "@/lib/access/access";
+import { canOpenTile } from "@/lib/access/access";
 import { DEPARTMENTS } from "@/lib/departments/catalog";
 import { loadOrgPage } from "@/lib/org/page";
-import { listPendingVacationRequestsForUser } from "@/lib/vacation/queries";
+import { listVacationsAwaitingMySignature } from "@/lib/vacation/queries";
 
 export const instant = false;
 
@@ -13,7 +13,7 @@ export default async function CompanyPage({
 }) {
   const { session, org } = await loadOrgPage((await params).orgCode);
 
-  const pendingVacations = await listPendingVacationRequestsForUser(
+  const awaitingSignature = await listVacationsAwaitingMySignature(
     session.userId,
     org.code,
   );
@@ -22,8 +22,7 @@ export default async function CompanyPage({
     <CompanyHomeClient
       org={org}
       tiles={DEPARTMENTS.filter((dept) => canOpenTile(org.access, dept.key))}
-      canReviewLeave={can.reviewLeave(org.access)}
-      pendingVacations={pendingVacations}
+      awaitingSignature={awaitingSignature}
     />
   );
 }

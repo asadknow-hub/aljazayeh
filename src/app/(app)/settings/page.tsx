@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { ProfileSettingsClient } from "@/app/(app)/settings/profile-settings-client";
 import { getSession } from "@/lib/auth/session";
 import { getProfileSettingsBundle } from "@/lib/profile/queries";
+import { getSigningProfile } from "@/lib/signoffs/credentials";
 import { resolveProfileSection } from "@/lib/profile/types";
 
 export const instant = false;
@@ -26,7 +27,10 @@ export default async function SettingsPage({
     : params.section;
   const initialSection = resolveProfileSection(rawSection);
 
-  const bundle = await getProfileSettingsBundle(session.userId);
+  const [bundle, signing] = await Promise.all([
+    getProfileSettingsBundle(session.userId),
+    getSigningProfile(session.userId),
+  ]);
   if (!bundle) {
     notFound();
   }
@@ -35,6 +39,7 @@ export default async function SettingsPage({
     <ProfileSettingsClient
       initialSection={initialSection}
       initialBundle={bundle}
+      signing={signing}
     />
   );
 }

@@ -1,3 +1,5 @@
+import { weekdayOf } from "@/lib/datetime/calendar";
+
 /**
  * Attendance as kept on the company's monthly "Employee Attendance Sheet":
  * one mark per person per day.
@@ -68,36 +70,13 @@ export function isAttendanceGroup(value: string): value is AttendanceGroup {
   return ATTENDANCE_GROUPS.some((group) => group.key === value);
 }
 
-/* ------------------------------ calendar math ----------------------------- */
-// Dates here are plain calendar days (YYYY-MM-DD); UTC is only used to do
-// arithmetic on them without any timezone shifting the day.
-
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const ISO_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+/* -------------------------------- calendar -------------------------------- */
 
 /** Friday is the weekly day off. */
 const WEEKLY_OFF_WEEKDAY = 5;
 
-export function isIsoDate(value: string): boolean {
-  return ISO_DATE.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
-}
-
-export function isIsoMonth(value: string): boolean {
-  return ISO_MONTH.test(value);
-}
-
 export function isWeeklyOff(date: string): boolean {
-  return new Date(`${date}T00:00:00Z`).getUTCDay() === WEEKLY_OFF_WEEKDAY;
-}
-
-/** Every date of a month ("2026-10"), in order. */
-export function datesOfMonth(month: string): string[] {
-  const [year, monthNumber] = month.split("-").map(Number) as [number, number];
-  const count = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
-  return Array.from(
-    { length: count },
-    (_, index) => `${month}-${String(index + 1).padStart(2, "0")}`,
-  );
+  return weekdayOf(date) === WEEKLY_OFF_WEEKDAY;
 }
 
 /** "2026-10" → "OCTOBER 2026", as printed in the sheet title. */

@@ -1,4 +1,4 @@
-import { isIsoDate } from "@/lib/attendance/types";
+import { isIsoDate } from "@/lib/datetime/calendar";
 import {
   isAssignableDepartmentKey,
   type StaffRoleKey,
@@ -65,6 +65,8 @@ export function normalizeStaffProfileInput(
     fullName,
     email,
     phone: clean(input.phone),
+    homeCountryContact: clean(input.homeCountryContact),
+    passportNumber: clean(input.passportNumber).toUpperCase(),
     jobTitle: clean(input.jobTitle),
     employeeCode: clean(input.employeeCode),
     joinedOn,

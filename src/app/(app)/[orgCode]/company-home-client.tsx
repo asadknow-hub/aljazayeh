@@ -1,63 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
 import { DepartmentIcon } from "@/components/departments/department-icons";
 import { usePageTitle } from "@/components/providers/page-title-provider";
-import { useToast } from "@/components/providers/toast-provider";
-import {
-  formatFriendlyDateTime,
-  formatVacationDuration,
-} from "@/lib/datetime/format";
+import { formatLeavePeriod } from "@/lib/datetime/format";
 import { departmentPath, type Department } from "@/lib/departments/catalog";
-import { useServerState } from "@/lib/react/use-server-state";
-import { reviewVacationRequestAction } from "@/lib/vacation/actions";
-import {
-  leaveTypeLabel,
-  type VacationRequestView,
-} from "@/lib/vacation/types";
-import { unwrap } from "@/lib/actions/result";
+import { leaveTypeLabel, type VacationRequestView } from "@/lib/vacation/types";
 
 type CompanyHomeClientProps = {
-  org: {
-    id: string;
-    name: string;
-    code: string;
-  };
+  org: { name: string; code: string };
   /** Departments this person is allowed to open. */
   tiles: Department[];
-  canReviewLeave: boolean;
-  pendingVacations: VacationRequestView[];
+  /** Documents whose next signature is this person's. */
+  awaitingSignature: VacationRequestView[];
 };
 
 export function CompanyHomeClient({
   org,
   tiles,
-  canReviewLeave,
-  pendingVacations,
+  awaitingSignature,
 }: CompanyHomeClientProps) {
   usePageTitle("Select Department");
-  const router = useRouter();
-  const { showToast } = useToast();
-  const [items, setItems] = useServerState(pendingVacations);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function onReview(id: string, decision: "approved" | "rejected") {
-    setError(null);
-    setBusyId(id);
-    try {
-      await unwrap(reviewVacationRequestAction(org.code, id, decision));
-      setItems((current) => current.filter((item) => item.id !== id));
-      showToast(`Vacation ${decision}`);
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save.");
-    } finally {
-      setBusyId(null);
-    }
-  }
 
   return (
     <main className="flex flex-1 flex-col px-4 py-8 sm:px-8 sm:py-10">
@@ -82,7 +45,6 @@ export function CompanyHomeClient({
         ))}
       </div>
 
-      {canReviewLeave ? (
       <section className="mx-auto mt-12 w-full max-w-5xl">
         <div className="border border-zinc-300 bg-white">
           <div className="border-b border-zinc-200 px-4 py-3 sm:px-5">
@@ -90,84 +52,45 @@ export function CompanyHomeClient({
               My Tasks
             </h2>
             <p className="mt-1 text-sm text-zinc-600">
-              Vacation requests awaiting management approval.
+              Documents waiting for your signature.
             </p>
           </div>
 
-          {error ? (
-            <div className="border-b border-zinc-200 px-4 py-3 text-sm text-red-700 sm:px-5">
-              {error}
-            </div>
-          ) : null}
-
-          {items.length === 0 ? (
+          {awaitingSignature.length === 0 ? (
             <p className="px-4 py-5 text-sm text-zinc-600 sm:px-5">
-              No pending tasks right now.
+              Nothing is waiting for you right now.
             </p>
           ) : (
             <ul className="divide-y divide-zinc-200">
-              {items.map((item) => {
-                const busy = busyId === item.id;
-                return (
-                  <li
-                    key={item.id}
-                    className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-5"
+              {awaitingSignature.map((item) => (
+                <li key={item.id}>
+                  <Link
+                    href={`/${org.code}/leave/${item.id}`}
+                    className="flex flex-col gap-1 px-4 py-4 transition hover:bg-zinc-50 sm:flex-row sm:items-center sm:justify-between sm:px-5"
                   >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-zinc-900">
-                        Vacation request · {item.staffName}
-                      </p>
-                      <p className="mt-1 text-sm text-zinc-600">
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-zinc-900">
+                        Leave request · {item.staffName}
+                      </span>
+                      <span className="mt-0.5 block text-sm text-zinc-600">
                         {leaveTypeLabel(item.leaveType)} ·{" "}
-                        {formatVacationDuration(
-                          item.selectedDates,
-                          item.dayCount,
+                        {formatLeavePeriod(
                           item.startDate,
                           item.endDate,
+                          item.dayCount,
                         )}
-                      </p>
-                      {item.reason ? (
-                        <p className="mt-1 text-sm text-zinc-600">
-                          Reason: {item.reason}
-                        </p>
-                      ) : null}
-                      <p className="mt-1 text-xs text-zinc-500">
-                        Requested {formatFriendlyDateTime(new Date(item.createdAt))}
-                        {item.staffJobTitle ? ` · ${item.staffJobTitle}` : ""}
-                      </p>
-                      <Link
-                        href={`/${org.code}/staff/${item.staffId}?section=vacation`}
-                        className="mt-2 inline-block text-xs font-medium text-header underline-offset-2 hover:underline"
-                      >
-                        Open staff vacation log
-                      </Link>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => onReview(item.id, "rejected")}
-                        className="border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-45"
-                      >
-                        {busy ? "…" : "Reject"}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => onReview(item.id, "approved")}
-                        className="bg-header px-3 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control disabled:opacity-45"
-                      >
-                        {busy ? "…" : "Approve"}
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-sm font-medium text-header">
+                      Open and sign
+                    </span>
+                  </Link>
+                </li>
+              ))}
             </ul>
           )}
         </div>
       </section>
-      ) : null}
     </main>
   );
 }

@@ -35,8 +35,6 @@ export const can = {
   useReception: (access: OrgAccess) =>
     isLeadership(access) || inDepartment(access, "reception"),
 
-  reviewLeave: (access: OrgAccess) => isLeadership(access),
-
   /** Open a department's workspace (Admin, Sales, Accounts, Engineering). */
   openDepartment: (access: OrgAccess, dept: InquiryWorkflowDepartmentKey) =>
     isLeadership(access) || inDepartment(access, dept),

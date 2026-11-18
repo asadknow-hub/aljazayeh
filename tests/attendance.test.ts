@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import postgres from "postgres";
+import { approveLeaveFully, leaveInput, makeSoleSignatory } from "./helpers";
 import { getAdminDatabaseUrl } from "@/db/admin-env";
 import {
   getAttendanceDayForUser,
@@ -13,10 +14,10 @@ import {
 } from "@/lib/attendance/queries";
 import {
   attendanceTotals,
-  datesOfMonth,
   isWeeklyOff,
   type AttendanceStatus,
 } from "@/lib/attendance/types";
+import { datesOfMonth } from "@/lib/datetime/calendar";
 import { authenticateUser } from "@/lib/auth/authenticate";
 import type { StaffRoleKey } from "@/lib/departments/catalog";
 import { UserError } from "@/lib/errors";
@@ -26,10 +27,7 @@ import {
   createStaffLoginForUser,
   deleteStaffForUser,
 } from "@/lib/staff/queries";
-import {
-  createVacationRequestForUser,
-  reviewVacationRequestForUser,
-} from "@/lib/vacation/queries";
+import { createVacationRequestForUser } from "@/lib/vacation/queries";
 
 const run = Date.now().toString(36);
 const ORG = `att-${run}`;
@@ -50,6 +48,8 @@ async function addStaff(
     fullName,
     email: "",
     phone: "",
+    homeCountryContact: "",
+    passportNumber: "",
     jobTitle: "",
     employeeCode: "",
     joinedOn,
@@ -95,10 +95,13 @@ before(async () => {
     name: "Attendance Works",
     code: ORG,
   });
-  receptionist = await addLogin(
-    (await addStaff("Rita", ["reception"])).id,
-    "rita",
-  );
+  const rita = await addStaff("Rita", ["reception"]);
+  receptionist = await addLogin(rita.id, "rita");
+  // Rita signs every box herself here; the chain has its own tests.
+  await makeSoleSignatory(owner, ORG, {
+    userId: receptionist,
+    staffId: rita.id,
+  });
   salesperson = await addLogin((await addStaff("Sam", ["sales"])).id, "sam");
 });
 
@@ -232,16 +235,15 @@ describe("monthly sheet", () => {
 
   test("approved leave fills in as Vacation; a mark on top of it wins", async () => {
     const worker = await addStaff("On Leave", ["workers"]);
-    const leave = await createVacationRequestForUser(receptionist, ORG, {
-      staffId: worker.id,
-      selectedDates: [`${MONTH}-19`, `${MONTH}-31`],
-      leaveType: "annual",
-      reason: "",
-    });
+    const leave = await createVacationRequestForUser(
+      receptionist,
+      ORG,
+      leaveInput(worker.id, `${MONTH}-19`, `${MONTH}-31`),
+    );
     // Pending leave changes nothing.
     assert.equal((await sheetRow(worker.id)).totals.absent, 0);
 
-    await reviewVacationRequestForUser(owner, ORG, leave.id, "approved");
+    await approveLeaveFully(receptionist, ORG, leave.id);
     assert.equal((await sheetRow(worker.id)).totals.absent, 13);
 
     // Came back a day early.

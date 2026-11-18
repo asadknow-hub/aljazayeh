@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { logout } from "@/app/login/actions";
+import { SignatureSection } from "@/app/(app)/settings/signature-section";
 import { usePageTitle } from "@/components/providers/page-title-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import {
@@ -17,6 +18,7 @@ import {
   saveProfileNameAction,
   saveProfileSalaryAction,
 } from "@/lib/profile/actions";
+import type { SigningProfile } from "@/lib/signoffs/credentials";
 import { formatFriendlyDateTime } from "@/lib/datetime/format";
 import {
   PROFILE_SECTION_META,
@@ -30,6 +32,7 @@ import { unwrap } from "@/lib/actions/result";
 type ProfileSettingsClientProps = {
   initialSection: ProfileSection;
   initialBundle: ProfileSettingsBundle;
+  signing: SigningProfile;
 };
 
 function LoginActivityWhen({ iso }: { iso: string }) {
@@ -120,6 +123,7 @@ function PasswordField({
 export function ProfileSettingsClient({
   initialSection,
   initialBundle,
+  signing,
 }: ProfileSettingsClientProps) {
   usePageTitle("Settings");
   const router = useRouter();
@@ -408,6 +412,15 @@ export function ProfileSettingsClient({
                     </button>
                   </div>
                 </div>
+              </SectionShell>
+            ) : null}
+
+            {section === "signature" ? (
+              <SectionShell
+                title="Signature"
+                description="How you sign documents in the system."
+              >
+                <SignatureSection initial={signing} />
               </SectionShell>
             ) : null}
 

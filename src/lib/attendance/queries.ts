@@ -12,10 +12,7 @@ import {
 import { assertCan, can } from "@/lib/access/access";
 import {
   attendanceTotals,
-  datesOfMonth,
   isAttendanceStatus,
-  isIsoDate,
-  isIsoMonth,
   isWeeklyOff,
   type AttendanceCell,
   type AttendanceDay,
@@ -24,6 +21,7 @@ import {
   type AttendanceSheet,
   type AttendanceStatus,
 } from "@/lib/attendance/types";
+import { datesOfMonth, isIsoDate, isIsoMonth } from "@/lib/datetime/calendar";
 import { appDateValue } from "@/lib/datetime/format";
 import { UserError } from "@/lib/errors";
 import { requireOrg, resolveOrg } from "@/lib/org/resolve";

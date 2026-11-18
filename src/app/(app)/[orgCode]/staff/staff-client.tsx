@@ -38,6 +38,8 @@ const emptyForm: StaffProfileInput = {
   fullName: "",
   email: "",
   phone: "",
+  homeCountryContact: "",
+  passportNumber: "",
   jobTitle: "",
   employeeCode: "",
   joinedOn: "",
@@ -458,6 +460,36 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                         setForm((current) => ({
                           ...current,
                           phone: event.target.value,
+                        }))
+                      }
+                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[12px] font-medium text-zinc-700">
+                      Home country contact number
+                    </span>
+                    <input
+                      value={form.homeCountryContact}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          homeCountryContact: event.target.value,
+                        }))
+                      }
+                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[12px] font-medium text-zinc-700">
+                      Passport number
+                    </span>
+                    <input
+                      value={form.passportNumber}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          passportNumber: event.target.value,
                         }))
                       }
                       className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"

@@ -1,4 +1,5 @@
 import { appDateValue } from "@/lib/datetime/format";
+import type { SignoffState } from "@/lib/signoffs/chains";
 
 export const LEAVE_TYPES = [
   { value: "annual", label: "Annual Leave" },
@@ -11,32 +12,55 @@ export type LeaveType = (typeof LEAVE_TYPES)[number]["value"];
 
 export type VacationStatus = "pending" | "approved" | "rejected";
 
+/** What Reception fills in to raise a leave request. */
 export type VacationRequestInput = {
   staffId: string;
-  selectedDates: string[];
+  /** First and last day away (YYYY-MM-DD). */
+  startDate: string;
+  endDate: string;
   leaveType: LeaveType;
   reason: string;
+  /** Office use: who covers the job, and the leave balance (optional). */
+  jobHandledBy: string;
+  leaveAvailableDays: string;
+  officeComments: string;
 };
 
 export type VacationRequestView = {
   id: string;
-  organizationId: string;
   staffId: string;
   staffName: string;
   staffJobTitle: string;
   startDate: string;
   endDate: string;
-  selectedDates: string[];
+  /** The day the person is back on duty. */
+  returnDate: string;
   dayCount: number;
   leaveType: LeaveType;
   reason: string;
   status: VacationStatus;
-  requestedByUserId: string;
-  reviewedByUserId: string | null;
-  reviewedAt: string | null;
-  reviewNote: string;
   createdAt: string;
-  updatedAt: string;
+};
+
+/** Everything printed on the Leave Request Application form. */
+export type LeaveDocument = VacationRequestView & {
+  company: { name: string; nameArabic: string; logoImage: string | null };
+  employee: {
+    designation: string;
+    department: string;
+    localContact: string;
+    homeCountryContact: string;
+    passportNumber: string;
+    joinedOn: string;
+    /** Time with the company when the leave starts. */
+    workingDuration: string;
+    /** When they last came back from leave, if they have been on any. */
+    previousReturn: string;
+  };
+  jobHandledBy: string;
+  leaveAvailableDays: number | null;
+  officeComments: string;
+  signoffs: SignoffState;
 };
 
 export function leaveTypeLabel(type: string): string {
@@ -50,38 +74,24 @@ export function vacationStatusLabel(status: VacationStatus): string {
 }
 
 export function vacationDayCountLabel(count: number): string {
-  const safe = Math.max(0, count);
-  return safe === 1 ? "1 day" : `${safe} days`;
+  return count === 1 ? "1 day" : `${count} days`;
 }
 
 export type VacationListFilter = "active" | "completed" | "rejected";
 
-export function vacationListBucket(
+function vacationListBucket(
   item: Pick<VacationRequestView, "status" | "endDate">,
-  today = appDateValue(),
+  today: string,
 ): VacationListFilter {
   if (item.status === "rejected") return "rejected";
   if (item.status === "pending") return "active";
-  if (item.endDate < today) return "completed";
-  return "active";
+  return item.endDate < today ? "completed" : "active";
 }
 
 export function filterVacationsByList(
   items: VacationRequestView[],
   filter: VacationListFilter,
+  today = appDateValue(),
 ): VacationRequestView[] {
-  return items.filter((item) => vacationListBucket(item) === filter);
-}
-
-export function parseSelectedDatesJson(value: string): string[] {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((item): item is string => typeof item === "string")
-      .filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item))
-      .sort();
-  } catch {
-    return [];
-  }
+  return items.filter((item) => vacationListBucket(item, today) === filter);
 }

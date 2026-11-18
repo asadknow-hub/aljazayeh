@@ -71,36 +71,36 @@ export function formatFriendlyDate(value: string | Date): string {
   }).format(date);
 }
 
-export function formatFriendlyDateRange(start: string, end: string): string {
+function formatFriendlyDateRange(start: string, end: string): string {
   if (!start && !end) return "—";
   if (start === end || !end) return formatFriendlyDate(start);
   if (!start) return formatFriendlyDate(end);
   return `${formatFriendlyDate(start)} – ${formatFriendlyDate(end)}`;
 }
 
-/** Compact friendly summary for selected vacation days. */
-export function formatVacationDuration(
-  selectedDates: string[],
-  dayCount: number,
+/** A leave period with its length, e.g. "Thu, 5 Mar 2027 – Fri, 7 May 2027 · 64 days". */
+export function formatLeavePeriod(
   startDate: string,
   endDate: string,
+  dayCount: number,
 ): string {
-  const count = dayCount || selectedDates.length;
-  const countLabel = count === 1 ? "1 day" : `${count} days`;
+  return `${formatFriendlyDateRange(startDate, endDate)} · ${dayCount === 1 ? "1 day" : `${dayCount} days`}`;
+}
 
-  if (selectedDates.length === 1) {
-    return `${formatFriendlyDate(selectedDates[0]!)} · ${countLabel}`;
-  }
+/** A date as written on the company's forms: 05-03-2027. */
+export function formatFormDate(date: string): string {
+  if (!date) return "";
+  const [year, month, day] = date.slice(0, 10).split("-");
+  return `${day}-${month}-${year}`;
+}
 
-  if (selectedDates.length > 1) {
-    return `${formatFriendlyDate(selectedDates[0]!)} – ${formatFriendlyDate(
-      selectedDates[selectedDates.length - 1]!,
-    )} · ${countLabel}`;
-  }
-
-  if (startDate || endDate) {
-    return `${formatFriendlyDateRange(startDate, endDate)} · ${countLabel}`;
-  }
-
-  return countLabel;
+/** A date as written in the company's letters: 05-March-2027. */
+export function formatLetterDate(date: string): string {
+  if (!date) return "";
+  const [year, month, day] = date.slice(0, 10).split("-").map(Number);
+  const monthName = new Intl.DateTimeFormat("en-GB", {
+    month: "long",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year!, month! - 1, 1)));
+  return `${String(day).padStart(2, "0")}-${monthName}-${year}`;
 }

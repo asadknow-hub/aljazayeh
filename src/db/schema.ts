@@ -86,6 +86,11 @@ export const users = pgTable("users", {
   isActive: boolean("is_active").notNull().default(true),
   /** May create companies. Everyone else only works inside companies they belong to. */
   isPlatformAdmin: boolean("is_platform_admin").notNull().default(false),
+  /** The person's signature as a PNG data URL, stamped on what they approve. */
+  signatureImage: text("signature_image"),
+  /** Hash of the PIN they enter each time they approve something. */
+  approvalPinHash: text("approval_pin_hash"),
+  approvalPinFailures: integer("approval_pin_failures").notNull().default(0),
   ...timestamps,
 }, (table) => [
   uniqueIndex("users_username_uidx").on(table.username),
@@ -179,6 +184,9 @@ export const organizationSettings = pgTable("organization_settings", {
   facebookUrl: text("facebook_url").notNull().default(""),
   adminName: text("admin_name").notNull().default(""),
   adminEmail: text("admin_email").notNull().default(""),
+  /** Letterhead of printed forms: Arabic company name and logo (data URL). */
+  nameArabic: text("name_arabic").notNull().default(""),
+  logoImage: text("logo_image"),
   /** Printed under the monthly attendance sheet, one note per line. */
   attendanceSheetNotes: text("attendance_sheet_notes").notNull().default(""),
   ...timestamps,
@@ -221,6 +229,8 @@ export const staffMembers = pgTable(
     fullName: text("full_name").notNull(),
     email: text("email").notNull().default(""),
     phone: text("phone").notNull().default(""),
+    homeCountryContact: text("home_country_contact").notNull().default(""),
+    passportNumber: text("passport_number").notNull().default(""),
     jobTitle: text("job_title").notNull().default(""),
     employeeCode: text("employee_code").notNull().default(""),
     /** First working day. Attendance before it shows as "New join". */
@@ -288,7 +298,70 @@ export const staffDepartmentAssignments = pgTable(
   ],
 );
 
-/** Vacation / leave requests initiated from Reception, approved by management. */
+/**
+ * Who holds each signing position in a company (Foreman, Accountant,
+ * Managing Director, …). Forms name positions; this says who signs for them.
+ */
+export const signatoryPositions = pgTable(
+  "signatory_positions",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    positionKey: text("position_key").notNull(),
+    staffId: uuid("staff_id")
+      .notNull()
+      .references(() => staffMembers.id, { onDelete: "restrict" }),
+    ...timestamps,
+  },
+  (table) => [
+    primaryKey({ columns: [table.organizationId, table.positionKey] }),
+    allowSelect("signatory_positions_member_select", isOrgMember()),
+    allowInsert("signatory_positions_admin_insert", isOrgAdmin()),
+    allowUpdate("signatory_positions_admin_update", isOrgAdmin()),
+    allowDelete("signatory_positions_admin_delete", isOrgAdmin()),
+  ],
+);
+
+/**
+ * A signature on a document: one row per step of its sign-off chain, written
+ * when that step is signed. The signer's name and signature are copied in,
+ * so the record stays as it was signed. Never changed or removed.
+ */
+export const documentSignoffs = pgTable(
+  "document_signoffs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    documentType: text("document_type").notNull(),
+    documentId: uuid("document_id").notNull(),
+    step: integer("step").notNull(),
+    decision: text("decision").notNull(),
+    signedByUserId: uuid("signed_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    signerName: text("signer_name").notNull(),
+    signatureImage: text("signature_image"),
+    remarks: text("remarks").notNull().default(""),
+    signedAt: timestamp("signed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("document_signoffs_document_step_uidx").on(
+      table.documentType,
+      table.documentId,
+      table.step,
+    ),
+    index("document_signoffs_org_idx").on(table.organizationId),
+    allowSelect("document_signoffs_member_select", isOrgMember()),
+    allowInsert("document_signoffs_member_insert", isOrgMember()),
+  ],
+);
+
+/** Leave requests, raised by Reception and signed off in order. */
 export const vacationRequests = pgTable(
   "vacation_requests",
   {
@@ -299,22 +372,20 @@ export const vacationRequests = pgTable(
     staffId: uuid("staff_id")
       .notNull()
       .references(() => staffMembers.id, { onDelete: "cascade" }),
-    startDate: text("start_date").notNull(),
-    endDate: text("end_date").notNull(),
-    /** JSON array of selected ISO dates (YYYY-MM-DD), weekdays typically. */
-    selectedDates: text("selected_dates").notNull().default("[]"),
+    /** First and last day away; the person is back on duty the day after. */
+    startDate: date("start_date", { mode: "string" }).notNull(),
+    endDate: date("end_date", { mode: "string" }).notNull(),
     dayCount: integer("day_count").notNull().default(0),
+    /** "Office use only" part of the form. */
+    jobHandledBy: text("job_handled_by").notNull().default(""),
+    leaveAvailableDays: integer("leave_available_days"),
+    officeComments: text("office_comments").notNull().default(""),
     leaveType: text("leave_type").notNull(),
     reason: text("reason").notNull().default(""),
     status: text("status").notNull().default("pending"),
     requestedByUserId: uuid("requested_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
-    reviewedByUserId: uuid("reviewed_by_user_id").references(() => users.id, {
-      onDelete: "set null",
-    }),
-    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
-    reviewNote: text("review_note").notNull().default(""),
     ...timestamps,
   },
   (table) => [

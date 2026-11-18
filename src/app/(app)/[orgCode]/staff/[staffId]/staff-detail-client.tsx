@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { usePageTitle } from "@/components/providers/page-title-provider";
@@ -8,7 +9,7 @@ import { StaffLoginSection } from "@/app/(app)/[orgCode]/staff/[staffId]/staff-l
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import {
   formatFriendlyDateTime,
-  formatVacationDuration,
+  formatLeavePeriod,
 } from "@/lib/datetime/format";
 import {
   STAFF_ASSIGNABLE_ROLES,
@@ -75,6 +76,8 @@ export function StaffDetailClient({
     fullName: initialStaff.fullName,
     email: initialStaff.email,
     phone: initialStaff.phone,
+    homeCountryContact: initialStaff.homeCountryContact,
+    passportNumber: initialStaff.passportNumber,
     jobTitle: initialStaff.jobTitle,
     employeeCode: initialStaff.employeeCode,
     joinedOn: initialStaff.joinedOn,
@@ -178,6 +181,8 @@ export function StaffDetailClient({
           fullName: updated.fullName,
           email: updated.email,
           phone: updated.phone,
+          homeCountryContact: updated.homeCountryContact,
+          passportNumber: updated.passportNumber,
           jobTitle: updated.jobTitle,
           employeeCode: updated.employeeCode,
           joinedOn: updated.joinedOn,
@@ -352,6 +357,36 @@ export function StaffDetailClient({
                         setProfile((current) => ({
                           ...current,
                           phone: event.target.value,
+                        }))
+                      }
+                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[12px] font-medium text-zinc-700">
+                      Home country contact number
+                    </span>
+                    <input
+                      value={profile.homeCountryContact}
+                      onChange={(event) =>
+                        setProfile((current) => ({
+                          ...current,
+                          homeCountryContact: event.target.value,
+                        }))
+                      }
+                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[12px] font-medium text-zinc-700">
+                      Passport number
+                    </span>
+                    <input
+                      value={profile.passportNumber}
+                      onChange={(event) =>
+                        setProfile((current) => ({
+                          ...current,
+                          passportNumber: event.target.value,
                         }))
                       }
                       className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
@@ -718,13 +753,18 @@ export function StaffDetailClient({
                           </span>
                         </div>
                         <p className="mt-1 text-sm text-zinc-600">
-                          {formatVacationDuration(
-                            item.selectedDates,
-                            item.dayCount,
+                          {formatLeavePeriod(
                             item.startDate,
                             item.endDate,
+                            item.dayCount,
                           )}
                         </p>
+                        <Link
+                          href={`/${org.code}/leave/${item.id}`}
+                          className="mt-1 inline-block text-xs font-medium text-header underline-offset-2 hover:underline"
+                        >
+                          Open leave form
+                        </Link>
                         {item.reason ? (
                           <p className="mt-1 text-sm text-zinc-600">
                             Reason: {item.reason}

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { CompanySettingsClient } from "@/app/(app)/[orgCode]/company-settings/company-settings-client";
 import { getCompanySettingsForUser } from "@/lib/company-settings/queries";
 import { getInquiryWorkflowMapForUser } from "@/lib/inquiries/queries";
+import { getSignatoriesForUser } from "@/lib/signoffs/queries";
 import { firstParam, loadOrgPage } from "@/lib/org/page";
 
 export const instant = false;
@@ -19,21 +20,24 @@ export default async function CompanySettingsPage({
     can.manageCompany,
   );
 
-  const [settings, workflow] = await Promise.all([
+  const [settings, workflow, signatories] = await Promise.all([
     getCompanySettingsForUser(session.userId, org.code),
     getInquiryWorkflowMapForUser(session.userId, org.code),
+    getSignatoriesForUser(session.userId, org.code),
   ]);
-  if (!settings || !workflow) notFound();
+  if (!settings || !workflow || !signatories) notFound();
 
+  const section = firstParam((await searchParams).section);
   const initialSection =
-    firstParam((await searchParams).section) === "inquiry-settings"
-      ? "inquiry-settings"
+    section === "inquiry-settings" || section === "signatories"
+      ? section
       : "company";
 
   return (
     <CompanySettingsClient
       initialSettings={settings}
       initialWorkflow={workflow}
+      initialSignatories={signatories}
       initialSection={initialSection}
     />
   );
