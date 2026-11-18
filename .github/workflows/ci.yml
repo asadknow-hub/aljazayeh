@@ -36,6 +36,8 @@ jobs:
       - run: npm run typecheck
       - name: Build the database from empty
         run: npm run db:setup
+      - name: Permission and workflow tests
+        run: npm test
       - name: Migrations match the schema
         run: |
           npx drizzle-kit generate --name unexpected_schema_change
