@@ -5,7 +5,7 @@ cd /d "%~dp0.."
 
 echo.
 echo === Stopping any copy that is already running ===
-for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":3000 " ^| findstr "LISTENING"') do taskkill /PID %%p /F >nul 2>&1
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr /C:":3000 " ^| findstr /C:"LISTENING"') do taskkill /PID %%p /F >nul 2>&1
 
 echo === Installing what it needs ===
 call npm install || goto failed
