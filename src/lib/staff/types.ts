@@ -8,6 +8,8 @@ export type StaffProfileInput = {
   phone: string;
   jobTitle: string;
   employeeCode: string;
+  /** First working day as YYYY-MM-DD, or empty if not recorded. */
+  joinedOn: string;
   status: StaffStatus;
   notes: string;
   departmentKeys: StaffRoleKey[];

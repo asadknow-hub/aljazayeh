@@ -1,3 +1,4 @@
+import { isIsoDate } from "@/lib/attendance/types";
 import {
   isAssignableDepartmentKey,
   type StaffRoleKey,
@@ -50,6 +51,11 @@ export function normalizeStaffProfileInput(
     throw new UserError("Email must be a valid email address.");
   }
 
+  const joinedOn = clean(input.joinedOn);
+  if (joinedOn && !isIsoDate(joinedOn)) {
+    throw new UserError("Joining date is not a valid date.");
+  }
+
   const status = input.status;
   if (!STATUSES.has(status)) {
     throw new UserError("Invalid staff status.");
@@ -61,6 +67,7 @@ export function normalizeStaffProfileInput(
     phone: clean(input.phone),
     jobTitle: clean(input.jobTitle),
     employeeCode: clean(input.employeeCode),
+    joinedOn,
     status,
     notes: clean(input.notes),
     departmentKeys: normalizeDepartments(input.departmentKeys),

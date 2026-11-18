@@ -1,7 +1,6 @@
 export const RECEPTION_SECTIONS = [
+  { key: "attendance", label: "Attendance" },
   { key: "vacation", label: "Vacation" },
-  { key: "monthly-timesheet", label: "Monthly Timesheet" },
-  { key: "daily-timesheet-ot", label: "Daily Timesheet/OT" },
   { key: "visitors", label: "Visitors" },
 ] as const;
 

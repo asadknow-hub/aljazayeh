@@ -1,5 +1,8 @@
 import { can } from "@/lib/access/access";
+import { notFound } from "next/navigation";
 import { ReceptionClient } from "@/app/(app)/[orgCode]/reception/reception-client";
+import { getAttendanceDayForUser } from "@/lib/attendance/queries";
+import { appDateValue } from "@/lib/datetime/format";
 import { firstParam, loadOrgPage } from "@/lib/org/page";
 import {
   isReceptionSection,
@@ -23,16 +26,19 @@ export default async function ReceptionPage({
     can.useReception,
   );
 
-  const [staff, vacations, visitors] = await Promise.all([
+  const today = appDateValue();
+  const [staff, vacations, visitors, attendance] = await Promise.all([
     listStaffOptionsForUser(session.userId, org.code),
     listOrgVacationRequestsForUser(session.userId, org.code),
     listVisitorLogsForUser(session.userId, org.code),
+    getAttendanceDayForUser(session.userId, org.code, today),
   ]);
+  if (!attendance) notFound();
 
   const section = firstParam((await searchParams).section);
   const initialSection: ReceptionSection = isReceptionSection(section)
     ? section
-    : "vacation";
+    : "attendance";
 
   return (
     <ReceptionClient
@@ -40,6 +46,8 @@ export default async function ReceptionPage({
       staffOptions={staff}
       initialVacations={vacations}
       initialVisitors={visitors}
+      initialAttendance={attendance}
+      today={today}
       initialSection={initialSection}
     />
   );

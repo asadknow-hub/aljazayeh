@@ -15,6 +15,13 @@
       "when": 1795019555305,
       "tag": "0001_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795021079898,
+      "tag": "0002_attendance",
+      "breakpoints": true
     }
   ]
 }

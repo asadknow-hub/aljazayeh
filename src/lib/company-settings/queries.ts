@@ -38,6 +38,7 @@ export async function getCompanySettingsForUser(
       facebookUrl: settings?.facebookUrl ?? "",
       adminName: settings?.adminName ?? "",
       adminEmail: settings?.adminEmail ?? "",
+      attendanceSheetNotes: settings?.attendanceSheetNotes ?? "",
     };
   });
 }

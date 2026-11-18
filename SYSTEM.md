@@ -28,7 +28,7 @@ It is not a public marketing site. It is an authenticated internal tool with ten
 | --- | --- |
 | Owner | Creates companies |
 | Company administrator | Company Settings, Inquiry Settings, staff logins, everything in the company |
-| Reception | Visitors log, vacation requests, timesheet shells |
+| Reception | Daily attendance and the monthly attendance sheet, visitors log, vacation requests |
 | Sales / Engineering / Accounts | Department inquiry queues + invoice-stage queues |
 | Management | Approves vacation on company home; can approve inquiry stages when required |
 | Staff / HR | Staff directory, profiles, salary, contracts |
@@ -139,7 +139,7 @@ After selecting a company, the home screen is **Select Department** with tiles:
 | --- | --- | --- |
 | Staff | `/{code}/staff` | Built |
 | Accounts | `/{code}/accounts` | Built (Inquiries + Invoice) |
-| Reception | `/{code}/reception` | Built (Visitors + Vacation; timesheets are shells) |
+| Reception | `/{code}/reception` | Built (Attendance, Vacation, Visitors) |
 | Sales | `/{code}/sales` | Built (Inquiries + Invoice) |
 | Engineering Department | `/{code}/engineering` | Built (Inquiries + Invoice) |
 | Admin | `/{code}/admin` | Built (full Inquiries CRM + Invoice) |
@@ -196,10 +196,19 @@ Sidebar sections:
 
 | Section | Status |
 | --- | --- |
+| Attendance | Built — daily marking and the printable monthly sheet |
 | Vacation | Built — create leave requests for staff |
-| Monthly Timesheet | Shell copy only |
-| Daily Timesheet / OT | Shell copy only |
 | Visitors | Built |
+
+**Attendance** follows the company's paper "Employee Attendance Sheet". Reception marks each
+person once a day: P (present), A (absent), HF (half day), MD or OFF (Friday is the weekly day
+off). "Mark the rest Present" fills in everyone not marked yet. Two things fill in on their own:
+approved leave shows as VACATION, and days before a person's joining date show as NEW JOIN.
+
+The **monthly sheet** (`/{code}/reception/attendance`) is laid out like the paper form, one for
+Workers and one for Office staff, and prints on one A4 landscape page. Totals count P, OFF and MD
+as present days; A, vacation and days before joining as absent days; half days separately. Notes
+printed under the sheet are set in Company Settings → Printed forms.
 
 **Visitors** capture name, visit time, purpose, and notes.
 
@@ -352,7 +361,7 @@ sessions when a password changes (sessions currently last 12 hours).
 | Identity | `users`, `user_login_events`, `user_salary`, `user_contracts`, `user_preferences` |
 | Company | `organizations`, `organization_settings` |
 | Staff and access | `staff_members` (login link, administrator flag), `staff_department_assignments` |
-| Reception / leave | `visitor_logs`, `vacation_requests` |
+| Reception / leave | `attendance_records`, `visitor_logs`, `vacation_requests` |
 | Activity | `staff_activity_logs` |
 | Inquiry CRM | `inquiry_workflow_settings`, `inquiries`, `inquiry_line_items`, `inquiry_stage_events`, `inquiry_comments`, `inquiry_stage_approvals` |
 
@@ -403,7 +412,8 @@ Env essentials:
 - Documents behind the pipeline stages (quotation, LPO, job card, delivery note, invoices, receipt)
   with numbering, VAT and printing. Stages are status only today.
 - Per-company workflows: the nine stages are the same for every company.
-- Reception **Monthly / Daily timesheets** are placeholders.
+- Labour card (daily in/out, overtime and the monthly pay summary), the full leave application
+  form with its sign-offs, and employee notices / fines.
 - Personal Salary / Contract under Account duplicate the HR record and will be replaced by a
   read-only view of it.
 - Login throttling and session revocation (see section 8).

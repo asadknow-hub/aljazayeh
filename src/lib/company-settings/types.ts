@@ -9,6 +9,8 @@ export type CompanySettingsInput = {
   facebookUrl: string;
   adminName: string;
   adminEmail: string;
+  /** Printed under the monthly attendance sheet, one note per line. */
+  attendanceSheetNotes: string;
 };
 
 export type CompanySettingsView = CompanySettingsInput & {

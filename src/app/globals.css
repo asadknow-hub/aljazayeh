@@ -25,6 +25,30 @@ body {
   font-family: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
+/*
+ * Printed forms. A page marked .print-landscape prints on A4 landscape, and
+ * .print-exact keeps the shaded cells that browsers otherwise drop.
+ */
+@page landscape {
+  size: A4 landscape;
+  margin: 8mm;
+}
+
+.print-landscape {
+  page: landscape;
+}
+
+.print-exact {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+}
+
 h1,
 h2,
 h3,

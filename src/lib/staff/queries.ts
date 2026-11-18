@@ -3,6 +3,7 @@ import "server-only";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { withTenantContext, type DbTransaction } from "@/db/client";
 import {
+  attendanceRecords,
   inquiries,
   staffDepartmentAssignments,
   staffMembers,
@@ -49,6 +50,7 @@ function toView(
     phone: row.phone,
     jobTitle: row.jobTitle,
     employeeCode: row.employeeCode,
+    joinedOn: row.joinedOn ?? "",
     status: row.status as StaffStatus,
     isAdmin: row.isAdmin,
     loginUsername,
@@ -207,6 +209,7 @@ export async function createStaffForUser(
       phone: normalized.phone,
       jobTitle: normalized.jobTitle,
       employeeCode: normalized.employeeCode,
+      joinedOn: normalized.joinedOn || null,
       status: normalized.status,
       notes: normalized.notes,
     });
@@ -257,6 +260,7 @@ export async function updateStaffProfileForUser(
         phone: normalized.phone,
         jobTitle: normalized.jobTitle,
         employeeCode: normalized.employeeCode,
+        joinedOn: normalized.joinedOn || null,
         status: normalized.status,
         notes: normalized.notes,
         updatedAt: new Date(),
@@ -461,7 +465,7 @@ export async function setStaffAdminForUser(
 
 /**
  * Remove a staff record created by mistake. Anyone with history (a login,
- * leave requests, assigned inquiries) is deactivated instead, so records
+ * leave requests, attendance, assigned inquiries) is deactivated instead, so records
  * that refer to them stay intact.
  */
 export async function deleteStaffForUser(
@@ -484,8 +488,19 @@ export async function deleteStaffForUser(
       .from(inquiries)
       .where(eq(inquiries.assignedStaffId, staffId))
       .limit(1);
+    const [attendance] = await tx
+      .select({ id: attendanceRecords.id })
+      .from(attendanceRecords)
+      .where(eq(attendanceRecords.staffId, staffId))
+      .limit(1);
 
-    if (staff.loginUsername || staff.isAdmin || leave || assigned) {
+    if (
+      staff.loginUsername ||
+      staff.isAdmin ||
+      leave ||
+      assigned ||
+      attendance
+    ) {
       throw new UserError(
         "This person has a login or history in the system and cannot be deleted. Set their status to Inactive instead.",
       );

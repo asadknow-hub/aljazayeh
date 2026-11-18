@@ -8,8 +8,10 @@ import {
   formatFriendlyDateTime,
   formatVacationDuration,
 } from "@/lib/datetime/format";
+import { AttendancePanel } from "@/app/(app)/[orgCode]/reception/attendance-panel";
 import { VisitorsPanel } from "@/app/(app)/[orgCode]/reception/visitors-panel";
 import { useServerState } from "@/lib/react/use-server-state";
+import type { AttendanceDay } from "@/lib/attendance/types";
 import { createVacationRequestAction } from "@/lib/vacation/actions";
 import {
   RECEPTION_SECTIONS,
@@ -41,6 +43,9 @@ type ReceptionClientProps = {
   staffOptions: StaffOption[];
   initialVacations: VacationRequestView[];
   initialVisitors: VisitorLogView[];
+  initialAttendance: AttendanceDay;
+  /** Today's date in Dubai. */
+  today: string;
   initialSection: ReceptionSection;
 };
 
@@ -74,6 +79,8 @@ export function ReceptionClient({
   staffOptions,
   initialVacations,
   initialVisitors,
+  initialAttendance,
+  today,
   initialSection,
 }: ReceptionClientProps) {
   usePageTitle("Reception");
@@ -187,42 +194,12 @@ export function ReceptionClient({
         </aside>
 
         <div className="min-w-0 flex-1 p-4 sm:p-6">
-          {section === "monthly-timesheet" ? (
-            <div className="w-full max-w-4xl border border-zinc-300 bg-white">
-              <div className="border-b border-zinc-200 px-4 py-3 sm:px-5">
-                <h2 className="font-display text-base font-semibold text-zinc-900">
-                  Monthly Timesheet
-                </h2>
-                <p className="mt-1 text-sm text-zinc-600">
-                  Monthly attendance and hours will be managed here.
-                </p>
-              </div>
-              <div className="px-4 py-5 sm:px-5">
-                <p className="text-sm text-zinc-600">
-                  Module shell ready. Monthly timesheet functions will be built
-                  next.
-                </p>
-              </div>
-            </div>
-          ) : null}
-
-          {section === "daily-timesheet-ot" ? (
-            <div className="w-full max-w-4xl border border-zinc-300 bg-white">
-              <div className="border-b border-zinc-200 px-4 py-3 sm:px-5">
-                <h2 className="font-display text-base font-semibold text-zinc-900">
-                  Daily Timesheet/OT
-                </h2>
-                <p className="mt-1 text-sm text-zinc-600">
-                  Daily timesheets and overtime entries will be managed here.
-                </p>
-              </div>
-              <div className="px-4 py-5 sm:px-5">
-                <p className="text-sm text-zinc-600">
-                  Module shell ready. Daily timesheet and OT functions will be
-                  built next.
-                </p>
-              </div>
-            </div>
+          {section === "attendance" ? (
+            <AttendancePanel
+              orgCode={org.code}
+              today={today}
+              initialDay={initialAttendance}
+            />
           ) : null}
 
           {section === "visitors" ? (

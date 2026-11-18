@@ -40,6 +40,7 @@ const emptyForm: StaffProfileInput = {
   phone: "",
   jobTitle: "",
   employeeCode: "",
+  joinedOn: "",
   status: "active",
   notes: "",
   departmentKeys: [],
@@ -410,6 +411,22 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                         setForm((current) => ({
                           ...current,
                           employeeCode: event.target.value,
+                        }))
+                      }
+                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[12px] font-medium text-zinc-700">
+                      Joining date
+                    </span>
+                    <input
+                      type="date"
+                      value={form.joinedOn}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          joinedOn: event.target.value,
                         }))
                       }
                       className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"

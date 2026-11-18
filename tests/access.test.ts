@@ -72,6 +72,7 @@ async function addPerson(
     phone: "",
     jobTitle: "",
     employeeCode: "",
+    joinedOn: "",
     status: "active",
     notes: "",
     departmentKeys: departments,
@@ -194,6 +195,7 @@ describe("who can do what", () => {
     facebookUrl: "",
     adminName: "",
     adminEmail: "",
+    attendanceSheetNotes: "",
   };
   const salary = {
     salaryAmount: "1",
@@ -291,6 +293,7 @@ describe("logins", () => {
       phone: "",
       jobTitle: "",
       employeeCode: "",
+      joinedOn: "",
       status: "active",
       notes: "",
       departmentKeys: ["workers"],
@@ -527,6 +530,7 @@ describe("inquiry pipeline", () => {
       phone: staff.phone,
       jobTitle: staff.jobTitle,
       employeeCode: staff.employeeCode,
+      joinedOn: staff.joinedOn,
       notes: staff.notes,
       departmentKeys: staff.departmentKeys,
       status: "inactive",

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   boolean,
+  date,
   index,
   integer,
   numeric,
@@ -178,6 +179,8 @@ export const organizationSettings = pgTable("organization_settings", {
   facebookUrl: text("facebook_url").notNull().default(""),
   adminName: text("admin_name").notNull().default(""),
   adminEmail: text("admin_email").notNull().default(""),
+  /** Printed under the monthly attendance sheet, one note per line. */
+  attendanceSheetNotes: text("attendance_sheet_notes").notNull().default(""),
   ...timestamps,
 }, () => [
   allowSelect("organization_settings_member_select", isOrgMember()),
@@ -220,6 +223,8 @@ export const staffMembers = pgTable(
     phone: text("phone").notNull().default(""),
     jobTitle: text("job_title").notNull().default(""),
     employeeCode: text("employee_code").notNull().default(""),
+    /** First working day. Attendance before it shows as "New join". */
+    joinedOn: date("joined_on", { mode: "string" }),
     status: text("status").notNull().default("active"),
     /** Company administrator: settings, staff logins, everything. */
     isAdmin: boolean("is_admin").notNull().default(false),
@@ -320,6 +325,39 @@ export const vacationRequests = pgTable(
       table.status,
     ),
     ...orgMemberRecords("vacation_requests"),
+  ],
+);
+
+/** One mark per person per day, entered by Reception. */
+export const attendanceRecords = pgTable(
+  "attendance_records",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    staffId: uuid("staff_id")
+      .notNull()
+      .references(() => staffMembers.id, { onDelete: "restrict" }),
+    workDate: date("work_date", { mode: "string" }).notNull(),
+    status: text("status").notNull(),
+    markedByUserId: uuid("marked_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("attendance_records_staff_date_uidx").on(
+      table.staffId,
+      table.workDate,
+    ),
+    index("attendance_records_org_date_idx").on(
+      table.organizationId,
+      table.workDate,
+    ),
+    ...orgMemberRecords("attendance_records"),
+    // A mark entered by mistake can be cleared.
+    allowDelete("attendance_records_member_delete", isOrgMember()),
   ],
 );
 

@@ -77,6 +77,7 @@ export function StaffDetailClient({
     phone: initialStaff.phone,
     jobTitle: initialStaff.jobTitle,
     employeeCode: initialStaff.employeeCode,
+    joinedOn: initialStaff.joinedOn,
     status: initialStaff.status,
     notes: initialStaff.notes,
     departmentKeys: [...initialStaff.departmentKeys],
@@ -179,6 +180,7 @@ export function StaffDetailClient({
           phone: updated.phone,
           jobTitle: updated.jobTitle,
           employeeCode: updated.employeeCode,
+          joinedOn: updated.joinedOn,
           status: updated.status,
           notes: updated.notes,
           departmentKeys: [...updated.departmentKeys],
@@ -380,6 +382,22 @@ export function StaffDetailClient({
                         setProfile((current) => ({
                           ...current,
                           employeeCode: event.target.value,
+                        }))
+                      }
+                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[12px] font-medium text-zinc-700">
+                      Joining date
+                    </span>
+                    <input
+                      type="date"
+                      value={profile.joinedOn}
+                      onChange={(event) =>
+                        setProfile((current) => ({
+                          ...current,
+                          joinedOn: event.target.value,
                         }))
                       }
                       className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"

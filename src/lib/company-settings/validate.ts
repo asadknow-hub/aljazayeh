@@ -57,5 +57,10 @@ export function normalizeCompanySettingsInput(
     facebookUrl,
     adminName: clean(input.adminName),
     adminEmail,
+    attendanceSheetNotes: input.attendanceSheetNotes
+      .split("\n")
+      .map(clean)
+      .filter(Boolean)
+      .join("\n"),
   };
 }

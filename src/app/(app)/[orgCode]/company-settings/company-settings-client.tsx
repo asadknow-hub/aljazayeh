@@ -37,6 +37,7 @@ const EDITABLE_KEYS: FieldKey[] = [
   "facebookUrl",
   "adminName",
   "adminEmail",
+  "attendanceSheetNotes",
 ];
 
 function settingsEqual(
@@ -221,6 +222,7 @@ export function CompanySettingsClient({
           facebookUrl: form.facebookUrl,
           adminName: form.adminName,
           adminEmail: form.adminEmail,
+          attendanceSheetNotes: form.attendanceSheetNotes,
         }));
         setForm(next);
         setSaved(next);
@@ -381,6 +383,32 @@ export function CompanySettingsClient({
                       />
                     </label>
                   ))}
+                </div>
+
+                <div className="border-t border-zinc-200 px-4 py-3 sm:px-5">
+                  <h3 className="font-display text-sm font-semibold text-zinc-900">
+                    Printed forms
+                  </h3>
+                  <p className="mt-1 text-sm text-zinc-600">
+                    Text that appears on forms printed from the system.
+                  </p>
+                </div>
+
+                <div className="px-4 py-4 sm:px-5">
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[12px] font-medium text-zinc-700">
+                      Notes under the attendance sheet (one per line)
+                    </span>
+                    <textarea
+                      rows={3}
+                      value={form.attendanceSheetNotes}
+                      onChange={(event) =>
+                        updateField("attendanceSheetNotes", event.target.value)
+                      }
+                      placeholder="FOR ANY CLARIFICATION AFTER 6.10PM END OF DUTY HOURS ASK FROM OFFICE"
+                      className="border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-header"
+                    />
+                  </label>
                 </div>
               </>
             ) : (
