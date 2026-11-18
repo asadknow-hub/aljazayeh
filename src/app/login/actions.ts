@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { authenticateUser } from "@/lib/auth/authenticate";
+import { UserError } from "@/lib/errors";
 import { clearSession, setSession } from "@/lib/auth/session";
 import { companyPath } from "@/lib/org/code";
 import { listUserOrganizations } from "@/lib/org/queries";
@@ -27,7 +28,14 @@ export async function login(
   const password = String(formData.get("password") ?? "");
   const next = safeNextPath(formData.get("next"));
 
-  const user = await authenticateUser(username, password);
+  let user: Awaited<ReturnType<typeof authenticateUser>>;
+  try {
+    user = await authenticateUser(username, password);
+  } catch (error) {
+    // A locked login explains itself; anything else is a real failure.
+    if (error instanceof UserError) return { error: error.message };
+    throw error;
+  }
   if (!user) {
     return { error: "Invalid username or password." };
   }

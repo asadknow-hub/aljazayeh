@@ -92,6 +92,9 @@ export const users = pgTable("users", {
   /** Hash of the PIN they enter each time they approve something. */
   approvalPinHash: text("approval_pin_hash"),
   approvalPinFailures: integer("approval_pin_failures").notNull().default(0),
+  /** Wrong passwords in a row, and until when the login is locked for them. */
+  failedLoginCount: integer("failed_login_count").notNull().default(0),
+  loginLockedUntil: timestamp("login_locked_until", { withTimezone: true }),
   ...timestamps,
 }, (table) => [
   uniqueIndex("users_username_uidx").on(table.username),
