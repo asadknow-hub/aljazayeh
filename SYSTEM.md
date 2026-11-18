@@ -60,7 +60,7 @@ Row Level Security (RLS)    ── membership-scoped org data
 | ORM / migrations | Drizzle + SQL under `drizzle/` |
 | Auth | Cookie session (`aj_session`) + bcrypt password hashes |
 | Tenancy | `organizations.id` (UUID) + human URL `/{ORG_CODE}` |
-| App DB role | Non-owner role `aljazayeh` so RLS applies |
+| App DB role | Non-owner login role (member of `aljazayeh_app`) so RLS applies |
 
 Canonical contract for new modules: [`src/db/DEPARTMENT_CONTRACT.md`](src/db/DEPARTMENT_CONTRACT.md).
 
@@ -326,8 +326,8 @@ Profile name/email ↔ Admin contact stay linked for companies you admin
 | Activity | `staff_activity_logs` |
 | Inquiry CRM | `inquiry_workflow_settings`, `inquiries`, `inquiry_line_items`, `inquiry_stage_events`, `inquiry_comments`, `inquiry_stage_approvals` |
 
-Schema source of truth: [`src/db/schema.ts`](src/db/schema.ts)  
-RLS source of truth: [`src/db/rls.sql`](src/db/rls.sql)
+Schema and RLS policies: [`src/db/schema.ts`](src/db/schema.ts)  
+SQL access functions: [`drizzle/0000_access_functions.sql`](drizzle/0000_access_functions.sql)
 
 ---
 
@@ -342,8 +342,9 @@ RLS source of truth: [`src/db/rls.sql`](src/db/rls.sql)
 | Staff / vacation / activity | `src/lib/staff/`, `src/lib/vacation/`, `src/lib/activity/` |
 | Profile | `src/lib/profile/` |
 | Department catalog | `src/lib/departments/catalog.ts` |
+| Department workspaces (Admin, Sales, Accounts, Engineering) | `src/app/(app)/[orgCode]/[dept]/` |
 | App routes | `src/app/(app)/[orgCode]/...` |
-| Migrations | `drizzle/0000_…` through `0012_…` |
+| Migrations | `drizzle/` (generated from the schema) |
 
 ---
 

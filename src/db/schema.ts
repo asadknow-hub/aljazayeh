@@ -5,6 +5,7 @@ import {
   index,
   integer,
   numeric,
+  pgPolicy,
   pgTable,
   primaryKey,
   text,
@@ -22,6 +23,44 @@ const timestamps = {
     .defaultNow(),
 };
 
+/*
+ * Row Level Security.
+ *
+ * Every table carries its policies here so a table and its access rules are
+ * always created by the same migration. Policies evaluate against the
+ * request's `app.user_id` setting (see `withTenantContext`) through the SQL
+ * helper functions created in drizzle/0000_access_functions.sql.
+ */
+type PolicyCheck = ReturnType<typeof sql.raw>;
+
+const isSelf = (column: string) =>
+  sql.raw(`${column} = app_current_user_id()`);
+
+const isOrgMember = (column = "organization_id") =>
+  sql.raw(`app_user_is_org_member(${column})`);
+
+/** For child tables that reach their company through a parent row. */
+const viaParent = (parentTable: string, foreignKey: string) =>
+  sql.raw(
+    `exists (select 1 from ${parentTable} p where p.id = ${foreignKey} and app_user_is_org_member(p.organization_id))`,
+  );
+
+const allowSelect = (name: string, check: PolicyCheck) =>
+  pgPolicy(name, { for: "select", using: check });
+const allowInsert = (name: string, check: PolicyCheck) =>
+  pgPolicy(name, { for: "insert", withCheck: check });
+const allowUpdate = (name: string, check: PolicyCheck) =>
+  pgPolicy(name, { for: "update", using: check, withCheck: check });
+const allowDelete = (name: string, check: PolicyCheck) =>
+  pgPolicy(name, { for: "delete", using: check });
+const allowAll = (name: string, check: PolicyCheck) =>
+  pgPolicy(name, { for: "all", using: check, withCheck: check });
+
+/** Full read/write for members of the row's company. */
+const orgMemberAccess = (table: string) => [
+  allowAll(`${table}_member_all`, isOrgMember()),
+];
+
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
   username: text("username").notNull(),
@@ -32,6 +71,8 @@ export const users = pgTable("users", {
   ...timestamps,
 }, (table) => [
   uniqueIndex("users_username_uidx").on(table.username),
+  allowSelect("users_self_select", isSelf("id")),
+  allowUpdate("users_self_update", isSelf("id")),
 ]);
 
 export const userLoginEvents = pgTable(
@@ -53,6 +94,8 @@ export const userLoginEvents = pgTable(
       table.userId,
       table.occurredAt,
     ),
+    allowSelect("user_login_events_self_select", isSelf("user_id")),
+    allowInsert("user_login_events_self_insert", isSelf("user_id")),
   ],
 );
 
@@ -67,7 +110,7 @@ export const userSalary = pgTable("user_salary", {
   effectiveFrom: text("effective_from").notNull().default(""),
   notes: text("notes").notNull().default(""),
   ...timestamps,
-});
+}, () => [allowAll("user_salary_self", isSelf("user_id"))]);
 
 export const userContracts = pgTable(
   "user_contracts",
@@ -83,7 +126,10 @@ export const userContracts = pgTable(
     notes: text("notes").notNull().default(""),
     ...timestamps,
   },
-  (table) => [index("user_contracts_user_idx").on(table.userId)],
+  (table) => [
+    index("user_contracts_user_idx").on(table.userId),
+    allowAll("user_contracts_self", isSelf("user_id")),
+  ],
 );
 
 export const organizations = pgTable("organizations", {
@@ -93,6 +139,12 @@ export const organizations = pgTable("organizations", {
   ...timestamps,
 }, (table) => [
   uniqueIndex("organizations_code_uidx").on(table.code),
+  allowSelect("organizations_member_select", isOrgMember("id")),
+  allowUpdate("organizations_member_update", isOrgMember("id")),
+  allowInsert(
+    "organizations_authenticated_insert",
+    sql.raw("app_current_user_id() is not null"),
+  ),
 ]);
 
 /** One settings profile per organization (company contact + public admin contact). */
@@ -110,7 +162,7 @@ export const organizationSettings = pgTable("organization_settings", {
   adminName: text("admin_name").notNull().default(""),
   adminEmail: text("admin_email").notNull().default(""),
   ...timestamps,
-});
+}, () => [...orgMemberAccess("organization_settings")]);
 
 export const memberships = pgTable("memberships", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -128,6 +180,16 @@ export const memberships = pgTable("memberships", {
   ),
   index("memberships_org_idx").on(table.organizationId),
   index("memberships_user_idx").on(table.userId),
+  allowSelect(
+    "memberships_member_select",
+    sql.raw(
+      "app_user_is_org_member(organization_id) or user_id = app_current_user_id()",
+    ),
+  ),
+  // First membership of a new company goes through app_insert_org_membership().
+  allowInsert("memberships_member_insert", isOrgMember()),
+  allowUpdate("memberships_member_update", isOrgMember()),
+  allowDelete("memberships_member_delete", isOrgMember()),
 ]);
 
 export const permissions = pgTable("permissions", {
@@ -137,6 +199,10 @@ export const permissions = pgTable("permissions", {
   ...timestamps,
 }, (table) => [
   uniqueIndex("permissions_key_uidx").on(table.key),
+  allowSelect(
+    "permissions_read_authenticated",
+    sql.raw("app_current_user_id() is not null"),
+  ),
 ]);
 
 export const roles = pgTable("roles", {
@@ -151,6 +217,7 @@ export const roles = pgTable("roles", {
 }, (table) => [
   uniqueIndex("roles_org_key_uidx").on(table.organizationId, table.key),
   index("roles_org_idx").on(table.organizationId),
+  ...orgMemberAccess("roles"),
 ]);
 
 export const rolePermissions = pgTable(
@@ -168,6 +235,7 @@ export const rolePermissions = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.roleId, table.permissionId] }),
+    allowAll("role_permissions_member_all", viaParent("roles", "role_id")),
   ],
 );
 
@@ -186,6 +254,10 @@ export const membershipRoles = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.membershipId, table.roleId] }),
+    allowAll(
+      "membership_roles_member_all",
+      viaParent("memberships", "membership_id"),
+    ),
   ],
 );
 
@@ -200,7 +272,9 @@ export const userPreferences = pgTable("user_preferences", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, () => [
+  allowAll("user_preferences_self", isSelf("user_id")),
+]);
 
 /** Org-scoped staff directory (HR module). */
 export const staffMembers = pgTable(
@@ -241,6 +315,7 @@ export const staffMembers = pgTable(
       table.organizationId,
       table.userId,
     ),
+    ...orgMemberAccess("staff_members"),
   ],
 );
 
@@ -259,6 +334,10 @@ export const staffDepartmentAssignments = pgTable(
   (table) => [
     primaryKey({ columns: [table.staffId, table.departmentKey] }),
     index("staff_department_assignments_dept_idx").on(table.departmentKey),
+    allowAll(
+      "staff_department_assignments_member_all",
+      viaParent("staff_members", "staff_id"),
+    ),
   ],
 );
 
@@ -298,6 +377,7 @@ export const vacationRequests = pgTable(
       table.organizationId,
       table.status,
     ),
+    ...orgMemberAccess("vacation_requests"),
   ],
 );
 
@@ -327,6 +407,7 @@ export const visitorLogs = pgTable(
       table.organizationId,
       table.visitedAt,
     ),
+    ...orgMemberAccess("visitor_logs"),
   ],
 );
 
@@ -350,6 +431,7 @@ export const inquiryWorkflowSettings = pgTable(
       table.stageKey,
     ),
     index("inquiry_workflow_settings_org_idx").on(table.organizationId),
+    ...orgMemberAccess("inquiry_workflow_settings"),
   ],
 );
 
@@ -387,6 +469,7 @@ export const inquiries = pgTable(
       table.organizationId,
       table.owningDepartmentKey,
     ),
+    ...orgMemberAccess("inquiries"),
   ],
 );
 
@@ -418,6 +501,9 @@ export const inquiryStageApprovals = pgTable(
     ),
     index("inquiry_stage_approvals_org_idx").on(table.organizationId),
     index("inquiry_stage_approvals_inquiry_idx").on(table.inquiryId),
+    allowSelect("inquiry_stage_approvals_member_select", isOrgMember()),
+    allowInsert("inquiry_stage_approvals_member_insert", isOrgMember()),
+    allowDelete("inquiry_stage_approvals_member_delete", isOrgMember()),
   ],
 );
 
@@ -438,7 +524,10 @@ export const inquiryLineItems = pgTable(
     sortOrder: integer("sort_order").notNull().default(0),
     ...timestamps,
   },
-  (table) => [index("inquiry_line_items_inquiry_idx").on(table.inquiryId)],
+  (table) => [
+    index("inquiry_line_items_inquiry_idx").on(table.inquiryId),
+    allowAll("inquiry_line_items_member_all", viaParent("inquiries", "inquiry_id")),
+  ],
 );
 
 export const inquiryStageEvents = pgTable(
@@ -465,6 +554,8 @@ export const inquiryStageEvents = pgTable(
   (table) => [
     index("inquiry_stage_events_inquiry_idx").on(table.inquiryId),
     index("inquiry_stage_events_org_idx").on(table.organizationId),
+    allowSelect("inquiry_stage_events_member_select", isOrgMember()),
+    allowInsert("inquiry_stage_events_member_insert", isOrgMember()),
   ],
 );
 
@@ -488,6 +579,8 @@ export const inquiryComments = pgTable(
   (table) => [
     index("inquiry_comments_inquiry_idx").on(table.inquiryId),
     index("inquiry_comments_org_idx").on(table.organizationId),
+    allowSelect("inquiry_comments_member_select", isOrgMember()),
+    allowInsert("inquiry_comments_member_insert", isOrgMember()),
   ],
 );
 
@@ -525,28 +618,11 @@ export const staffActivityLogs = pgTable(
       table.occurredAt,
     ),
     index("staff_activity_logs_staff_idx").on(table.staffId),
+    ...orgMemberAccess("staff_activity_logs"),
   ],
 );
 
 export type User = typeof users.$inferSelect;
-export type UserLoginEvent = typeof userLoginEvents.$inferSelect;
-export type UserSalary = typeof userSalary.$inferSelect;
-export type UserContract = typeof userContracts.$inferSelect;
 export type Organization = typeof organizations.$inferSelect;
-export type OrganizationSettings = typeof organizationSettings.$inferSelect;
-export type Membership = typeof memberships.$inferSelect;
-export type StaffMember = typeof staffMembers.$inferSelect;
-export type StaffDepartmentAssignment =
-  typeof staffDepartmentAssignments.$inferSelect;
-export type VacationRequest = typeof vacationRequests.$inferSelect;
-export type VisitorLog = typeof visitorLogs.$inferSelect;
-export type StaffActivityLog = typeof staffActivityLogs.$inferSelect;
-export type InquiryWorkflowSetting = typeof inquiryWorkflowSettings.$inferSelect;
 export type Inquiry = typeof inquiries.$inferSelect;
-export type InquiryLineItem = typeof inquiryLineItems.$inferSelect;
-export type InquiryStageEvent = typeof inquiryStageEvents.$inferSelect;
-export type InquiryComment = typeof inquiryComments.$inferSelect;
-export type InquiryStageApproval = typeof inquiryStageApprovals.$inferSelect;
 
-/** Helper expression for SQL migrations / docs */
-export const currentAppUserId = sql`nullif(current_setting('app.user_id', true), '')::uuid`;

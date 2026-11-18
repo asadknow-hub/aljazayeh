@@ -1,11 +1,9 @@
-import { config } from "dotenv";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { getAdminDatabaseUrl } from "@/db/admin-env";
 import { permissions, users } from "@/db/schema";
-
-config({ path: ".env.local" });
 
 const BASE_PERMISSIONS = [
   { key: "org.read", description: "View organization" },
@@ -18,12 +16,7 @@ const BASE_PERMISSIONS = [
 ] as const;
 
 async function main() {
-  const url = process.env.DATABASE_URL_ADMIN ?? process.env.DATABASE_URL;
-  if (!url) {
-    throw new Error("DATABASE_URL_ADMIN or DATABASE_URL is required");
-  }
-
-  const client = postgres(url, { max: 1 });
+  const client = postgres(getAdminDatabaseUrl(), { max: 1 });
   const db = drizzle(client);
 
   console.log("Seeding permissions...");

@@ -1,95 +1,92 @@
-import { config } from "dotenv";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
-import fs from "node:fs";
 import path from "node:path";
 import postgres from "postgres";
+import { getAdminDatabaseUrl, getAppDatabaseUrl } from "@/db/admin-env";
 
-config({ path: ".env.local" });
+/** Group role created by drizzle/0000_access_functions.sql. */
+const APP_GROUP_ROLE = "aljazayeh_app";
 
-async function main() {
-  const url = process.env.DATABASE_URL_ADMIN ?? process.env.DATABASE_URL;
-  if (!url) {
-    throw new Error("DATABASE_URL_ADMIN or DATABASE_URL is required");
+type Sql = ReturnType<typeof postgres>;
+
+/**
+ * Make sure the login role in DATABASE_URL exists, can only act through the
+ * app group role, and cannot bypass Row Level Security.
+ */
+async function provisionAppRole(sql: Sql) {
+  const appUrl = new URL(getAppDatabaseUrl());
+  const adminUrl = new URL(getAdminDatabaseUrl());
+  const appRole = decodeURIComponent(appUrl.username);
+  const appPassword = decodeURIComponent(appUrl.password);
+
+  if (!appRole || appRole === decodeURIComponent(adminUrl.username)) {
+    throw new Error(
+      "DATABASE_URL must use its own login role, different from DATABASE_URL_ADMIN. " +
+        "The admin role owns the tables, and owners bypass Row Level Security.",
+    );
   }
 
-  const client = postgres(url, { max: 1 });
-  const db = drizzle(client);
+  const [existing] = await sql<{ unsafe: boolean }[]>`
+    select (rolsuper or rolbypassrls) as unsafe
+    from pg_roles
+    where rolname = ${appRole}
+  `;
 
-  console.log("Running Drizzle migrations...");
-  await migrate(db, { migrationsFolder: path.join(process.cwd(), "drizzle") });
+  if (!existing) {
+    const [{ statement }] = await sql<{ statement: string }[]>`
+      select format('create role %I login password %L', ${appRole}::text, ${appPassword}::text) as statement
+    `;
+    await sql.unsafe(statement);
+    console.log(`Created app login role "${appRole}".`);
+  } else if (existing.unsafe) {
+    throw new Error(
+      `App role "${appRole}" is a superuser or has BYPASSRLS, so Row Level Security would not apply. Use a plain login role.`,
+    );
+  }
 
-  const rlsPath = path.join(process.cwd(), "src", "db", "rls.sql");
-  const rlsSql = fs.readFileSync(rlsPath, "utf8");
-  console.log("Applying RLS policies + grants...");
-  await client.unsafe(rlsSql);
+  const [{ statement: grantMembership }] = await sql<{ statement: string }[]>`
+    select format('grant %I to %I', ${APP_GROUP_ROLE}::text, ${appRole}::text) as statement
+  `;
+  await sql.unsafe(grantMembership);
 
-  await client.unsafe(`
-    create or replace function app_find_user_for_login(p_username text)
-    returns table (
-      id uuid,
-      username text,
-      password_hash text,
-      is_active boolean
-    )
-    language sql
-    security definer
-    set search_path = public
-    as $$
-      select u.id, u.username, u.password_hash, u.is_active
-      from users u
-      where lower(u.username) = lower(p_username)
-      limit 1;
-    $$;
-
-    revoke all on function app_find_user_for_login(text) from public;
-    grant execute on function app_find_user_for_login(text) to aljazayeh;
-
-    create or replace function app_is_org_code_available(p_code text)
-    returns boolean
-    language sql
-    security definer
-    set search_path = public
-    as $$
-      select not exists (
-        select 1 from organizations o where o.code = lower(p_code)
-      );
-    $$;
-
-    revoke all on function app_is_org_code_available(text) from public;
-    grant execute on function app_is_org_code_available(text) to aljazayeh;
-
-    create or replace function app_record_login(
-      p_user_id uuid,
-      p_ip_address text,
-      p_user_agent text
-    )
-    returns uuid
-    language plpgsql
-    security definer
-    set search_path = public
-    as $$
-    declare
-      new_id uuid;
-    begin
-      insert into user_login_events (user_id, ip_address, user_agent, success)
-      values (
-        p_user_id,
-        left(coalesce(p_ip_address, ''), 128),
-        left(coalesce(p_user_agent, ''), 512),
-        true
-      )
-      returning id into new_id;
-      return new_id;
-    end;
-    $$;
-
-    revoke all on function app_record_login(uuid, text, text) from public;
-    grant execute on function app_record_login(uuid, text, text) to aljazayeh;
+  await sql.unsafe(`
+    grant select, insert, update, delete on all tables in schema public to ${APP_GROUP_ROLE};
+    grant usage, select on all sequences in schema public to ${APP_GROUP_ROLE};
   `);
+}
 
-  await client.end();
-  console.log("Migrations complete.");
+/** Every table must be protected; a table without RLS is open to all companies. */
+async function assertRowLevelSecurity(sql: Sql) {
+  const unprotected = await sql<{ name: string }[]>`
+    select c.relname as name
+    from pg_class c
+    inner join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relkind = 'r'
+      and not c.relrowsecurity
+    order by c.relname
+  `;
+  if (unprotected.length > 0) {
+    throw new Error(
+      `Tables without Row Level Security: ${unprotected.map((t) => t.name).join(", ")}. ` +
+        "Add policies for them in src/db/schema.ts.",
+    );
+  }
+}
+
+async function main() {
+  const sql = postgres(getAdminDatabaseUrl(), { max: 1, onnotice: () => {} });
+  try {
+    console.log("Applying migrations...");
+    await migrate(drizzle(sql), {
+      migrationsFolder: path.join(process.cwd(), "drizzle"),
+    });
+    await provisionAppRole(sql);
+    await assertRowLevelSecurity(sql);
+    console.log("Database is up to date.");
+  } finally {
+    await sql.end();
+  }
 }
 
 main().catch((error) => {
