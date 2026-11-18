@@ -37,6 +37,17 @@ npm run db:setup
 npm run dev
 ```
 
+To look around with data already in place, load the demo company (staff, logins, attendance,
+forms at different stages of approval):
+
+```bash
+npm run db:demo
+```
+
+**On Windows without typing commands:** double-click `start-windows.cmd`. It stops any copy
+already running, gets the latest `main`, installs, updates the database, loads the demo company
+if it is not there yet, starts the system and opens the browser.
+
 Development login: `admin` / `admin` (the owner). In production, set `OWNER_USERNAME` and
 `OWNER_PASSWORD` before seeding; `admin` / `admin` is refused there.
 
@@ -64,5 +75,6 @@ Modules must follow [src/db/DEPARTMENT_CONTRACT.md](src/db/DEPARTMENT_CONTRACT.m
 - `npm run db:migrate` — apply migrations, provision the app role, verify every table has RLS
 - `npm run db:seed` — create the owner login
 - `npm run db:setup` — migrate + seed
+- `npm run db:demo` — load the demo company (not for production)
 
 Changing the database: see [src/db/DEPARTMENT_CONTRACT.md](src/db/DEPARTMENT_CONTRACT.md) §4.
