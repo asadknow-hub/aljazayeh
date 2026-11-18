@@ -28,11 +28,7 @@ export function StaffIcon({ accent, className }: IconProps) {
         fill={accent}
         opacity="0.85"
       />
-      <path
-        d="M30 50c2-9 8-13 11-13s9 4 11 13"
-        fill={accent}
-        opacity="0.45"
-      />
+      <path d="M30 50c2-9 8-13 11-13s9 4 11 13" fill={accent} opacity="0.45" />
     </svg>
   );
 }
@@ -41,11 +37,7 @@ export function AccountsIcon({ accent, className }: IconProps) {
   return (
     <svg viewBox="0 0 64 64" className={className} aria-hidden>
       <circle cx="32" cy="32" r="20" fill={accent} opacity="0.18" />
-      <path
-        d="M24 20h4v24h-4zm12 0h4v24h-4z"
-        fill={accent}
-        opacity="0.9"
-      />
+      <path d="M24 20h4v24h-4zm12 0h4v24h-4z" fill={accent} opacity="0.9" />
       <path
         d="M18 30h28v4H18zm0 0 24-12 4 8-24 12z"
         fill={accent}
@@ -174,7 +166,11 @@ export function AllLogsIcon({ accent, className }: IconProps) {
         fill={accent}
         opacity="0.18"
       />
-      <path d="M12 22h40M12 30h40M12 38h40M20 14v36" stroke={accent} strokeWidth="2.5" />
+      <path
+        d="M12 22h40M12 30h40M12 38h40M20 14v36"
+        stroke={accent}
+        strokeWidth="2.5"
+      />
       <rect x="24" y="24" width="10" height="4" fill={accent} opacity="0.85" />
       <rect x="38" y="32" width="8" height="4" fill={accent} opacity="0.55" />
       <rect x="24" y="40" width="14" height="4" fill={accent} opacity="0.7" />

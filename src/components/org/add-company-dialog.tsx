@@ -54,40 +54,37 @@ function CodeStatusIcon({ unique }: { unique: boolean }) {
 }
 
 export function AddCompanyDialog({ open, onClose }: AddCompanyDialogProps) {
+  // Mounted only while open, so the form starts empty every time.
+  return open ? <AddCompanyForm onClose={onClose} /> : null;
+}
+
+function AddCompanyForm({ onClose }: Pick<AddCompanyDialogProps, "onClose">) {
   const { addOrganization, isCodeAvailable } = useOrganizations();
   const { showToast } = useToast();
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [codeTouched, setCodeTouched] = useState(false);
-  const [codeAvailable, setCodeAvailable] = useState(false);
-  const [checkingCode, setCheckingCode] = useState(false);
+  const [codeCheck, setCodeCheck] = useState<{
+    code: string;
+    available: boolean;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const titleId = useId();
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!open) return;
-    setName("");
-    setCode("");
-    setCodeTouched(false);
-    setCodeAvailable(false);
-    setError(null);
-    setPending(false);
-    const id = window.setTimeout(() => nameRef.current?.focus(), 0);
-    return () => window.clearTimeout(id);
-  }, [open]);
+    nameRef.current?.focus();
+  }, []);
 
   useEffect(() => {
-    if (!open) return;
-
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
     }
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
+  }, [onClose]);
 
   const normalizedCode = useMemo(() => normalizeOrgCode(code), [code]);
   const codeReserved = normalizedCode
@@ -98,21 +95,19 @@ export function AddCompanyDialog({ open, onClose }: AddCompanyDialogProps) {
     : false;
   const showCodeStatus = normalizedCode.length > 0;
 
+  // The last answer from the server only counts for the code it was asked about.
+  const codeCheckable = codeFormatOk && !codeReserved;
+  const codeChecked = codeCheck?.code === normalizedCode;
+  const checkingCode = codeCheckable && !codeChecked;
+  const codeAvailable = codeCheckable && codeChecked && codeCheck.available;
+
   useEffect(() => {
-    if (!normalizedCode || !codeFormatOk || codeReserved) {
-      setCodeAvailable(false);
-      setCheckingCode(false);
-      return;
-    }
+    if (!codeCheckable) return;
 
     let cancelled = false;
-    setCheckingCode(true);
     const handle = window.setTimeout(() => {
       void isCodeAvailable(normalizedCode).then((available) => {
-        if (!cancelled) {
-          setCodeAvailable(available);
-          setCheckingCode(false);
-        }
+        if (!cancelled) setCodeCheck({ code: normalizedCode, available });
       });
     }, 250);
 
@@ -120,9 +115,7 @@ export function AddCompanyDialog({ open, onClose }: AddCompanyDialogProps) {
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [normalizedCode, codeFormatOk, codeReserved, isCodeAvailable]);
-
-  if (!open) return null;
+  }, [normalizedCode, codeCheckable, isCodeAvailable]);
 
   function onNameChange(value: string) {
     setName(value);

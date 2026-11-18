@@ -1,8 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
-import { formatFriendlyDateTime } from "@/lib/datetime/format";
+import { useState, type FormEvent } from "react";
+import {
+  appDateValue,
+  appTimeValue,
+  formatFriendlyDateTime,
+} from "@/lib/datetime/format";
+import { useServerState } from "@/lib/react/use-server-state";
 import { createVisitorLogAction } from "@/lib/visitors/actions";
 import {
   VISITOR_PURPOSES,
@@ -11,10 +16,7 @@ import {
   type VisitorLogView,
   type VisitorPurpose,
 } from "@/lib/visitors/types";
-import {
-  toLocalDateValue,
-  toLocalTimeValue,
-} from "@/lib/visitors/validate";
+import { unwrap } from "@/lib/actions/result";
 
 type VisitorsPanelProps = {
   orgCode: string;
@@ -25,8 +27,8 @@ function emptyForm(): VisitorLogInput {
   const now = new Date();
   return {
     fullName: "",
-    visitDate: toLocalDateValue(now),
-    visitTime: toLocalTimeValue(now),
+    visitDate: appDateValue(now),
+    visitTime: appTimeValue(now),
     purpose: "inquiry",
     notes: "",
   };
@@ -37,17 +39,13 @@ export function VisitorsPanel({
   initialVisitors,
 }: VisitorsPanelProps) {
   const router = useRouter();
-  const [visitors, setVisitors] = useState(initialVisitors);
+  const [visitors, setVisitors] = useServerState(initialVisitors);
   const [editorOpen, setEditorOpen] = useState(false);
   const [createSuccess, setCreateSuccess] = useState(false);
   const [createdItem, setCreatedItem] = useState<VisitorLogView | null>(null);
   const [form, setForm] = useState<VisitorLogInput>(emptyForm);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-
-  useEffect(() => {
-    setVisitors(initialVisitors);
-  }, [initialVisitors]);
 
   function openCreate() {
     setForm(emptyForm());
@@ -72,7 +70,7 @@ export function VisitorsPanel({
     setError(null);
     setPending(true);
     try {
-      const created = await createVisitorLogAction(orgCode, form);
+      const created = await unwrap(createVisitorLogAction(orgCode, form));
       setVisitors((current) => [
         created,
         ...current.filter((item) => item.id !== created.id),

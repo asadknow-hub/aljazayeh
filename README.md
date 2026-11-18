@@ -9,14 +9,14 @@ For a full product/architecture walkthrough (modules, inquiry CRM, multi-company
 | Layer | Choice |
 | --- | --- |
 | App | Next.js (App Router) + TypeScript + Tailwind |
-| DB | PostgreSQL (local Windows now, VPS later) |
+| DB | PostgreSQL 16+ |
 | ORM | Drizzle |
 | Auth | Cookie session + bcrypt password hashes |
 | Tenancy | `organizations.id` (UUID) + URL `/{ORG_CODE}` |
 
 ## Local setup
 
-1. PostgreSQL 17 installed locally (already used for this project).
+1. PostgreSQL 16 or newer, with an empty database and an owner login for it.
 2. Copy env:
 
 ```bash
@@ -25,8 +25,8 @@ cp .env.example .env.local
 
 3. Ensure `.env.local` has:
 
-- `DATABASE_URL` — app role (RLS applies)
-- `DATABASE_URL_ADMIN` — migrator/superuser
+- `DATABASE_URL` — the app's own login role (RLS applies). Created for you by the migration step.
+- `DATABASE_URL_ADMIN` — owner of the database, used only for migrations and seeding
 - `AUTH_SECRET` — long random string
 
 4. Install + migrate + seed:
@@ -37,25 +37,44 @@ npm run db:setup
 npm run dev
 ```
 
-Login: `admin` / `admin`
+To look around with data already in place, load the demo company (staff, logins, attendance,
+forms at different stages of approval):
+
+```bash
+npm run db:demo
+```
+
+**On Windows without typing commands:** double-click `start-windows.cmd`. It stops any copy
+already running, gets the latest `main`, installs, updates the database, loads the demo company
+if it is not there yet, starts the system and opens the browser.
+
+Development login: `admin` / `admin` (the owner). In production, set `OWNER_USERNAME` and
+`OWNER_PASSWORD` before seeding; `admin` / `admin` is refused there.
 
 ## Canonical model
 
 ```text
-Organization (tenant)
-  └── Membership (user ↔ org)
-        └── Roles → Permissions (RBAC)
+Company (tenant)
+  └── Staff member ── optional login (user)
+        ├── departments  → what they can open and do
+        └── administrator flag → company settings and logins
 ```
 
-- URL: `/{ORG_CODE}`
-- RLS session GUC: `app.user_id`
-- Helper: `withTenantContext(userId, ...)`
+- A person can use a company when they have an **active staff record with a login** there.
+- Every rule about who may do what is in `src/lib/access/access.ts`.
+- The database (Row Level Security) keeps companies apart and blocks privilege escalation.
+- URL: `/{ORG_CODE}`; queries run inside `withTenantContext(userId, ...)`.
 
-Department modules must follow [src/db/DEPARTMENT_CONTRACT.md](src/db/DEPARTMENT_CONTRACT.md).
+Modules must follow [src/db/DEPARTMENT_CONTRACT.md](src/db/DEPARTMENT_CONTRACT.md).
 
 ## Scripts
 
-- `npm run db:generate` — create Drizzle SQL migrations
-- `npm run db:migrate` — apply migrations + RLS
-- `npm run db:seed` — seed admin + permission catalog
+- `npm run check` — lint + typecheck
+- `npm test` — permission and workflow tests against the database in `.env.local`
+- `npm run db:generate` — write a migration from changes in `src/db/schema.ts`
+- `npm run db:migrate` — apply migrations, provision the app role, verify every table has RLS
+- `npm run db:seed` — create the owner login
 - `npm run db:setup` — migrate + seed
+- `npm run db:demo` — load the demo company (not for production)
+
+Changing the database: see [src/db/DEPARTMENT_CONTRACT.md](src/db/DEPARTMENT_CONTRACT.md) §4.

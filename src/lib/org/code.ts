@@ -1,3 +1,5 @@
+import { UserError } from "@/lib/errors";
+
 export const ORG_CODE_MAX_LENGTH = 64;
 
 /**
@@ -51,12 +53,12 @@ export function isValidOrgCodeFormat(code: string): boolean {
 export function assertValidOrgCode(code: string): string {
   const normalized = normalizeOrgCode(code);
   if (!isValidOrgCodeFormat(normalized)) {
-    throw new Error(
+    throw new UserError(
       "Company code must be a-z, 0-9, with single hyphens (e.g. aljazayeh-tr).",
     );
   }
   if (isReservedOrgCode(normalized)) {
-    throw new Error("This code is reserved by the system.");
+    throw new UserError("This code is reserved by the system.");
   }
   return normalized;
 }

@@ -27,7 +27,7 @@ function BrandFallback() {
 
 export function AppHeader() {
   return (
-    <header className="sticky top-0 z-40 border-b border-header-border bg-header text-header-fg shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+    <header className="sticky top-0 print:hidden z-40 border-b border-header-border bg-header text-header-fg shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
       <div className="grid h-12 w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-2 sm:px-3">
         <div className="min-w-0 justify-self-start">
           <Suspense fallback={<BrandFallback />}>

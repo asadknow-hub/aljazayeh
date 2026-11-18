@@ -2,9 +2,12 @@ import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   boolean,
+  date,
   index,
   integer,
+  jsonb,
   numeric,
+  pgPolicy,
   pgTable,
   primaryKey,
   text,
@@ -22,6 +25,59 @@ const timestamps = {
     .defaultNow(),
 };
 
+/*
+ * Row Level Security.
+ *
+ * Every table carries its policies here so a table and its access rules are
+ * always created by the same migration. Policies evaluate against the
+ * request's `app.user_id` setting (see `withTenantContext`) through the SQL
+ * helper functions created in drizzle/0000_access_functions.sql.
+ */
+type PolicyCheck = ReturnType<typeof sql.raw>;
+
+const isSelf = (column: string) =>
+  sql.raw(`${column} = app_current_user_id()`);
+
+const isOrgMember = (column = "organization_id") =>
+  sql.raw(`app_user_is_org_member(${column})`);
+
+const isOrgAdmin = (column = "organization_id") =>
+  sql.raw(`app_user_is_org_admin(${column})`);
+
+const canManageStaff = (column = "organization_id") =>
+  sql.raw(`app_user_can_manage_staff(${column})`);
+
+/** For child tables that reach their company through a parent row. */
+const viaParent = (
+  parentTable: string,
+  foreignKey: string,
+  check = "app_user_is_org_member",
+) =>
+  sql.raw(
+    `exists (select 1 from ${parentTable} p where p.id = ${foreignKey} and ${check}(p.organization_id))`,
+  );
+
+const allowSelect = (name: string, check: PolicyCheck) =>
+  pgPolicy(name, { for: "select", using: check });
+const allowInsert = (name: string, check: PolicyCheck) =>
+  pgPolicy(name, { for: "insert", withCheck: check });
+const allowUpdate = (name: string, check: PolicyCheck) =>
+  pgPolicy(name, { for: "update", using: check, withCheck: check });
+const allowDelete = (name: string, check: PolicyCheck) =>
+  pgPolicy(name, { for: "delete", using: check });
+const allowAll = (name: string, check: PolicyCheck) =>
+  pgPolicy(name, { for: "all", using: check, withCheck: check });
+
+/**
+ * Members of the row's company may read, add and change rows; nobody deletes
+ * them. Who may do what inside a company is decided in src/lib/access.
+ */
+const orgMemberRecords = (table: string) => [
+  allowSelect(`${table}_member_select`, isOrgMember()),
+  allowInsert(`${table}_member_insert`, isOrgMember()),
+  allowUpdate(`${table}_member_update`, isOrgMember()),
+];
+
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
   username: text("username").notNull(),
@@ -29,9 +85,21 @@ export const users = pgTable("users", {
   email: text("email").notNull().default(""),
   passwordHash: text("password_hash").notNull(),
   isActive: boolean("is_active").notNull().default(true),
+  /** May create companies. Everyone else only works inside companies they belong to. */
+  isPlatformAdmin: boolean("is_platform_admin").notNull().default(false),
+  /** The person's signature as a PNG data URL, stamped on what they approve. */
+  signatureImage: text("signature_image"),
+  /** Hash of the PIN they enter each time they approve something. */
+  approvalPinHash: text("approval_pin_hash"),
+  approvalPinFailures: integer("approval_pin_failures").notNull().default(0),
+  /** Wrong passwords in a row, and until when the login is locked for them. */
+  failedLoginCount: integer("failed_login_count").notNull().default(0),
+  loginLockedUntil: timestamp("login_locked_until", { withTimezone: true }),
   ...timestamps,
 }, (table) => [
   uniqueIndex("users_username_uidx").on(table.username),
+  allowSelect("users_self_select", isSelf("id")),
+  allowUpdate("users_self_update", isSelf("id")),
 ]);
 
 export const userLoginEvents = pgTable(
@@ -53,6 +121,8 @@ export const userLoginEvents = pgTable(
       table.userId,
       table.occurredAt,
     ),
+    // Rows are written by app_record_login() only.
+    allowSelect("user_login_events_self_select", isSelf("user_id")),
   ],
 );
 
@@ -67,7 +137,7 @@ export const userSalary = pgTable("user_salary", {
   effectiveFrom: text("effective_from").notNull().default(""),
   notes: text("notes").notNull().default(""),
   ...timestamps,
-});
+}, () => [allowAll("user_salary_self", isSelf("user_id"))]);
 
 export const userContracts = pgTable(
   "user_contracts",
@@ -83,7 +153,10 @@ export const userContracts = pgTable(
     notes: text("notes").notNull().default(""),
     ...timestamps,
   },
-  (table) => [index("user_contracts_user_idx").on(table.userId)],
+  (table) => [
+    index("user_contracts_user_idx").on(table.userId),
+    allowAll("user_contracts_self", isSelf("user_id")),
+  ],
 );
 
 export const organizations = pgTable("organizations", {
@@ -93,6 +166,12 @@ export const organizations = pgTable("organizations", {
   ...timestamps,
 }, (table) => [
   uniqueIndex("organizations_code_uidx").on(table.code),
+  allowSelect("organizations_member_select", isOrgMember("id")),
+  allowUpdate("organizations_admin_update", isOrgAdmin("id")),
+  allowInsert(
+    "organizations_platform_admin_insert",
+    sql.raw("app_is_platform_admin()"),
+  ),
 ]);
 
 /** One settings profile per organization (company contact + public admin contact). */
@@ -109,85 +188,17 @@ export const organizationSettings = pgTable("organization_settings", {
   facebookUrl: text("facebook_url").notNull().default(""),
   adminName: text("admin_name").notNull().default(""),
   adminEmail: text("admin_email").notNull().default(""),
+  /** Letterhead of printed forms: Arabic company name and logo (data URL). */
+  nameArabic: text("name_arabic").notNull().default(""),
+  logoImage: text("logo_image"),
+  /** Printed under the monthly attendance sheet, one note per line. */
+  attendanceSheetNotes: text("attendance_sheet_notes").notNull().default(""),
   ...timestamps,
-});
-
-export const memberships = pgTable("memberships", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  organizationId: uuid("organization_id")
-    .notNull()
-    .references(() => organizations.id, { onDelete: "cascade" }),
-  ...timestamps,
-}, (table) => [
-  uniqueIndex("memberships_user_org_uidx").on(
-    table.userId,
-    table.organizationId,
-  ),
-  index("memberships_org_idx").on(table.organizationId),
-  index("memberships_user_idx").on(table.userId),
+}, () => [
+  allowSelect("organization_settings_member_select", isOrgMember()),
+  allowInsert("organization_settings_admin_insert", isOrgAdmin()),
+  allowUpdate("organization_settings_admin_update", isOrgAdmin()),
 ]);
-
-export const permissions = pgTable("permissions", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  key: text("key").notNull(),
-  description: text("description").notNull().default(""),
-  ...timestamps,
-}, (table) => [
-  uniqueIndex("permissions_key_uidx").on(table.key),
-]);
-
-export const roles = pgTable("roles", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  organizationId: uuid("organization_id")
-    .notNull()
-    .references(() => organizations.id, { onDelete: "cascade" }),
-  key: text("key").notNull(),
-  name: text("name").notNull(),
-  isSystem: boolean("is_system").notNull().default(false),
-  ...timestamps,
-}, (table) => [
-  uniqueIndex("roles_org_key_uidx").on(table.organizationId, table.key),
-  index("roles_org_idx").on(table.organizationId),
-]);
-
-export const rolePermissions = pgTable(
-  "role_permissions",
-  {
-    roleId: uuid("role_id")
-      .notNull()
-      .references(() => roles.id, { onDelete: "cascade" }),
-    permissionId: uuid("permission_id")
-      .notNull()
-      .references(() => permissions.id, { onDelete: "cascade" }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.roleId, table.permissionId] }),
-  ],
-);
-
-export const membershipRoles = pgTable(
-  "membership_roles",
-  {
-    membershipId: uuid("membership_id")
-      .notNull()
-      .references(() => memberships.id, { onDelete: "cascade" }),
-    roleId: uuid("role_id")
-      .notNull()
-      .references(() => roles.id, { onDelete: "cascade" }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.membershipId, table.roleId] }),
-  ],
-);
 
 export const userPreferences = pgTable("user_preferences", {
   userId: uuid("user_id")
@@ -200,9 +211,15 @@ export const userPreferences = pgTable("user_preferences", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, () => [
+  allowAll("user_preferences_self", isSelf("user_id")),
+]);
 
-/** Org-scoped staff directory (HR module). */
+/**
+ * Everyone who works for a company. A staff record with a linked login
+ * (`userId`) and status "active" is what gives that person access to the
+ * company; their departments decide what they can do in it.
+ */
 export const staffMembers = pgTable(
   "staff_members",
   {
@@ -216,9 +233,15 @@ export const staffMembers = pgTable(
     fullName: text("full_name").notNull(),
     email: text("email").notNull().default(""),
     phone: text("phone").notNull().default(""),
+    homeCountryContact: text("home_country_contact").notNull().default(""),
+    passportNumber: text("passport_number").notNull().default(""),
     jobTitle: text("job_title").notNull().default(""),
     employeeCode: text("employee_code").notNull().default(""),
+    /** First working day. Attendance before it shows as "New join". */
+    joinedOn: date("joined_on", { mode: "string" }),
     status: text("status").notNull().default("active"),
+    /** Company administrator: settings, staff logins, everything. */
+    isAdmin: boolean("is_admin").notNull().default(false),
     notes: text("notes").notNull().default(""),
     salaryAmount: numeric("salary_amount", { precision: 14, scale: 2 })
       .notNull()
@@ -241,6 +264,11 @@ export const staffMembers = pgTable(
       table.organizationId,
       table.userId,
     ),
+    index("staff_members_user_idx").on(table.userId),
+    allowSelect("staff_members_member_select", isOrgMember()),
+    allowInsert("staff_members_manager_insert", canManageStaff()),
+    allowUpdate("staff_members_manager_update", canManageStaff()),
+    allowDelete("staff_members_manager_delete", canManageStaff()),
   ],
 );
 
@@ -259,10 +287,149 @@ export const staffDepartmentAssignments = pgTable(
   (table) => [
     primaryKey({ columns: [table.staffId, table.departmentKey] }),
     index("staff_department_assignments_dept_idx").on(table.departmentKey),
+    allowSelect(
+      "staff_department_assignments_member_select",
+      viaParent("staff_members", "staff_id"),
+    ),
+    allowInsert(
+      "staff_department_assignments_manager_insert",
+      viaParent("staff_members", "staff_id", "app_user_can_manage_staff"),
+    ),
+    allowDelete(
+      "staff_department_assignments_manager_delete",
+      viaParent("staff_members", "staff_id", "app_user_can_manage_staff"),
+    ),
   ],
 );
 
-/** Vacation / leave requests initiated from Reception, approved by management. */
+/**
+ * Who holds each signing position in a company (Foreman, Accountant,
+ * Managing Director, …). Forms name positions; this says who signs for them.
+ */
+export const signatoryPositions = pgTable(
+  "signatory_positions",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    positionKey: text("position_key").notNull(),
+    staffId: uuid("staff_id")
+      .notNull()
+      .references(() => staffMembers.id, { onDelete: "restrict" }),
+    ...timestamps,
+  },
+  (table) => [
+    primaryKey({ columns: [table.organizationId, table.positionKey] }),
+    allowSelect("signatory_positions_member_select", isOrgMember()),
+    allowInsert("signatory_positions_admin_insert", isOrgAdmin()),
+    allowUpdate("signatory_positions_admin_update", isOrgAdmin()),
+    allowDelete("signatory_positions_admin_delete", isOrgAdmin()),
+  ],
+);
+
+/**
+ * A signature on a document: one row per step of its sign-off chain, written
+ * when that step is signed. The signer's name and signature are copied in,
+ * so the record stays as it was signed. Never changed or removed.
+ */
+export const documentSignoffs = pgTable(
+  "document_signoffs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    documentType: text("document_type").notNull(),
+    documentId: uuid("document_id").notNull(),
+    step: integer("step").notNull(),
+    decision: text("decision").notNull(),
+    signedByUserId: uuid("signed_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    signerName: text("signer_name").notNull(),
+    signatureImage: text("signature_image"),
+    remarks: text("remarks").notNull().default(""),
+    signedAt: timestamp("signed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("document_signoffs_document_step_uidx").on(
+      table.documentType,
+      table.documentId,
+      table.step,
+    ),
+    index("document_signoffs_org_idx").on(table.organizationId),
+    allowSelect("document_signoffs_member_select", isOrgMember()),
+    allowInsert("document_signoffs_member_insert", isOrgMember()),
+  ],
+);
+
+/**
+ * Running numbers for documents (FN/2026/0001, …), one counter per company,
+ * kind of document and year.
+ */
+export const documentCounters = pgTable(
+  "document_counters",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    counterKey: text("counter_key").notNull(),
+    year: integer("year").notNull(),
+    lastNumber: integer("last_number").notNull().default(0),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.organizationId, table.counterKey, table.year],
+    }),
+    ...orgMemberRecords("document_counters"),
+  ],
+);
+
+/**
+ * The company's internal forms that are filled in and then signed off: fine
+ * notices, medical amounts, petty cash, material requests, verbal work
+ * approvals. What each kind contains is defined in src/lib/forms; the
+ * answers are stored here as entered.
+ */
+export const approvalForms = pgTable(
+  "approval_forms",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    formType: text("form_type").notNull(),
+    referenceNo: text("reference_no").notNull(),
+    /** The employee the form is about, for forms that concern one. */
+    staffId: uuid("staff_id").references(() => staffMembers.id, {
+      onDelete: "restrict",
+    }),
+    fields: jsonb("fields").$type<Record<string, string>>().notNull(),
+    lines: jsonb("lines").$type<Record<string, string>[]>().notNull(),
+    /** The form's headline amount in AED, where it has one. */
+    amount: numeric("amount", { precision: 14, scale: 2 }),
+    status: text("status").notNull().default("pending"),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("approval_forms_org_reference_uidx").on(
+      table.organizationId,
+      table.referenceNo,
+    ),
+    index("approval_forms_org_type_idx").on(
+      table.organizationId,
+      table.formType,
+    ),
+    ...orgMemberRecords("approval_forms"),
+  ],
+);
+
+/** Leave requests, raised by Reception and signed off in order. */
 export const vacationRequests = pgTable(
   "vacation_requests",
   {
@@ -273,22 +440,20 @@ export const vacationRequests = pgTable(
     staffId: uuid("staff_id")
       .notNull()
       .references(() => staffMembers.id, { onDelete: "cascade" }),
-    startDate: text("start_date").notNull(),
-    endDate: text("end_date").notNull(),
-    /** JSON array of selected ISO dates (YYYY-MM-DD), weekdays typically. */
-    selectedDates: text("selected_dates").notNull().default("[]"),
+    /** First and last day away; the person is back on duty the day after. */
+    startDate: date("start_date", { mode: "string" }).notNull(),
+    endDate: date("end_date", { mode: "string" }).notNull(),
     dayCount: integer("day_count").notNull().default(0),
+    /** "Office use only" part of the form. */
+    jobHandledBy: text("job_handled_by").notNull().default(""),
+    leaveAvailableDays: integer("leave_available_days"),
+    officeComments: text("office_comments").notNull().default(""),
     leaveType: text("leave_type").notNull(),
     reason: text("reason").notNull().default(""),
     status: text("status").notNull().default("pending"),
     requestedByUserId: uuid("requested_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
-    reviewedByUserId: uuid("reviewed_by_user_id").references(() => users.id, {
-      onDelete: "set null",
-    }),
-    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
-    reviewNote: text("review_note").notNull().default(""),
     ...timestamps,
   },
   (table) => [
@@ -298,6 +463,40 @@ export const vacationRequests = pgTable(
       table.organizationId,
       table.status,
     ),
+    ...orgMemberRecords("vacation_requests"),
+  ],
+);
+
+/** One mark per person per day, entered by Reception. */
+export const attendanceRecords = pgTable(
+  "attendance_records",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    staffId: uuid("staff_id")
+      .notNull()
+      .references(() => staffMembers.id, { onDelete: "restrict" }),
+    workDate: date("work_date", { mode: "string" }).notNull(),
+    status: text("status").notNull(),
+    markedByUserId: uuid("marked_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("attendance_records_staff_date_uidx").on(
+      table.staffId,
+      table.workDate,
+    ),
+    index("attendance_records_org_date_idx").on(
+      table.organizationId,
+      table.workDate,
+    ),
+    ...orgMemberRecords("attendance_records"),
+    // A mark entered by mistake can be cleared.
+    allowDelete("attendance_records_member_delete", isOrgMember()),
   ],
 );
 
@@ -327,6 +526,7 @@ export const visitorLogs = pgTable(
       table.organizationId,
       table.visitedAt,
     ),
+    ...orgMemberRecords("visitor_logs"),
   ],
 );
 
@@ -350,6 +550,9 @@ export const inquiryWorkflowSettings = pgTable(
       table.stageKey,
     ),
     index("inquiry_workflow_settings_org_idx").on(table.organizationId),
+    allowSelect("inquiry_workflow_settings_member_select", isOrgMember()),
+    allowInsert("inquiry_workflow_settings_admin_insert", isOrgAdmin()),
+    allowUpdate("inquiry_workflow_settings_admin_update", isOrgAdmin()),
   ],
 );
 
@@ -387,6 +590,7 @@ export const inquiries = pgTable(
       table.organizationId,
       table.owningDepartmentKey,
     ),
+    ...orgMemberRecords("inquiries"),
   ],
 );
 
@@ -418,6 +622,9 @@ export const inquiryStageApprovals = pgTable(
     ),
     index("inquiry_stage_approvals_org_idx").on(table.organizationId),
     index("inquiry_stage_approvals_inquiry_idx").on(table.inquiryId),
+    allowSelect("inquiry_stage_approvals_member_select", isOrgMember()),
+    allowInsert("inquiry_stage_approvals_member_insert", isOrgMember()),
+    allowDelete("inquiry_stage_approvals_member_delete", isOrgMember()),
   ],
 );
 
@@ -438,7 +645,10 @@ export const inquiryLineItems = pgTable(
     sortOrder: integer("sort_order").notNull().default(0),
     ...timestamps,
   },
-  (table) => [index("inquiry_line_items_inquiry_idx").on(table.inquiryId)],
+  (table) => [
+    index("inquiry_line_items_inquiry_idx").on(table.inquiryId),
+    allowAll("inquiry_line_items_member_all", viaParent("inquiries", "inquiry_id")),
+  ],
 );
 
 export const inquiryStageEvents = pgTable(
@@ -465,6 +675,8 @@ export const inquiryStageEvents = pgTable(
   (table) => [
     index("inquiry_stage_events_inquiry_idx").on(table.inquiryId),
     index("inquiry_stage_events_org_idx").on(table.organizationId),
+    allowSelect("inquiry_stage_events_member_select", isOrgMember()),
+    allowInsert("inquiry_stage_events_member_insert", isOrgMember()),
   ],
 );
 
@@ -488,6 +700,8 @@ export const inquiryComments = pgTable(
   (table) => [
     index("inquiry_comments_inquiry_idx").on(table.inquiryId),
     index("inquiry_comments_org_idx").on(table.organizationId),
+    allowSelect("inquiry_comments_member_select", isOrgMember()),
+    allowInsert("inquiry_comments_member_insert", isOrgMember()),
   ],
 );
 
@@ -525,28 +739,13 @@ export const staffActivityLogs = pgTable(
       table.occurredAt,
     ),
     index("staff_activity_logs_staff_idx").on(table.staffId),
+    // Audit trail: append-only.
+    allowSelect("staff_activity_logs_member_select", isOrgMember()),
+    allowInsert("staff_activity_logs_member_insert", isOrgMember()),
   ],
 );
 
 export type User = typeof users.$inferSelect;
-export type UserLoginEvent = typeof userLoginEvents.$inferSelect;
-export type UserSalary = typeof userSalary.$inferSelect;
-export type UserContract = typeof userContracts.$inferSelect;
 export type Organization = typeof organizations.$inferSelect;
-export type OrganizationSettings = typeof organizationSettings.$inferSelect;
-export type Membership = typeof memberships.$inferSelect;
-export type StaffMember = typeof staffMembers.$inferSelect;
-export type StaffDepartmentAssignment =
-  typeof staffDepartmentAssignments.$inferSelect;
-export type VacationRequest = typeof vacationRequests.$inferSelect;
-export type VisitorLog = typeof visitorLogs.$inferSelect;
-export type StaffActivityLog = typeof staffActivityLogs.$inferSelect;
-export type InquiryWorkflowSetting = typeof inquiryWorkflowSettings.$inferSelect;
 export type Inquiry = typeof inquiries.$inferSelect;
-export type InquiryLineItem = typeof inquiryLineItems.$inferSelect;
-export type InquiryStageEvent = typeof inquiryStageEvents.$inferSelect;
-export type InquiryComment = typeof inquiryComments.$inferSelect;
-export type InquiryStageApproval = typeof inquiryStageApprovals.$inferSelect;
 
-/** Helper expression for SQL migrations / docs */
-export const currentAppUserId = sql`nullif(current_setting('app.user_id', true), '')::uuid`;

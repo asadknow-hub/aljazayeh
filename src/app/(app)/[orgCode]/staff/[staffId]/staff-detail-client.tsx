@@ -1,13 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { usePageTitle } from "@/components/providers/page-title-provider";
 import { useToast } from "@/components/providers/toast-provider";
+import { StaffLoginSection } from "@/app/(app)/[orgCode]/staff/[staffId]/staff-login-section";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import {
   formatFriendlyDateTime,
-  formatVacationDuration,
+  formatLeavePeriod,
 } from "@/lib/datetime/format";
 import {
   STAFF_ASSIGNABLE_ROLES,
@@ -36,13 +38,14 @@ import {
   type VacationListFilter,
   type VacationRequestView,
 } from "@/lib/vacation/types";
+import { unwrap } from "@/lib/actions/result";
 
 const SECTION_LABELS: Record<StaffDetailSection, string> = {
   profile: "Profile",
   salary: "Salary",
   contract: "Contract",
   vacation: "Vacation",
-  "login-activity": "Login activity",
+  login: "Login",
   actions: "Actions",
 };
 
@@ -51,33 +54,33 @@ type StaffDetailClientProps = {
   initialStaff: StaffView;
   initialVacations: VacationRequestView[];
   initialSection: StaffDetailSection;
+  viewer: { staffId: string; canManageCompany: boolean };
 };
 
 export function StaffDetailClient({
   org,
   initialStaff,
-  initialVacations,
+  initialVacations: vacations,
   initialSection,
+  viewer,
 }: StaffDetailClientProps) {
   usePageTitle(initialStaff.fullName);
   const router = useRouter();
   const { showToast } = useToast();
 
   const [staff, setStaff] = useState(initialStaff);
-  const [vacations, setVacations] = useState(initialVacations);
   const [vacationFilter, setVacationFilter] =
     useState<VacationListFilter>("active");
   const [section, setSection] = useState<StaffDetailSection>(initialSection);
-
-  useEffect(() => {
-    setVacations(initialVacations);
-  }, [initialVacations]);
   const [profile, setProfile] = useState<StaffProfileInput>({
     fullName: initialStaff.fullName,
     email: initialStaff.email,
     phone: initialStaff.phone,
+    homeCountryContact: initialStaff.homeCountryContact,
+    passportNumber: initialStaff.passportNumber,
     jobTitle: initialStaff.jobTitle,
     employeeCode: initialStaff.employeeCode,
+    joinedOn: initialStaff.joinedOn,
     status: initialStaff.status,
     notes: initialStaff.notes,
     departmentKeys: [...initialStaff.departmentKeys],
@@ -128,7 +131,7 @@ export function StaffDetailClient({
   const canSave =
     isDirty &&
     !pending &&
-    section !== "login-activity" &&
+    section !== "login" &&
     section !== "actions" &&
     section !== "vacation";
 
@@ -168,18 +171,21 @@ export function StaffDetailClient({
     setPending(true);
     try {
       if (section === "profile") {
-        const updated = await updateStaffProfileAction(
+        const updated = await unwrap(updateStaffProfileAction(
           org.code,
           staff.id,
           profile,
-        );
+        ));
         setStaff(updated);
         const nextProfile: StaffProfileInput = {
           fullName: updated.fullName,
           email: updated.email,
           phone: updated.phone,
+          homeCountryContact: updated.homeCountryContact,
+          passportNumber: updated.passportNumber,
           jobTitle: updated.jobTitle,
           employeeCode: updated.employeeCode,
+          joinedOn: updated.joinedOn,
           status: updated.status,
           notes: updated.notes,
           departmentKeys: [...updated.departmentKeys],
@@ -188,11 +194,11 @@ export function StaffDetailClient({
         setSavedProfile(nextProfile);
         showToast("Profile saved");
       } else if (section === "salary") {
-        const updated = await updateStaffSalaryAction(
+        const updated = await unwrap(updateStaffSalaryAction(
           org.code,
           staff.id,
           salary,
-        );
+        ));
         setStaff(updated);
         const nextSalary: StaffSalaryInput = {
           salaryAmount: updated.salaryAmount,
@@ -205,11 +211,11 @@ export function StaffDetailClient({
         setSavedSalary(nextSalary);
         showToast("Salary saved");
       } else if (section === "contract") {
-        const updated = await updateStaffContractAction(
+        const updated = await unwrap(updateStaffContractAction(
           org.code,
           staff.id,
           contract,
-        );
+        ));
         setStaff(updated);
         const nextContract: StaffContractInput = {
           contractTitle: updated.contractTitle,
@@ -233,7 +239,7 @@ export function StaffDetailClient({
   async function confirmDelete() {
     setDeletePending(true);
     try {
-      await deleteStaffAction(org.code, staff.id);
+      await unwrap(deleteStaffAction(org.code, staff.id));
       setDeleteOpen(false);
       router.push(`/${org.code}/staff`);
     } catch (err) {
@@ -358,6 +364,36 @@ export function StaffDetailClient({
                   </label>
                   <label className="flex flex-col gap-1.5">
                     <span className="text-[12px] font-medium text-zinc-700">
+                      Home country contact number
+                    </span>
+                    <input
+                      value={profile.homeCountryContact}
+                      onChange={(event) =>
+                        setProfile((current) => ({
+                          ...current,
+                          homeCountryContact: event.target.value,
+                        }))
+                      }
+                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[12px] font-medium text-zinc-700">
+                      Passport number
+                    </span>
+                    <input
+                      value={profile.passportNumber}
+                      onChange={(event) =>
+                        setProfile((current) => ({
+                          ...current,
+                          passportNumber: event.target.value,
+                        }))
+                      }
+                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[12px] font-medium text-zinc-700">
                       Job title
                     </span>
                     <input
@@ -381,6 +417,22 @@ export function StaffDetailClient({
                         setProfile((current) => ({
                           ...current,
                           employeeCode: event.target.value,
+                        }))
+                      }
+                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[12px] font-medium text-zinc-700">
+                      Joining date
+                    </span>
+                    <input
+                      type="date"
+                      value={profile.joinedOn}
+                      onChange={(event) =>
+                        setProfile((current) => ({
+                          ...current,
+                          joinedOn: event.target.value,
                         }))
                       }
                       className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
@@ -701,13 +753,18 @@ export function StaffDetailClient({
                           </span>
                         </div>
                         <p className="mt-1 text-sm text-zinc-600">
-                          {formatVacationDuration(
-                            item.selectedDates,
-                            item.dayCount,
+                          {formatLeavePeriod(
                             item.startDate,
                             item.endDate,
+                            item.dayCount,
                           )}
                         </p>
+                        <Link
+                          href={`/${org.code}/leave/${item.id}`}
+                          className="mt-1 inline-block text-xs font-medium text-header underline-offset-2 hover:underline"
+                        >
+                          Open leave form
+                        </Link>
                         {item.reason ? (
                           <p className="mt-1 text-sm text-zinc-600">
                             Reason: {item.reason}
@@ -724,15 +781,17 @@ export function StaffDetailClient({
               </SectionShell>
             ) : null}
 
-            {section === "login-activity" ? (
+            {section === "login" ? (
               <SectionShell
-                title="Login activity"
-                description="Login history appears here once this staff member has a linked user account."
+                title="Login"
+                description="Whether this person can sign in to the system."
               >
-                <p className="text-sm text-zinc-600">
-                  No linked login account yet. Activity will show when staff
-                  portal access is enabled for this person.
-                </p>
+                <StaffLoginSection
+                  orgCode={org.code}
+                  staff={staff}
+                  viewer={viewer}
+                  onChange={setStaff}
+                />
               </SectionShell>
             ) : null}
 
@@ -746,7 +805,9 @@ export function StaffDetailClient({
                     Delete staff
                   </p>
                   <p className="mt-1 text-sm text-zinc-600">
-                    Permanently remove this person from {org.name}.
+                    Only for records created by mistake. Someone who has a
+                    login or any history is set to Inactive on the Profile tab
+                    instead.
                   </p>
                   <button
                     type="button"

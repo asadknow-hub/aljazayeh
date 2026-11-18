@@ -15,21 +15,22 @@ const COUNTDOWN_SECONDS = 3;
 
 export function ConfirmDeleteDialog({
   open,
+  ...props
+}: ConfirmDeleteDialogProps) {
+  // Mounted only while open, so the countdown restarts every time.
+  return open ? <ConfirmDeleteDialogBody {...props} /> : null;
+}
+
+function ConfirmDeleteDialogBody({
   title = "Confirm delete",
   message,
   pending = false,
   onCancel,
   onConfirm,
-}: ConfirmDeleteDialogProps) {
+}: Omit<ConfirmDeleteDialogProps, "open">) {
   const [secondsLeft, setSecondsLeft] = useState(COUNTDOWN_SECONDS);
 
   useEffect(() => {
-    if (!open) {
-      setSecondsLeft(COUNTDOWN_SECONDS);
-      return;
-    }
-
-    setSecondsLeft(COUNTDOWN_SECONDS);
     const id = window.setInterval(() => {
       setSecondsLeft((current) => {
         if (current <= 1) {
@@ -41,9 +42,7 @@ export function ConfirmDeleteDialog({
     }, 1000);
 
     return () => window.clearInterval(id);
-  }, [open]);
-
-  if (!open) return null;
+  }, []);
 
   const canDelete = secondsLeft === 0 && !pending;
 

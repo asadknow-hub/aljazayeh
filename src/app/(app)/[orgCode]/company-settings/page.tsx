@@ -1,55 +1,43 @@
+import { can } from "@/lib/access/access";
 import { notFound } from "next/navigation";
 import { CompanySettingsClient } from "@/app/(app)/[orgCode]/company-settings/company-settings-client";
-import { getSession } from "@/lib/auth/session";
 import { getCompanySettingsForUser } from "@/lib/company-settings/queries";
 import { getInquiryWorkflowMapForUser } from "@/lib/inquiries/queries";
-import { isReservedOrgCode, normalizeOrgCode } from "@/lib/org/code";
+import { getSignatoriesForUser } from "@/lib/signoffs/queries";
+import { firstParam, loadOrgPage } from "@/lib/org/page";
 
 export const instant = false;
-
-type SettingsSearch = {
-  section?: string | string[];
-};
 
 export default async function CompanySettingsPage({
   params,
   searchParams,
 }: {
   params: Promise<{ orgCode: string }>;
-  searchParams: Promise<SettingsSearch>;
+  searchParams: Promise<{ section?: string | string[] }>;
 }) {
-  const session = await getSession();
-  if (!session) {
-    notFound();
-  }
+  const { session, org } = await loadOrgPage(
+    (await params).orgCode,
+    can.manageCompany,
+  );
 
-  const { orgCode: rawCode } = await params;
-  const orgCode = normalizeOrgCode(rawCode);
-
-  if (!orgCode || isReservedOrgCode(orgCode)) {
-    notFound();
-  }
-
-  const [settings, workflow] = await Promise.all([
-    getCompanySettingsForUser(session.userId, orgCode),
-    getInquiryWorkflowMapForUser(session.userId, orgCode),
+  const [settings, workflow, signatories] = await Promise.all([
+    getCompanySettingsForUser(session.userId, org.code),
+    getInquiryWorkflowMapForUser(session.userId, org.code),
+    getSignatoriesForUser(session.userId, org.code),
   ]);
+  if (!settings || !workflow || !signatories) notFound();
 
-  if (!settings || !workflow) {
-    notFound();
-  }
-
-  const query = await searchParams;
-  const rawSection = Array.isArray(query.section)
-    ? query.section[0]
-    : query.section;
+  const section = firstParam((await searchParams).section);
   const initialSection =
-    rawSection === "inquiry-settings" ? "inquiry-settings" : "company";
+    section === "inquiry-settings" || section === "signatories"
+      ? section
+      : "company";
 
   return (
     <CompanySettingsClient
       initialSettings={settings}
       initialWorkflow={workflow}
+      initialSignatories={signatories}
       initialSection={initialSection}
     />
   );

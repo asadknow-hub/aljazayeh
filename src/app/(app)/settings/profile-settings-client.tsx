@@ -2,13 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import {
-  useEffect,
   useMemo,
   useState,
   type FormEvent,
   type ReactNode,
 } from "react";
 import { logout } from "@/app/login/actions";
+import { SignatureSection } from "@/app/(app)/settings/signature-section";
 import { usePageTitle } from "@/components/providers/page-title-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import {
@@ -18,6 +18,7 @@ import {
   saveProfileNameAction,
   saveProfileSalaryAction,
 } from "@/lib/profile/actions";
+import type { SigningProfile } from "@/lib/signoffs/credentials";
 import { formatFriendlyDateTime } from "@/lib/datetime/format";
 import {
   PROFILE_SECTION_META,
@@ -26,27 +27,19 @@ import {
   type ProfileSettingsBundle,
   type SalaryView,
 } from "@/lib/profile/types";
+import { unwrap } from "@/lib/actions/result";
 
 type ProfileSettingsClientProps = {
   initialSection: ProfileSection;
   initialBundle: ProfileSettingsBundle;
+  signing: SigningProfile;
 };
 
 function LoginActivityWhen({ iso }: { iso: string }) {
-  const [label, setLabel] = useState<string | null>(null);
-
-  useEffect(() => {
-    const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) {
-      setLabel(iso);
-      return;
-    }
-    setLabel(formatFriendlyDateTime(date));
-  }, [iso]);
-
+  const date = new Date(iso);
   return (
-    <time dateTime={iso} suppressHydrationWarning>
-      {label ?? "—"}
+    <time dateTime={iso}>
+      {Number.isNaN(date.getTime()) ? iso : formatFriendlyDateTime(date)}
     </time>
   );
 }
@@ -130,6 +123,7 @@ function PasswordField({
 export function ProfileSettingsClient({
   initialSection,
   initialBundle,
+  signing,
 }: ProfileSettingsClientProps) {
   usePageTitle("Settings");
   const router = useRouter();
@@ -221,11 +215,11 @@ export function ProfileSettingsClient({
     setPasswordError(null);
     setPasswordPending(true);
     try {
-      await changeProfilePasswordAction({
+      await unwrap(changeProfilePasswordAction({
         currentPassword,
         newPassword,
         confirmPassword,
-      });
+      }));
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -251,23 +245,23 @@ export function ProfileSettingsClient({
         const emailChanged = email !== identity.email;
 
         if (nameChanged) {
-          const saved = await saveProfileNameAction(fullName);
+          const saved = await unwrap(saveProfileNameAction(fullName));
           setIdentity((current) => ({ ...current, fullName: saved.fullName }));
           setFullName(saved.fullName);
         }
         if (emailChanged) {
-          const saved = await saveProfileEmailAction(email);
+          const saved = await unwrap(saveProfileEmailAction(email));
           setIdentity((current) => ({ ...current, email: saved.email }));
           setEmail(saved.email);
         }
         showToast("Account settings saved");
       } else if (section === "salary") {
-        const saved = await saveProfileSalaryAction(salaryForm);
+        const saved = await unwrap(saveProfileSalaryAction(salaryForm));
         setSalary(saved);
         setSalaryForm(saved);
         showToast("Salary saved");
       } else if (section === "contract") {
-        const saved = await saveProfileContractAction(contractForm);
+        const saved = await unwrap(saveProfileContractAction(contractForm));
         setContract(saved);
         setContractForm(saved);
         showToast("Contract saved");
@@ -418,6 +412,15 @@ export function ProfileSettingsClient({
                     </button>
                   </div>
                 </div>
+              </SectionShell>
+            ) : null}
+
+            {section === "signature" ? (
+              <SectionShell
+                title="Signature"
+                description="How you sign documents in the system."
+              >
+                <SignatureSection initial={signing} />
               </SectionShell>
             ) : null}
 

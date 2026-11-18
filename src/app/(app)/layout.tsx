@@ -3,7 +3,10 @@ import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/header/app-header";
 import { AppProviders } from "@/components/providers/app-providers";
 import { getSession } from "@/lib/auth/session";
-import { listUserOrganizations } from "@/lib/org/queries";
+import {
+  listUserOrganizations,
+  userCanCreateOrganizations,
+} from "@/lib/org/queries";
 
 export const instant = false;
 
@@ -13,10 +16,14 @@ async function AuthenticatedApp({ children }: { children: React.ReactNode }) {
     redirect("/login");
   }
 
-  const organizations = await listUserOrganizations(session.userId);
+  const [organizations, canCreateOrganizations] = await Promise.all([
+    listUserOrganizations(session.userId),
+    userCanCreateOrganizations(session.userId),
+  ]);
 
   return (
     <AppProviders
+      canCreateOrganizations={canCreateOrganizations}
       initialOrganizations={organizations.map((org) => ({
         id: org.id,
         name: org.name,

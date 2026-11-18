@@ -1,13 +1,11 @@
 import "server-only";
 
-import type { withTenantContext } from "@/db/client";
+import type { DbTransaction } from "@/db/client";
 import { staffActivityLogs } from "@/db/schema";
 import type { StaffActivityLogInput } from "@/lib/activity/types";
 
-type TenantTx = Parameters<Parameters<typeof withTenantContext>[1]>[0];
-
 export async function insertStaffActivityLog(
-  tx: TenantTx,
+  tx: DbTransaction,
   input: StaffActivityLogInput,
 ) {
   const now = input.occurredAt ?? new Date();

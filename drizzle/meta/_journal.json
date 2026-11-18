@@ -5,92 +5,50 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1794345314121,
-      "tag": "0000_init_rbac",
+      "when": 1795017496397,
+      "tag": "0000_access_functions",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1794345600000,
-      "tag": "0001_organization_settings",
+      "when": 1795019555305,
+      "tag": "0001_baseline",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "7",
-      "when": 1794345800000,
-      "tag": "0002_user_profile_settings",
+      "when": 1795021079898,
+      "tag": "0002_attendance",
       "breakpoints": true
     },
     {
       "idx": 3,
       "version": "7",
-      "when": 1794346000000,
-      "tag": "0003_staff_members",
+      "when": 1795026036739,
+      "tag": "0003_leave_cleanup",
       "breakpoints": true
     },
     {
       "idx": 4,
       "version": "7",
-      "when": 1794346200000,
-      "tag": "0004_staff_salary_roles",
+      "when": 1795026037408,
+      "tag": "0004_signoffs_and_leave_form",
       "breakpoints": true
     },
     {
       "idx": 5,
       "version": "7",
-      "when": 1794346400000,
-      "tag": "0005_vacation_requests",
+      "when": 1795035193582,
+      "tag": "0005_approval_forms",
       "breakpoints": true
     },
     {
       "idx": 6,
       "version": "7",
-      "when": 1794346600000,
-      "tag": "0006_vacation_selected_days",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1794346800000,
-      "tag": "0007_visitor_logs",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1794347000000,
-      "tag": "0008_staff_activity_logs",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1794347200000,
-      "tag": "0009_inquiries_workflow",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1794347400000,
-      "tag": "0010_inquiry_comments",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "7",
-      "when": 1794347600000,
-      "tag": "0011_inquiry_workflow_approvals",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "7",
-      "when": 1794347800000,
-      "tag": "0012_staff_user_stage_approvals",
+      "when": 1795038292170,
+      "tag": "0006_login_lock",
       "breakpoints": true
     }
   ]

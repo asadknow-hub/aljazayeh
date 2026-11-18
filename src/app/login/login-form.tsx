@@ -22,7 +22,6 @@ export function LoginForm() {
           type="text"
           autoComplete="username"
           required
-          defaultValue="admin"
           className="h-11 rounded-md border border-zinc-300 bg-white px-3 text-zinc-950 outline-none transition focus:border-zinc-500"
         />
       </label>
@@ -34,7 +33,6 @@ export function LoginForm() {
           type="password"
           autoComplete="current-password"
           required
-          defaultValue="admin"
           className="h-11 rounded-md border border-zinc-300 bg-white px-3 text-zinc-950 outline-none transition focus:border-zinc-500"
         />
       </label>

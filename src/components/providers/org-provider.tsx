@@ -6,25 +6,26 @@ import {
   useContext,
   useMemo,
   useState,
-  useTransition,
   type ReactNode,
 } from "react";
+import { unwrap } from "@/lib/actions/result";
 import {
   checkOrgCodeAvailableAction,
   createOrganizationAction,
   setDefaultOrganizationAction,
 } from "@/lib/org/actions";
-import type { Organization } from "@/lib/org/types";
 import {
   isReservedOrgCode,
   isValidOrgCodeFormat,
   normalizeOrgCode,
 } from "@/lib/org/code";
+import type { Organization } from "@/lib/org/types";
 
 type OrgContextValue = {
+  /** Companies the signed-in person works for. */
   organizations: Organization[];
-  defaultOrganization: Organization | null;
-  ready: boolean;
+  /** Only the owner's login may create companies. */
+  canCreateOrganizations: boolean;
   refreshOrganizations: (next: Organization[]) => void;
   addOrganization: (input: {
     name: string;
@@ -39,25 +40,19 @@ const OrgContext = createContext<OrgContextValue | null>(null);
 export function OrgProvider({
   children,
   initialOrganizations,
+  canCreateOrganizations,
 }: {
   children: ReactNode;
   initialOrganizations: Organization[];
+  canCreateOrganizations: boolean;
 }) {
   const [organizations, setOrganizations] =
     useState<Organization[]>(initialOrganizations);
-  const [, startTransition] = useTransition();
-
-  const refreshOrganizations = useCallback((next: Organization[]) => {
-    setOrganizations(next);
-  }, []);
 
   const setDefaultOrganizationId = useCallback(async (id: string | null) => {
-    await setDefaultOrganizationAction(id);
+    await unwrap(setDefaultOrganizationAction(id));
     setOrganizations((current) =>
-      current.map((org) => ({
-        ...org,
-        isDefault: id ? org.id === id : false,
-      })),
+      current.map((org) => ({ ...org, isDefault: org.id === id })),
     );
   }, []);
 
@@ -71,48 +66,31 @@ export function OrgProvider({
 
   const addOrganization = useCallback(
     async (input: { name: string; code?: string }) => {
-      const created = await createOrganizationAction(input);
+      const created = await unwrap(createOrganizationAction(input));
       const organization: Organization = {
-        id: created.id,
-        name: created.name,
-        code: created.code,
+        ...created,
         createdAt: new Date().toISOString(),
+        // The first company becomes the default on login.
         isDefault: organizations.every((org) => !org.isDefault),
       };
-
-      startTransition(() => {
-        setOrganizations((current) => {
-          const withDefaults = organization.isDefault
-            ? current.map((org) => ({ ...org, isDefault: false }))
-            : current;
-          return [...withDefaults, organization];
-        });
-      });
-
+      setOrganizations((current) => [...current, organization]);
       return organization;
     },
-    [organizations],
-  );
-
-  const defaultOrganization = useMemo(
-    () => organizations.find((org) => org.isDefault) ?? null,
     [organizations],
   );
 
   const value = useMemo(
     () => ({
       organizations,
-      defaultOrganization,
-      ready: true,
-      refreshOrganizations,
+      canCreateOrganizations,
+      refreshOrganizations: setOrganizations,
       addOrganization,
       setDefaultOrganizationId,
       isCodeAvailable,
     }),
     [
       organizations,
-      defaultOrganization,
-      refreshOrganizations,
+      canCreateOrganizations,
       addOrganization,
       setDefaultOrganizationId,
       isCodeAvailable,

@@ -1,66 +1,54 @@
-import { config } from "dotenv";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { permissions, users } from "@/db/schema";
+import { getAdminDatabaseUrl } from "@/db/admin-env";
+import { users } from "@/db/schema";
 
-config({ path: ".env.local" });
-
-const BASE_PERMISSIONS = [
-  { key: "org.read", description: "View organization" },
-  { key: "org.manage", description: "Manage organization settings" },
-  { key: "members.read", description: "View members" },
-  { key: "members.manage", description: "Manage members and roles" },
-  { key: "roles.manage", description: "Manage roles and permissions" },
-  { key: "staff.read", description: "View staff directory" },
-  { key: "staff.manage", description: "Create, update, and delete staff" },
-] as const;
-
+/**
+ * Create the owner's login: the one account that can create companies.
+ * Everyone else gets a login from a company administrator inside the app.
+ *
+ * Set OWNER_USERNAME / OWNER_PASSWORD to choose the credentials. Without
+ * them a local development login (admin / admin) is created, which is
+ * refused in production.
+ */
 async function main() {
-  const url = process.env.DATABASE_URL_ADMIN ?? process.env.DATABASE_URL;
-  if (!url) {
-    throw new Error("DATABASE_URL_ADMIN or DATABASE_URL is required");
+  const username = (process.env.OWNER_USERNAME ?? "admin").trim().toLowerCase();
+  const password = process.env.OWNER_PASSWORD ?? "";
+
+  if (!password && process.env.NODE_ENV === "production") {
+    throw new Error("Set OWNER_PASSWORD to create the owner login in production.");
   }
 
-  const client = postgres(url, { max: 1 });
-  const db = drizzle(client);
-
-  console.log("Seeding permissions...");
-  for (const permission of BASE_PERMISSIONS) {
-    const existing = await db
-      .select({ id: permissions.id })
-      .from(permissions)
-      .where(eq(permissions.key, permission.key))
+  const client = postgres(getAdminDatabaseUrl(), { max: 1 });
+  try {
+    const db = drizzle(client);
+    const [existing] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.username, username))
       .limit(1);
-    if (existing.length === 0) {
-      await db.insert(permissions).values(permission);
+
+    if (existing) {
+      console.log(`Owner login "${username}" already exists; left unchanged.`);
+      return;
     }
-  }
 
-  console.log("Seeding admin user...");
-  const passwordHash = await bcrypt.hash("admin", 12);
-  const existingAdmin = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.username, "admin"))
-    .limit(1);
-
-  if (existingAdmin.length === 0) {
     await db.insert(users).values({
-      username: "admin",
-      fullName: "System Admin",
-      email: "admin@aljazayeh.local",
-      passwordHash,
-      isActive: true,
+      username,
+      fullName: "Owner",
+      passwordHash: await bcrypt.hash(password || "admin", 12),
+      isPlatformAdmin: true,
     });
-    console.log("Created admin user (admin / admin).");
-  } else {
-    console.log("Admin user already exists — leaving name/email/password unchanged.");
+    console.log(
+      password
+        ? `Created owner login "${username}".`
+        : `Created development owner login (${username} / admin).`,
+    );
+  } finally {
+    await client.end();
   }
-
-  await client.end();
-  console.log("Seed complete.");
 }
 
 main().catch((error) => {

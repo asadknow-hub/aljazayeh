@@ -1,4 +1,5 @@
 import type { CompanySettingsInput } from "@/lib/company-settings/types";
+import { UserError } from "@/lib/errors";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -9,7 +10,7 @@ function clean(value: string): string {
 function assertEmail(label: string, value: string) {
   if (!value) return;
   if (!EMAIL_PATTERN.test(value)) {
-    throw new Error(`${label} must be a valid email address.`);
+    throw new UserError(`${label} must be a valid email address.`);
   }
 }
 
@@ -18,10 +19,10 @@ function assertUrl(label: string, value: string) {
   try {
     const parsed = new URL(value.includes("://") ? value : `https://${value}`);
     if (!parsed.hostname.includes(".")) {
-      throw new Error("invalid");
+      throw new UserError("invalid");
     }
   } catch {
-    throw new Error(`${label} must be a valid URL.`);
+    throw new UserError(`${label} must be a valid URL.`);
   }
 }
 
@@ -30,7 +31,7 @@ export function normalizeCompanySettingsInput(
 ): CompanySettingsInput {
   const companyName = clean(input.companyName);
   if (!companyName) {
-    throw new Error("Company name is required.");
+    throw new UserError("Company name is required.");
   }
 
   const email = clean(input.email);
@@ -56,5 +57,11 @@ export function normalizeCompanySettingsInput(
     facebookUrl,
     adminName: clean(input.adminName),
     adminEmail,
+    nameArabic: clean(input.nameArabic),
+    attendanceSheetNotes: input.attendanceSheetNotes
+      .split("\n")
+      .map(clean)
+      .filter(Boolean)
+      .join("\n"),
   };
 }

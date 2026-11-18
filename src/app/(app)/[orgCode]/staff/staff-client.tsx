@@ -19,10 +19,11 @@ import { createStaffAction, deleteStaffAction } from "@/lib/staff/actions";
 import {
   STAFF_STATUSES,
   formatStaffSalary,
-  type StaffInput,
+  type StaffProfileInput,
   type StaffStatus,
   type StaffView,
 } from "@/lib/staff/types";
+import { unwrap } from "@/lib/actions/result";
 
 type StaffClientProps = {
   org: {
@@ -33,12 +34,15 @@ type StaffClientProps = {
   initialStaff: StaffView[];
 };
 
-const emptyForm: StaffInput = {
+const emptyForm: StaffProfileInput = {
   fullName: "",
   email: "",
   phone: "",
+  homeCountryContact: "",
+  passportNumber: "",
   jobTitle: "",
   employeeCode: "",
+  joinedOn: "",
   status: "active",
   notes: "",
   departmentKeys: [],
@@ -57,7 +61,7 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [createSuccess, setCreateSuccess] = useState(false);
   const [createdName, setCreatedName] = useState("");
-  const [form, setForm] = useState<StaffInput>(emptyForm);
+  const [form, setForm] = useState<StaffProfileInput>(emptyForm);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -136,7 +140,7 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
     setError(null);
     setPending(true);
     try {
-      const created = await createStaffAction(org.code, form);
+      const created = await unwrap(createStaffAction(org.code, form));
       setStaff((current) =>
         [...current, created].sort((a, b) =>
           a.fullName.localeCompare(b.fullName),
@@ -163,7 +167,7 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
     const item = pendingDelete;
     setDeletingId(item.id);
     try {
-      await deleteStaffAction(org.code, item.id);
+      await unwrap(deleteStaffAction(org.code, item.id));
       setStaff((current) => current.filter((row) => row.id !== item.id));
       setPendingDelete(null);
     } catch (err) {
@@ -416,6 +420,22 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                   </label>
                   <label className="flex flex-col gap-1.5">
                     <span className="text-[12px] font-medium text-zinc-700">
+                      Joining date
+                    </span>
+                    <input
+                      type="date"
+                      value={form.joinedOn}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          joinedOn: event.target.value,
+                        }))
+                      }
+                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[12px] font-medium text-zinc-700">
                       Email
                     </span>
                     <input
@@ -440,6 +460,36 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                         setForm((current) => ({
                           ...current,
                           phone: event.target.value,
+                        }))
+                      }
+                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[12px] font-medium text-zinc-700">
+                      Home country contact number
+                    </span>
+                    <input
+                      value={form.homeCountryContact}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          homeCountryContact: event.target.value,
+                        }))
+                      }
+                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[12px] font-medium text-zinc-700">
+                      Passport number
+                    </span>
+                    <input
+                      value={form.passportNumber}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          passportNumber: event.target.value,
                         }))
                       }
                       className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"

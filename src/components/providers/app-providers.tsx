@@ -9,14 +9,19 @@ import type { Organization } from "@/lib/org/types";
 export function AppProviders({
   children,
   initialOrganizations,
+  canCreateOrganizations,
 }: {
   children: ReactNode;
   initialOrganizations: Organization[];
+  canCreateOrganizations: boolean;
 }) {
   return (
     <PageTitleProvider>
       <ToastProvider>
-        <OrgProvider initialOrganizations={initialOrganizations}>
+        <OrgProvider
+          initialOrganizations={initialOrganizations}
+          canCreateOrganizations={canCreateOrganizations}
+        >
           {children}
         </OrgProvider>
       </ToastProvider>

@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: aljazayeh
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://aljazayeh:ci-app-password@localhost:5432/aljazayeh
+      DATABASE_URL_ADMIN: postgresql://postgres:postgres@localhost:5432/aljazayeh
+      AUTH_SECRET: ci-only-secret-not-used-anywhere-real
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - name: Build the database from empty
+        run: npm run db:setup
+      - name: Permission and workflow tests
+        run: npm test
+      - name: Migrations match the schema
+        run: |
+          npx drizzle-kit generate --name unexpected_schema_change
+          if [ -n "$(git status --porcelain drizzle)" ]; then
+            echo "src/db/schema.ts changed without a migration. Run: npm run db:generate"
+            git status --short drizzle
+            exit 1
+          fi
+      - run: npm run build

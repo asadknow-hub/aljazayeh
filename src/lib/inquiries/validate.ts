@@ -3,11 +3,14 @@ import {
   isInquiryApprovalRoleKey,
   isInquiryWorkflowDepartmentKey,
   type InquiryStageKey,
-  type InquiryWorkflowDepartmentKey,
   type InquiryWorkflowMap,
   type InquiryWorkflowStageConfig,
 } from "@/lib/inquiries/stages";
-import type { InquiryCreateInput, InquiryLineItemInput } from "@/lib/inquiries/types";
+import type {
+  InquiryCreateInput,
+  InquiryLineItemInput,
+} from "@/lib/inquiries/types";
+import { UserError } from "@/lib/errors";
 
 function clean(value: string): string {
   return value.trim();
@@ -32,10 +35,10 @@ function normalizeLineItems(
       const quantity = Number(item.quantity);
       const unitPrice = Number(item.unitPrice);
       if (Number.isNaN(quantity) || quantity < 0) {
-        throw new Error("Line item quantity must be a valid number.");
+        throw new UserError("Line item quantity must be a valid number.");
       }
       if (Number.isNaN(unitPrice) || unitPrice < 0) {
-        throw new Error("Line item price must be a valid number.");
+        throw new UserError("Line item price must be a valid number.");
       }
       return {
         description: item.description || "Item",
@@ -50,12 +53,12 @@ export function normalizeInquiryCreateInput(
 ): InquiryCreateInput {
   const customerName = clean(input.customerName);
   if (!customerName) {
-    throw new Error("Enter a customer name.");
+    throw new UserError("Enter a customer name.");
   }
 
   const deliveryExpectedOn = clean(input.deliveryExpectedOn);
   if (deliveryExpectedOn && !/^\d{4}-\d{2}-\d{2}$/.test(deliveryExpectedOn)) {
-    throw new Error("Delivery expected date is invalid.");
+    throw new UserError("Delivery expected date is invalid.");
   }
 
   return {
@@ -76,7 +79,7 @@ export function normalizeInquiryWorkflowMap(
     const raw = input[stage.key] ?? {};
     const departmentKey = raw.departmentKey ?? "admin";
     if (!isInquiryWorkflowDepartmentKey(departmentKey)) {
-      throw new Error(`Invalid department for ${stage.label}.`);
+      throw new UserError(`Invalid department for ${stage.label}.`);
     }
 
     const approvalRequired = Boolean(raw.approvalRequired);
@@ -86,7 +89,7 @@ export function normalizeInquiryWorkflowMap(
     if (approvalRequired) {
       const role = raw.approvalRequiredBy ?? "";
       if (!role || !isInquiryApprovalRoleKey(role)) {
-        throw new Error(
+        throw new UserError(
           `Select who must approve ${stage.label} when approval is required.`,
         );
       }
@@ -101,24 +104,4 @@ export function normalizeInquiryWorkflowMap(
   }
 
   return map;
-}
-
-export function assertAdjacentStageMove(
-  from: InquiryStageKey,
-  to: InquiryStageKey,
-) {
-  const fromIndex = INQUIRY_STAGES.findIndex((stage) => stage.key === from);
-  const toIndex = INQUIRY_STAGES.findIndex((stage) => stage.key === to);
-  if (fromIndex < 0 || toIndex < 0 || Math.abs(fromIndex - toIndex) !== 1) {
-    throw new Error("Stage can only move to the previous or next step.");
-  }
-}
-
-export function workflowDepartmentLabel(
-  key: InquiryWorkflowDepartmentKey,
-): string {
-  if (key === "sales") return "Sales";
-  if (key === "admin") return "Admin";
-  if (key === "engineering") return "Engineering Department";
-  return "Accounts";
 }

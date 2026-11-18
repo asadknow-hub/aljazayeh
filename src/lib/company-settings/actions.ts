@@ -1,35 +1,38 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { runAction } from "@/lib/actions/result";
 import { requireSession } from "@/lib/auth/session";
 import {
-  getCompanySettingsForUser,
+  saveCompanyLogoForUser,
   saveCompanySettingsForUser,
 } from "@/lib/company-settings/queries";
 import type { CompanySettingsInput } from "@/lib/company-settings/types";
-import { normalizeOrgCode } from "@/lib/org/code";
-
-export async function getCompanySettingsAction(orgCode: string) {
-  const session = await requireSession();
-  const settings = await getCompanySettingsForUser(session.userId, orgCode);
-  if (!settings) {
-    throw new Error("Company not found.");
-  }
-  return settings;
-}
 
 export async function saveCompanySettingsAction(
   orgCode: string,
   input: CompanySettingsInput,
 ) {
-  const session = await requireSession();
-  const code = normalizeOrgCode(orgCode);
-  const saved = await saveCompanySettingsForUser(session.userId, code, input);
+  return runAction(async () => {
+    const session = await requireSession();
+    const saved = await saveCompanySettingsForUser(
+      session.userId,
+      orgCode,
+      input,
+    );
+    // The company name appears in the header on every page.
+    revalidatePath("/", "layout");
+    return saved;
+  });
+}
 
-  revalidatePath("/");
-  revalidatePath("/settings");
-  revalidatePath(`/${saved.organizationCode}`);
-  revalidatePath(`/${saved.organizationCode}/company-settings`);
-
-  return saved;
+export async function saveCompanyLogoAction(
+  orgCode: string,
+  logoImage: string | null,
+) {
+  return runAction(async () => {
+    const session = await requireSession();
+    await saveCompanyLogoForUser(session.userId, orgCode, logoImage);
+    revalidatePath("/", "layout");
+  });
 }

@@ -9,24 +9,23 @@ import {
   inquiryStageApprovals,
   inquiryStageEvents,
   inquiryWorkflowSettings,
-  memberships,
-  organizations,
   staffDepartmentAssignments,
   staffMembers,
-  users,
   visitorLogs,
 } from "@/db/schema";
-import { userIsOrgAdmin } from "@/lib/company-settings/admin-contact";
+import { assertCan, can, type OrgAccess } from "@/lib/access/access";
+import { UserError } from "@/lib/errors";
 import {
+  adjacentInquiryStages,
   defaultInquiryWorkflowMap,
   departmentForStage,
+  INQUIRY_APPROVAL_ROLES,
   INQUIRY_STAGES,
   INVOICE_STAGE_KEYS,
   inquiryStageLabel,
   isInquiryApprovalRoleKey,
   isInquiryStageKey,
   isInquiryWorkflowDepartmentKey,
-  type InquiryApprovalRoleKey,
   type InquiryStageKey,
   type InquiryWorkflowDepartmentKey,
   type InquiryWorkflowMap,
@@ -39,69 +38,40 @@ import type {
   InquiryView,
 } from "@/lib/inquiries/types";
 import {
-  assertAdjacentStageMove,
   normalizeInquiryCreateInput,
   normalizeInquiryWorkflowMap,
 } from "@/lib/inquiries/validate";
-import { normalizeOrgCode } from "@/lib/org/code";
+import { requireOrg, resolveOrg, type ResolvedOrg } from "@/lib/org/resolve";
+import { isUuid } from "@/lib/ids";
 
-async function resolveOrgId(
-  tx: DbTransaction,
-  userId: string,
-  orgCode: string,
-) {
-  const code = normalizeOrgCode(orgCode);
-  const [org] = await tx
-    .select({ id: organizations.id, code: organizations.code })
-    .from(organizations)
-    .innerJoin(
-      memberships,
-      and(
-        eq(memberships.organizationId, organizations.id),
-        eq(memberships.userId, userId),
-      ),
-    )
-    .where(eq(organizations.code, code))
-    .limit(1);
+type InquiryRow = typeof inquiries.$inferSelect;
 
-  return org ?? null;
+function stageOf(row: InquiryRow): InquiryStageKey {
+  return isInquiryStageKey(row.currentStage) ? row.currentStage : "inquiry";
 }
 
-async function ensureWorkflowRows(tx: DbTransaction, organizationId: string) {
-  const existing = await tx
-    .select()
-    .from(inquiryWorkflowSettings)
-    .where(eq(inquiryWorkflowSettings.organizationId, organizationId));
-
-  const have = new Set(existing.map((row) => row.stageKey));
-  const missing = INQUIRY_STAGES.filter((stage) => !have.has(stage.key));
-  if (missing.length === 0) return;
-
-  const now = new Date();
-  await tx.insert(inquiryWorkflowSettings).values(
-    missing.map((stage) => ({
-      id: crypto.randomUUID(),
-      organizationId,
-      stageKey: stage.key,
-      departmentKey: "admin",
-      approvalRequired: false,
-      approvalRequiredBy: "",
-      createdAt: now,
-      updatedAt: now,
-    })),
-  );
+function ownerOf(row: InquiryRow): InquiryWorkflowDepartmentKey {
+  return isInquiryWorkflowDepartmentKey(row.owningDepartmentKey)
+    ? row.owningDepartmentKey
+    : "admin";
 }
+
+function approvalRoleLabel(key: string): string {
+  return INQUIRY_APPROVAL_ROLES.find((role) => role.key === key)?.label ?? key;
+}
+
+/* ------------------------------ workflow map ------------------------------ */
 
 async function loadWorkflowMap(
   tx: DbTransaction,
   organizationId: string,
 ): Promise<InquiryWorkflowMap> {
-  await ensureWorkflowRows(tx, organizationId);
   const rows = await tx
     .select()
     .from(inquiryWorkflowSettings)
     .where(eq(inquiryWorkflowSettings.organizationId, organizationId));
 
+  // Stages without a saved row fall back to the defaults.
   const map = defaultInquiryWorkflowMap();
   for (const row of rows) {
     if (
@@ -110,9 +80,10 @@ async function loadWorkflowMap(
     ) {
       map[row.stageKey] = {
         departmentKey: row.departmentKey,
-        approvalRequired: Boolean(row.approvalRequired),
+        approvalRequired: row.approvalRequired,
         approvalRequiredBy:
-          row.approvalRequired && isInquiryApprovalRoleKey(row.approvalRequiredBy)
+          row.approvalRequired &&
+          isInquiryApprovalRoleKey(row.approvalRequiredBy)
             ? row.approvalRequiredBy
             : "",
       };
@@ -121,83 +92,13 @@ async function loadWorkflowMap(
   return map;
 }
 
-async function displayNameForUser(
-  tx: DbTransaction,
-  userId: string,
-): Promise<string> {
-  const rows = await tx.execute<{ name: string }>(sql`
-    select coalesce(app_member_display_name(${userId}::uuid), '') as name
-  `);
-  const name = rows[0]?.name?.trim() ?? "";
-  return name || "Unknown user";
-}
-
-async function linkedStaffDepartmentKeys(
-  tx: DbTransaction,
-  organizationId: string,
-  userId: string,
-): Promise<string[]> {
-  const rows = await tx
-    .select({ departmentKey: staffDepartmentAssignments.departmentKey })
-    .from(staffMembers)
-    .innerJoin(
-      staffDepartmentAssignments,
-      eq(staffDepartmentAssignments.staffId, staffMembers.id),
-    )
-    .where(
-      and(
-        eq(staffMembers.organizationId, organizationId),
-        eq(staffMembers.userId, userId),
-        eq(staffMembers.status, "active"),
-      ),
-    );
-  return rows.map((row) => row.departmentKey);
-}
-
-async function ensureLinkedApproverStaff(
-  tx: DbTransaction,
-  organizationId: string,
-  userId: string,
-): Promise<string[]> {
-  const existing = await linkedStaffDepartmentKeys(tx, organizationId, userId);
-  if (existing.length > 0) return existing;
-
-  const isAdmin = await userIsOrgAdmin(tx, userId, organizationId);
-  if (!isAdmin) return [];
-
-  const [profile] = await tx
-    .select({ fullName: users.fullName, email: users.email })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  const staffId = crypto.randomUUID();
-  const now = new Date();
-  await tx.insert(staffMembers).values({
-    id: staffId,
-    organizationId,
-    userId,
-    fullName: profile?.fullName?.trim() || "Admin",
-    email: profile?.email?.trim() || "",
-    jobTitle: "Admin",
-    status: "active",
-    createdAt: now,
-    updatedAt: now,
-  });
-  await tx.insert(staffDepartmentAssignments).values([
-    { staffId, departmentKey: "admin" },
-    { staffId, departmentKey: "management" },
-  ]);
-  return ["admin", "management"];
-}
-
 export async function getInquiryWorkflowMapForUser(
   userId: string,
   orgCode: string,
 ): Promise<InquiryWorkflowMap | null> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
-    if (!org) return null;
+    const org = await resolveOrg(tx, userId, orgCode);
+    if (!org || !can.manageCompany(org.access)) return null;
     return loadWorkflowMap(tx, org.id);
   });
 }
@@ -210,49 +111,38 @@ export async function saveInquiryWorkflowMapForUser(
   const map = normalizeInquiryWorkflowMap(input);
 
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
-    if (!org) throw new Error("Company not found.");
-
-    await ensureWorkflowRows(tx, org.id);
+    const org = await requireOrg(tx, userId, orgCode);
+    assertCan(can.manageCompany(org.access));
     const now = new Date();
 
     for (const stage of INQUIRY_STAGES) {
       const config = map[stage.key];
       await tx
-        .update(inquiryWorkflowSettings)
-        .set({
-          departmentKey: config.departmentKey,
-          approvalRequired: config.approvalRequired,
-          approvalRequiredBy: config.approvalRequiredBy,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(inquiryWorkflowSettings.organizationId, org.id),
-            eq(inquiryWorkflowSettings.stageKey, stage.key),
-          ),
-        );
+        .insert(inquiryWorkflowSettings)
+        .values({ organizationId: org.id, stageKey: stage.key, ...config })
+        .onConflictDoUpdate({
+          target: [
+            inquiryWorkflowSettings.organizationId,
+            inquiryWorkflowSettings.stageKey,
+          ],
+          set: { ...config, updatedAt: now },
+        });
     }
 
-    const openInquiries = await tx
-      .select({
-        id: inquiries.id,
-        currentStage: inquiries.currentStage,
-        owningDepartmentKey: inquiries.owningDepartmentKey,
-      })
+    // Inquiries follow the department that now handles their stage. When
+    // that changes, the old assignee no longer applies.
+    const existing = await tx
+      .select()
       .from(inquiries)
       .where(eq(inquiries.organizationId, org.id));
 
-    for (const row of openInquiries) {
-      const stage = isInquiryStageKey(row.currentStage)
-        ? row.currentStage
-        : "inquiry";
-      const nextDept = departmentForStage(map, stage);
-      if (row.owningDepartmentKey === nextDept) continue;
+    for (const row of existing) {
+      const owner = departmentForStage(map, stageOf(row));
+      if (row.owningDepartmentKey === owner) continue;
       await tx
         .update(inquiries)
         .set({
-          owningDepartmentKey: nextDept,
+          owningDepartmentKey: owner,
           assignedStaffId: null,
           updatedAt: now,
         })
@@ -263,10 +153,11 @@ export async function saveInquiryWorkflowMapForUser(
   });
 }
 
+/* --------------------------------- reading -------------------------------- */
+
 async function loadLineItems(tx: DbTransaction, inquiryIds: string[]) {
-  if (inquiryIds.length === 0) {
-    return new Map<string, InquiryView["lineItems"]>();
-  }
+  const byInquiry = new Map<string, InquiryView["lineItems"]>();
+  if (inquiryIds.length === 0) return byInquiry;
 
   const rows = await tx
     .select()
@@ -274,9 +165,8 @@ async function loadLineItems(tx: DbTransaction, inquiryIds: string[]) {
     .where(inArray(inquiryLineItems.inquiryId, inquiryIds))
     .orderBy(asc(inquiryLineItems.sortOrder));
 
-  const map = new Map<string, InquiryView["lineItems"]>();
   for (const row of rows) {
-    const list = map.get(row.inquiryId) ?? [];
+    const list = byInquiry.get(row.inquiryId) ?? [];
     list.push({
       id: row.id,
       description: row.description,
@@ -284,32 +174,56 @@ async function loadLineItems(tx: DbTransaction, inquiryIds: string[]) {
       unitPrice: String(row.unitPrice),
       sortOrder: row.sortOrder,
     });
-    map.set(row.inquiryId, list);
+    byInquiry.set(row.inquiryId, list);
   }
-  return map;
+  return byInquiry;
 }
 
+/** Display names for a set of users, one query per distinct user. */
+async function loadDisplayNames(
+  tx: DbTransaction,
+  userIds: (string | null)[],
+): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  for (const id of new Set(userIds)) {
+    if (!id) continue;
+    const rows = await tx.execute<{ name: string | null }>(
+      sql`select app_member_display_name(${id}::uuid) as name`,
+    );
+    names.set(id, rows[0]?.name?.trim() || "Unknown user");
+  }
+  return names;
+}
+
+type InquiryDetails = Pick<
+  InquiryView,
+  | "createdByName"
+  | "comments"
+  | "activityLogs"
+  | "approvalRequired"
+  | "approvalRequiredBy"
+  | "currentStageApproved"
+  | "canApproveCurrentStage"
+>;
+
+const NO_DETAILS: InquiryDetails = {
+  createdByName: "",
+  comments: [],
+  activityLogs: [],
+  approvalRequired: false,
+  approvalRequiredBy: "",
+  currentStageApproved: false,
+  canApproveCurrentStage: false,
+};
+
 function toInquiryView(
-  row: typeof inquiries.$inferSelect,
+  row: InquiryRow,
+  access: OrgAccess,
   lineItems: InquiryView["lineItems"],
   assignedStaffName: string | null,
-  extras?: {
-    createdByName?: string;
-    comments?: InquiryCommentView[];
-    activityLogs?: InquiryActivityLogView[];
-    approvalRequired?: boolean;
-    approvalRequiredBy?: InquiryApprovalRoleKey | "";
-    currentStageApproved?: boolean;
-    canApproveCurrentStage?: boolean;
-  },
+  details: InquiryDetails = NO_DETAILS,
 ): InquiryView {
-  const stage = isInquiryStageKey(row.currentStage)
-    ? row.currentStage
-    : "inquiry";
-  const dept = isInquiryWorkflowDepartmentKey(row.owningDepartmentKey)
-    ? row.owningDepartmentKey
-    : "admin";
-
+  const owner = ownerOf(row);
   return {
     id: row.id,
     organizationId: row.organizationId,
@@ -317,206 +231,262 @@ function toInquiryView(
     contact: row.contact,
     deliveryExpectedOn: row.deliveryExpectedOn,
     notes: row.notes,
-    currentStage: stage,
-    owningDepartmentKey: dept,
+    currentStage: stageOf(row),
+    owningDepartmentKey: owner,
     assignedStaffId: row.assignedStaffId,
     assignedStaffName,
     source: row.source === "reception_visitor" ? "reception_visitor" : "admin",
     sourceVisitorId: row.sourceVisitorId,
     createdByUserId: row.createdByUserId,
-    createdByName: extras?.createdByName ?? "",
-    approvalRequired: extras?.approvalRequired ?? false,
-    approvalRequiredBy: extras?.approvalRequiredBy ?? "",
-    currentStageApproved: extras?.currentStageApproved ?? false,
-    canApproveCurrentStage: extras?.canApproveCurrentStage ?? false,
+    canWork: can.workInquiry(access, owner),
+    canAssign: can.assignInquiry(access, owner),
     lineItems,
-    comments: extras?.comments ?? [],
-    activityLogs: extras?.activityLogs ?? [],
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    ...details,
   };
 }
 
-async function loadInquiryExtras(
+async function loadInquiryList(
   tx: DbTransaction,
-  inquiry: typeof inquiries.$inferSelect,
-  userId: string,
-  map: InquiryWorkflowMap,
-): Promise<{
-  createdByName: string;
-  comments: InquiryCommentView[];
-  activityLogs: InquiryActivityLogView[];
-  approvalRequired: boolean;
-  approvalRequiredBy: InquiryApprovalRoleKey | "";
-  currentStageApproved: boolean;
-  canApproveCurrentStage: boolean;
-}> {
-  const stage = isInquiryStageKey(inquiry.currentStage)
-    ? inquiry.currentStage
-    : "inquiry";
-  const stageConfig = map[stage];
-  const approvalRequired = Boolean(stageConfig?.approvalRequired);
-  const approvalRequiredBy =
-    approvalRequired && isInquiryApprovalRoleKey(stageConfig.approvalRequiredBy)
-      ? stageConfig.approvalRequiredBy
-      : ("" as const);
+  org: ResolvedOrg,
+  filter: {
+    department?: InquiryWorkflowDepartmentKey;
+    stages?: readonly InquiryStageKey[];
+  } = {},
+): Promise<InquiryView[]> {
+  const rows = await tx
+    .select({ inquiry: inquiries, assignedName: staffMembers.fullName })
+    .from(inquiries)
+    .leftJoin(staffMembers, eq(staffMembers.id, inquiries.assignedStaffId))
+    .where(
+      and(
+        eq(inquiries.organizationId, org.id),
+        filter.department
+          ? eq(inquiries.owningDepartmentKey, filter.department)
+          : undefined,
+        filter.stages
+          ? inArray(inquiries.currentStage, [...filter.stages])
+          : undefined,
+      ),
+    )
+    .orderBy(desc(inquiries.updatedAt));
 
-  const createdByName = await displayNameForUser(tx, inquiry.createdByUserId);
+  const lineItems = await loadLineItems(
+    tx,
+    rows.map((row) => row.inquiry.id),
+  );
 
-  const commentRows = await tx
-    .select()
-    .from(inquiryComments)
-    .where(eq(inquiryComments.inquiryId, inquiry.id))
-    .orderBy(asc(inquiryComments.createdAt));
-
-  const comments: InquiryCommentView[] = [];
-  for (const row of commentRows) {
-    comments.push({
-      id: row.id,
-      body: row.body,
-      authorUserId: row.authorUserId,
-      authorName: await displayNameForUser(tx, row.authorUserId),
-      createdAt: row.createdAt.toISOString(),
-    });
-  }
-
-  const eventRows = await tx
-    .select()
-    .from(inquiryStageEvents)
-    .where(eq(inquiryStageEvents.inquiryId, inquiry.id))
-    .orderBy(asc(inquiryStageEvents.occurredAt));
-
-  const activityLogs: InquiryActivityLogView[] = [];
-
-  activityLogs.push({
-    id: `created-${inquiry.id}`,
-    label:
-      inquiry.source === "reception_visitor"
-        ? "Created from Reception visitor"
-        : "Created in Admin",
-    detail: inquiry.notes
-      ? `Initial notes: ${inquiry.notes}`
-      : "Inquiry opened at Inquiry stage",
-    actorName: createdByName,
-    occurredAt: inquiry.createdAt.toISOString(),
-  });
-
-  for (const event of eventRows) {
-    if (!event.fromStage && event.toStage === "inquiry") {
-      continue;
-    }
-    const actorName = event.actorUserId
-      ? await displayNameForUser(tx, event.actorUserId)
-      : null;
-    const approvedInPlace =
-      Boolean(event.fromStage) &&
-      event.fromStage === event.toStage &&
-      event.note.toLowerCase().startsWith("approved");
-    activityLogs.push({
-      id: event.id,
-      label: approvedInPlace
-        ? `Approved ${inquiryStageLabel(event.toStage)}`
-        : event.fromStage
-          ? `Moved ${inquiryStageLabel(event.fromStage)} → ${inquiryStageLabel(event.toStage)}`
-          : `Stage set to ${inquiryStageLabel(event.toStage)}`,
-      detail: event.note || "",
-      actorName,
-      occurredAt: event.occurredAt.toISOString(),
-    });
-  }
-
-  const [approval] = approvalRequired
-    ? await tx
-        .select({ id: inquiryStageApprovals.id })
-        .from(inquiryStageApprovals)
-        .where(
-          and(
-            eq(inquiryStageApprovals.inquiryId, inquiry.id),
-            eq(inquiryStageApprovals.stageKey, stage),
-          ),
-        )
-        .limit(1)
-    : [null];
-
-  const currentStageApproved = Boolean(approval);
-  let canApproveCurrentStage = false;
-  if (approvalRequired && !currentStageApproved) {
-    const depts = await ensureLinkedApproverStaff(
-      tx,
-      inquiry.organizationId,
-      userId,
-    );
-    canApproveCurrentStage =
-      Boolean(approvalRequiredBy) && depts.includes(approvalRequiredBy);
-  }
-
-  return {
-    createdByName,
-    comments,
-    activityLogs,
-    approvalRequired,
-    approvalRequiredBy,
-    currentStageApproved,
-    canApproveCurrentStage,
-  };
+  return rows.map((row) =>
+    toInquiryView(
+      row.inquiry,
+      org.access,
+      lineItems.get(row.inquiry.id) ?? [],
+      row.assignedName,
+    ),
+  );
 }
 
+/** Every inquiry in the company: the Admin workspace. */
 export async function listInquiriesForUser(
   userId: string,
   orgCode: string,
 ): Promise<InquiryView[]> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
-    if (!org) return [];
-
-    const rows = await tx
-      .select({
-        inquiry: inquiries,
-        assignedName: staffMembers.fullName,
-      })
-      .from(inquiries)
-      .leftJoin(staffMembers, eq(staffMembers.id, inquiries.assignedStaffId))
-      .where(eq(inquiries.organizationId, org.id))
-      .orderBy(desc(inquiries.updatedAt));
-
-    const lineMap = await loadLineItems(
-      tx,
-      rows.map((row) => row.inquiry.id),
-    );
-
-    return rows.map((row) =>
-      toInquiryView(
-        row.inquiry,
-        lineMap.get(row.inquiry.id) ?? [],
-        row.assignedName ?? null,
-      ),
-    );
+    const org = await resolveOrg(tx, userId, orgCode);
+    if (!org || !can.viewAllInquiries(org.access)) return [];
+    return loadInquiryList(tx, org);
   });
 }
 
+/** Inquiries whose current stage is handled by one department. */
 export async function listInquiriesForDepartment(
   userId: string,
   orgCode: string,
   departmentKey: InquiryWorkflowDepartmentKey,
 ): Promise<InquiryView[]> {
-  const all = await listInquiriesForUser(userId, orgCode);
-  return all.filter((item) => item.owningDepartmentKey === departmentKey);
+  return withTenantContext(userId, async (tx) => {
+    const org = await resolveOrg(tx, userId, orgCode);
+    if (!org || !can.openDepartment(org.access, departmentKey)) return [];
+    return loadInquiryList(tx, org, { department: departmentKey });
+  });
 }
 
+/** A department's inquiries that are currently at an invoicing stage. */
 export async function listInvoiceQueueForUser(
   userId: string,
   orgCode: string,
   departmentKey: InquiryWorkflowDepartmentKey,
 ): Promise<InquiryView[]> {
-  const all = await listInquiriesForDepartment(
-    userId,
-    orgCode,
-    departmentKey,
-  );
+  return withTenantContext(userId, async (tx) => {
+    const org = await resolveOrg(tx, userId, orgCode);
+    if (!org || !can.openDepartment(org.access, departmentKey)) return [];
+    return loadInquiryList(tx, org, {
+      department: departmentKey,
+      stages: INVOICE_STAGE_KEYS,
+    });
+  });
+}
 
-  return all.filter((item) =>
-    (INVOICE_STAGE_KEYS as readonly string[]).includes(item.currentStage),
+async function findInquiry(
+  tx: DbTransaction,
+  org: ResolvedOrg,
+  inquiryId: string,
+): Promise<InquiryRow | null> {
+  if (!isUuid(inquiryId)) return null;
+  const [row] = await tx
+    .select()
+    .from(inquiries)
+    .where(
+      and(eq(inquiries.id, inquiryId), eq(inquiries.organizationId, org.id)),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+async function requireInquiry(
+  tx: DbTransaction,
+  org: ResolvedOrg,
+  inquiryId: string,
+): Promise<InquiryRow> {
+  const row = await findInquiry(tx, org, inquiryId);
+  if (!row || !can.viewInquiry(org.access, ownerOf(row))) {
+    throw new UserError("Inquiry not found.");
+  }
+  return row;
+}
+
+async function hasApproval(
+  tx: DbTransaction,
+  inquiryId: string,
+  stage: InquiryStageKey,
+): Promise<boolean> {
+  const [approval] = await tx
+    .select({ id: inquiryStageApprovals.id })
+    .from(inquiryStageApprovals)
+    .where(
+      and(
+        eq(inquiryStageApprovals.inquiryId, inquiryId),
+        eq(inquiryStageApprovals.stageKey, stage),
+      ),
+    )
+    .limit(1);
+  return Boolean(approval);
+}
+
+/** The full inquiry as shown on its page: comments, history, approval state. */
+async function loadInquiryView(
+  tx: DbTransaction,
+  org: ResolvedOrg,
+  row: InquiryRow,
+): Promise<InquiryView> {
+  const stage = stageOf(row);
+  const config = (await loadWorkflowMap(tx, org.id))[stage];
+
+  const commentRows = await tx
+    .select()
+    .from(inquiryComments)
+    .where(eq(inquiryComments.inquiryId, row.id))
+    .orderBy(asc(inquiryComments.createdAt));
+
+  const eventRows = await tx
+    .select()
+    .from(inquiryStageEvents)
+    .where(eq(inquiryStageEvents.inquiryId, row.id))
+    .orderBy(asc(inquiryStageEvents.occurredAt));
+
+  const names = await loadDisplayNames(tx, [
+    row.createdByUserId,
+    ...commentRows.map((comment) => comment.authorUserId),
+    ...eventRows.map((event) => event.actorUserId),
+  ]);
+  const createdByName = names.get(row.createdByUserId) ?? "";
+
+  const comments: InquiryCommentView[] = commentRows.map((comment) => ({
+    id: comment.id,
+    body: comment.body,
+    authorUserId: comment.authorUserId,
+    authorName: names.get(comment.authorUserId) ?? "",
+    createdAt: comment.createdAt.toISOString(),
+  }));
+
+  const activityLogs: InquiryActivityLogView[] = [
+    {
+      id: `created-${row.id}`,
+      label:
+        row.source === "reception_visitor"
+          ? "Created from Reception visitor"
+          : "Created in Admin",
+      detail: row.notes
+        ? `Initial notes: ${row.notes}`
+        : "Inquiry opened at Inquiry stage",
+      actorName: createdByName,
+      occurredAt: row.createdAt.toISOString(),
+    },
+    ...eventRows
+      // The creation event is already represented by the entry above.
+      .filter((event) => event.fromStage)
+      .map((event) => ({
+        id: event.id,
+        // A stage move, or something that happened within a stage.
+        label:
+          event.fromStage === event.toStage
+            ? event.note
+            : `Moved ${inquiryStageLabel(event.fromStage)} → ${inquiryStageLabel(event.toStage)}`,
+        detail:
+          event.fromStage === event.toStage
+            ? inquiryStageLabel(event.toStage)
+            : event.note,
+        actorName: event.actorUserId
+          ? (names.get(event.actorUserId) ?? null)
+          : null,
+        occurredAt: event.occurredAt.toISOString(),
+      })),
+  ];
+
+  const approvalRequired = config.approvalRequired;
+  const currentStageApproved =
+    approvalRequired && (await hasApproval(tx, row.id, stage));
+
+  const [assigned] = row.assignedStaffId
+    ? await tx
+        .select({ fullName: staffMembers.fullName })
+        .from(staffMembers)
+        .where(eq(staffMembers.id, row.assignedStaffId))
+        .limit(1)
+    : [];
+  const lineItems = await loadLineItems(tx, [row.id]);
+
+  return toInquiryView(
+    row,
+    org.access,
+    lineItems.get(row.id) ?? [],
+    assigned?.fullName ?? null,
+    {
+      createdByName,
+      comments,
+      activityLogs,
+      approvalRequired,
+      approvalRequiredBy: config.approvalRequiredBy,
+      currentStageApproved,
+      canApproveCurrentStage:
+        approvalRequired &&
+        !currentStageApproved &&
+        config.approvalRequiredBy !== "" &&
+        org.access.departments.includes(config.approvalRequiredBy),
+    },
   );
+}
+
+/** Re-read an inquiry after changing it and return the fresh view. */
+async function reloadInquiryView(
+  tx: DbTransaction,
+  org: ResolvedOrg,
+  inquiryId: string,
+): Promise<InquiryView> {
+  const row = await findInquiry(tx, org, inquiryId);
+  if (!row) throw new UserError("Inquiry not found.");
+  return loadInquiryView(tx, org, row);
 }
 
 export async function getInquiryForUser(
@@ -525,94 +495,62 @@ export async function getInquiryForUser(
   inquiryId: string,
 ): Promise<InquiryView | null> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) return null;
-
-    const [row] = await tx
-      .select({
-        inquiry: inquiries,
-        assignedName: staffMembers.fullName,
-      })
-      .from(inquiries)
-      .leftJoin(staffMembers, eq(staffMembers.id, inquiries.assignedStaffId))
-      .where(
-        and(eq(inquiries.id, inquiryId), eq(inquiries.organizationId, org.id)),
-      )
-      .limit(1);
-
-    if (!row) return null;
-    const map = await loadWorkflowMap(tx, org.id);
-    const lineMap = await loadLineItems(tx, [row.inquiry.id]);
-    const extras = await loadInquiryExtras(tx, row.inquiry, userId, map);
-    return toInquiryView(
-      row.inquiry,
-      lineMap.get(row.inquiry.id) ?? [],
-      row.assignedName ?? null,
-      extras,
-    );
+    const row = await findInquiry(tx, org, inquiryId);
+    if (!row || !can.viewInquiry(org.access, ownerOf(row))) return null;
+    return loadInquiryView(tx, org, row);
   });
 }
 
-export async function addInquiryCommentForUser(
+/* --------------------------------- writing -------------------------------- */
+
+/** Something that happened to an inquiry; a stage move when `to` differs. */
+async function recordEvent(
+  tx: DbTransaction,
+  org: ResolvedOrg,
   userId: string,
-  orgCode: string,
   inquiryId: string,
-  body: string,
-): Promise<InquiryView> {
-  const text = body.trim();
-  if (!text) {
-    throw new Error("Enter a comment.");
-  }
-
-  return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
-    if (!org) throw new Error("Company not found.");
-
-    const [existing] = await tx
-      .select()
-      .from(inquiries)
-      .where(
-        and(eq(inquiries.id, inquiryId), eq(inquiries.organizationId, org.id)),
-      )
-      .limit(1);
-
-    if (!existing) throw new Error("Inquiry not found.");
-    if (!existing.assignedStaffId) {
-      throw new Error("Assign someone before posting comments.");
-    }
-
-    const now = new Date();
-    await tx.insert(inquiryComments).values({
-      id: crypto.randomUUID(),
-      organizationId: org.id,
-      inquiryId,
-      authorUserId: userId,
-      body: text,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    const [row] = await tx
-      .select({
-        inquiry: inquiries,
-        assignedName: staffMembers.fullName,
-      })
-      .from(inquiries)
-      .leftJoin(staffMembers, eq(staffMembers.id, inquiries.assignedStaffId))
-      .where(eq(inquiries.id, inquiryId))
-      .limit(1);
-    if (!row) throw new Error("Could not post comment.");
-
-    const map = await loadWorkflowMap(tx, org.id);
-    const lineMap = await loadLineItems(tx, [inquiryId]);
-    const extras = await loadInquiryExtras(tx, row.inquiry, userId, map);
-    return toInquiryView(
-      row.inquiry,
-      lineMap.get(inquiryId) ?? [],
-      row.assignedName ?? null,
-      extras,
-    );
+  event: { from: InquiryStageKey | ""; to: InquiryStageKey; note?: string },
+) {
+  await tx.insert(inquiryStageEvents).values({
+    organizationId: org.id,
+    inquiryId,
+    fromStage: event.from,
+    toStage: event.to,
+    actorUserId: userId,
+    // Several events can be written in one transaction; keep their order.
+    occurredAt: sql`clock_timestamp()`,
+    note: event.note ?? "",
   });
+}
+
+/** An approval only covers what was approved; changes after it void it. */
+async function clearApproval(
+  tx: DbTransaction,
+  org: ResolvedOrg,
+  userId: string,
+  inquiryId: string,
+  stage: InquiryStageKey,
+  reason: string,
+) {
+  const cleared = await tx
+    .delete(inquiryStageApprovals)
+    .where(
+      and(
+        eq(inquiryStageApprovals.inquiryId, inquiryId),
+        eq(inquiryStageApprovals.stageKey, stage),
+      ),
+    )
+    .returning({ id: inquiryStageApprovals.id });
+
+  if (cleared.length > 0) {
+    await recordEvent(tx, org, userId, inquiryId, {
+      from: stage,
+      to: stage,
+      note: `Approval cleared: ${reason}`,
+    });
+  }
 }
 
 async function replaceLineItems(
@@ -620,88 +558,110 @@ async function replaceLineItems(
   inquiryId: string,
   items: InquiryCreateInput["lineItems"],
 ) {
-  await tx.delete(inquiryLineItems).where(eq(inquiryLineItems.inquiryId, inquiryId));
+  await tx
+    .delete(inquiryLineItems)
+    .where(eq(inquiryLineItems.inquiryId, inquiryId));
   if (items.length === 0) return;
 
-  const now = new Date();
   await tx.insert(inquiryLineItems).values(
     items.map((item, index) => ({
-      id: crypto.randomUUID(),
       inquiryId,
       description: item.description,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
       sortOrder: index,
-      createdAt: now,
-      updatedAt: now,
     })),
   );
+}
+
+async function insertInquiry(
+  tx: DbTransaction,
+  org: ResolvedOrg,
+  userId: string,
+  values: {
+    customerName: string;
+    contact?: string;
+    deliveryExpectedOn?: string;
+    notes: string;
+    source: "admin" | "reception_visitor";
+    sourceVisitorId?: string;
+  },
+): Promise<string> {
+  const map = await loadWorkflowMap(tx, org.id);
+  const id = crypto.randomUUID();
+
+  await tx.insert(inquiries).values({
+    id,
+    organizationId: org.id,
+    customerName: values.customerName,
+    contact: values.contact ?? "",
+    deliveryExpectedOn: values.deliveryExpectedOn ?? "",
+    notes: values.notes,
+    currentStage: "inquiry",
+    owningDepartmentKey: departmentForStage(map, "inquiry"),
+    source: values.source,
+    sourceVisitorId: values.sourceVisitorId ?? null,
+    createdByUserId: userId,
+  });
+  await recordEvent(tx, org, userId, id, { from: "", to: "inquiry" });
+
+  return id;
 }
 
 export async function createInquiryForUser(
   userId: string,
   orgCode: string,
   input: InquiryCreateInput,
-  options?: {
-    source?: "admin" | "reception_visitor";
-    sourceVisitorId?: string | null;
-  },
 ): Promise<InquiryView> {
   const normalized = normalizeInquiryCreateInput(input);
 
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
-    if (!org) throw new Error("Company not found.");
+    const org = await requireOrg(tx, userId, orgCode);
+    assertCan(can.createInquiry(org.access));
 
-    const map = await loadWorkflowMap(tx, org.id);
-
-    const id = crypto.randomUUID();
-    const now = new Date();
-    const owningDepartmentKey = departmentForStage(map, "inquiry");
-
-    await tx.insert(inquiries).values({
-      id,
-      organizationId: org.id,
-      customerName: normalized.customerName,
-      contact: normalized.contact,
-      deliveryExpectedOn: normalized.deliveryExpectedOn,
-      notes: normalized.notes,
-      currentStage: "inquiry",
-      owningDepartmentKey,
-      assignedStaffId: null,
-      source: options?.source ?? "admin",
-      sourceVisitorId: options?.sourceVisitorId ?? null,
-      createdByUserId: userId,
-      createdAt: now,
-      updatedAt: now,
+    const id = await insertInquiry(tx, org, userId, {
+      ...normalized,
+      source: "admin",
     });
-
     await replaceLineItems(tx, id, normalized.lineItems);
 
-    await tx.insert(inquiryStageEvents).values({
-      id: crypto.randomUUID(),
-      organizationId: org.id,
-      inquiryId: id,
-      fromStage: "",
-      toStage: "inquiry",
-      actorUserId: userId,
-      occurredAt: now,
-      note: options?.source === "reception_visitor" ? "From Reception visitor" : "Created",
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    const [row] = await tx
-      .select()
-      .from(inquiries)
-      .where(eq(inquiries.id, id))
-      .limit(1);
-    if (!row) throw new Error("Could not create inquiry.");
-
-    const lineMap = await loadLineItems(tx, [id]);
-    const extras = await loadInquiryExtras(tx, row, userId, map);
-    return toInquiryView(row, lineMap.get(id) ?? [], null, extras);
+    return reloadInquiryView(tx, org, id);
   });
+}
+
+/** A walk-in logged at Reception with purpose "Inquiry" starts an inquiry. */
+export async function createStarterInquiryInTx(
+  tx: DbTransaction,
+  org: ResolvedOrg,
+  userId: string,
+  visitor: { id: string; fullName: string; notes: string },
+): Promise<string> {
+  const id = await insertInquiry(tx, org, userId, {
+    customerName: visitor.fullName,
+    notes: visitor.notes,
+    source: "reception_visitor",
+    sourceVisitorId: visitor.id,
+  });
+
+  await tx
+    .update(visitorLogs)
+    .set({ inquiryId: id, updatedAt: new Date() })
+    .where(eq(visitorLogs.id, visitor.id));
+
+  return id;
+}
+
+/** Load an inquiry the user is about to work on and check they may. */
+async function requireWorkableInquiry(
+  tx: DbTransaction,
+  org: ResolvedOrg,
+  inquiryId: string,
+  unassignedMessage: string,
+): Promise<InquiryRow> {
+  const row = await requireInquiry(tx, org, inquiryId);
+  assertCan(can.workInquiry(org.access, ownerOf(row)));
+  if (!row.assignedStaffId) throw new UserError(unassignedMessage);
+  return row;
 }
 
 export async function updateInquiryForUser(
@@ -713,98 +673,107 @@ export async function updateInquiryForUser(
   const normalized = normalizeInquiryCreateInput(input);
 
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
-    if (!org) throw new Error("Company not found.");
+    const org = await requireOrg(tx, userId, orgCode);
+    const existing = await requireWorkableInquiry(
+      tx,
+      org,
+      inquiryId,
+      "Assign someone before editing this inquiry.",
+    );
 
-    const [existing] = await tx
-      .select()
-      .from(inquiries)
-      .where(
-        and(eq(inquiries.id, inquiryId), eq(inquiries.organizationId, org.id)),
-      )
-      .limit(1);
-
-    if (!existing) throw new Error("Inquiry not found.");
-    if (!existing.assignedStaffId) {
-      throw new Error("Assign someone before editing this inquiry.");
-    }
-
-    const now = new Date();
     await tx
       .update(inquiries)
       .set({
         customerName: normalized.customerName,
         contact: normalized.contact,
         deliveryExpectedOn: normalized.deliveryExpectedOn,
-        notes: existing.notes,
-        updatedAt: now,
+        updatedAt: new Date(),
       })
       .where(eq(inquiries.id, inquiryId));
-
     await replaceLineItems(tx, inquiryId, normalized.lineItems);
-
-    const [row] = await tx
-      .select({
-        inquiry: inquiries,
-        assignedName: staffMembers.fullName,
-      })
-      .from(inquiries)
-      .leftJoin(staffMembers, eq(staffMembers.id, inquiries.assignedStaffId))
-      .where(eq(inquiries.id, inquiryId))
-      .limit(1);
-    if (!row) throw new Error("Could not update inquiry.");
-    const map = await loadWorkflowMap(tx, org.id);
-    const lineMap = await loadLineItems(tx, [inquiryId]);
-    const extras = await loadInquiryExtras(tx, row.inquiry, userId, map);
-    return toInquiryView(
-      row.inquiry,
-      lineMap.get(inquiryId) ?? [],
-      row.assignedName ?? null,
-      extras,
+    await clearApproval(
+      tx,
+      org,
+      userId,
+      inquiryId,
+      stageOf(existing),
+      "inquiry changed",
     );
+
+    return reloadInquiryView(tx, org, inquiryId);
   });
 }
 
+export async function addInquiryCommentForUser(
+  userId: string,
+  orgCode: string,
+  inquiryId: string,
+  body: string,
+): Promise<InquiryView> {
+  const text = body.trim();
+  if (!text) {
+    throw new UserError("Enter a comment.");
+  }
+
+  return withTenantContext(userId, async (tx) => {
+    const org = await requireOrg(tx, userId, orgCode);
+    await requireWorkableInquiry(
+      tx,
+      org,
+      inquiryId,
+      "Assign someone before posting comments.",
+    );
+
+    await tx.insert(inquiryComments).values({
+      organizationId: org.id,
+      inquiryId,
+      authorUserId: userId,
+      body: text,
+    });
+
+    return reloadInquiryView(tx, org, inquiryId);
+  });
+}
+
+/** Active staff of one department, for the "Assign person" list. */
 export async function listAssignableStaffForDepartment(
   userId: string,
   orgCode: string,
   departmentKey: InquiryWorkflowDepartmentKey,
 ): Promise<{ id: string; fullName: string; jobTitle: string }[]> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
-    if (!org) return [];
-
-    const rows = await tx
-      .select({
-        id: staffMembers.id,
-        fullName: staffMembers.fullName,
-        jobTitle: staffMembers.jobTitle,
-        departmentKey: staffDepartmentAssignments.departmentKey,
-      })
-      .from(staffMembers)
-      .innerJoin(
-        staffDepartmentAssignments,
-        eq(staffDepartmentAssignments.staffId, staffMembers.id),
-      )
-      .where(
-        and(
-          eq(staffMembers.organizationId, org.id),
-          eq(staffMembers.status, "active"),
-        ),
-      )
-      .orderBy(asc(staffMembers.fullName));
-
-    const byId = new Map<string, { id: string; fullName: string; jobTitle: string }>();
-    for (const row of rows) {
-      if (row.departmentKey !== departmentKey) continue;
-      byId.set(row.id, {
-        id: row.id,
-        fullName: row.fullName,
-        jobTitle: row.jobTitle,
-      });
-    }
-    return Array.from(byId.values());
+    const org = await resolveOrg(tx, userId, orgCode);
+    if (!org || !can.assignInquiry(org.access, departmentKey)) return [];
+    return loadAssignableStaff(tx, org.id, departmentKey);
   });
+}
+
+async function loadAssignableStaff(
+  tx: DbTransaction,
+  organizationId: string,
+  departmentKey: InquiryWorkflowDepartmentKey,
+) {
+  return tx
+    .select({
+      id: staffMembers.id,
+      fullName: staffMembers.fullName,
+      jobTitle: staffMembers.jobTitle,
+    })
+    .from(staffMembers)
+    .innerJoin(
+      staffDepartmentAssignments,
+      and(
+        eq(staffDepartmentAssignments.staffId, staffMembers.id),
+        eq(staffDepartmentAssignments.departmentKey, departmentKey),
+      ),
+    )
+    .where(
+      and(
+        eq(staffMembers.organizationId, organizationId),
+        eq(staffMembers.status, "active"),
+      ),
+    )
+    .orderBy(asc(staffMembers.fullName));
 }
 
 export async function assignInquiryForUser(
@@ -814,69 +783,32 @@ export async function assignInquiryForUser(
   staffId: string,
 ): Promise<InquiryView> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
-    if (!org) throw new Error("Company not found.");
+    const org = await requireOrg(tx, userId, orgCode);
+    const existing = await requireInquiry(tx, org, inquiryId);
+    const owner = ownerOf(existing);
+    assertCan(can.assignInquiry(org.access, owner));
 
-    const [existing] = await tx
-      .select()
-      .from(inquiries)
-      .where(
-        and(eq(inquiries.id, inquiryId), eq(inquiries.organizationId, org.id)),
-      )
-      .limit(1);
-
-    if (!existing) throw new Error("Inquiry not found.");
-
-    const dept = isInquiryWorkflowDepartmentKey(existing.owningDepartmentKey)
-      ? existing.owningDepartmentKey
-      : "admin";
-
-    const [assignment] = await tx
-      .select()
-      .from(staffDepartmentAssignments)
-      .innerJoin(
-        staffMembers,
-        and(
-          eq(staffMembers.id, staffDepartmentAssignments.staffId),
-          eq(staffMembers.organizationId, org.id),
-        ),
-      )
-      .where(
-        and(
-          eq(staffDepartmentAssignments.staffId, staffId),
-          eq(staffDepartmentAssignments.departmentKey, dept),
-        ),
-      )
-      .limit(1);
-
-    if (!assignment) {
-      throw new Error("Select a staff member from this department.");
+    const assignee = (await loadAssignableStaff(tx, org.id, owner)).find(
+      (staff) => staff.id === staffId,
+    );
+    if (!assignee) {
+      throw new UserError(
+        "Select an active staff member from this department.",
+      );
     }
 
     await tx
       .update(inquiries)
       .set({ assignedStaffId: staffId, updatedAt: new Date() })
       .where(eq(inquiries.id, inquiryId));
+    const stage = stageOf(existing);
+    await recordEvent(tx, org, userId, inquiryId, {
+      from: stage,
+      to: stage,
+      note: `Assigned to ${assignee.fullName}`,
+    });
 
-    const [row] = await tx
-      .select({
-        inquiry: inquiries,
-        assignedName: staffMembers.fullName,
-      })
-      .from(inquiries)
-      .leftJoin(staffMembers, eq(staffMembers.id, inquiries.assignedStaffId))
-      .where(eq(inquiries.id, inquiryId))
-      .limit(1);
-    if (!row) throw new Error("Could not assign inquiry.");
-    const map = await loadWorkflowMap(tx, org.id);
-    const lineMap = await loadLineItems(tx, [inquiryId]);
-    const extras = await loadInquiryExtras(tx, row.inquiry, userId, map);
-    return toInquiryView(
-      row.inquiry,
-      lineMap.get(inquiryId) ?? [],
-      row.assignedName ?? null,
-      extras,
-    );
+    return reloadInquiryView(tx, org, inquiryId);
   });
 }
 
@@ -886,95 +818,39 @@ export async function approveInquiryStageForUser(
   inquiryId: string,
 ): Promise<InquiryView> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
-    if (!org) throw new Error("Company not found.");
-
-    const [existing] = await tx
-      .select()
-      .from(inquiries)
-      .where(
-        and(eq(inquiries.id, inquiryId), eq(inquiries.organizationId, org.id)),
-      )
-      .limit(1);
-    if (!existing) throw new Error("Inquiry not found.");
+    const org = await requireOrg(tx, userId, orgCode);
+    const existing = await requireInquiry(tx, org, inquiryId);
     if (!existing.assignedStaffId) {
-      throw new Error("Assign a person before approving this stage.");
+      throw new UserError("Assign a person before approving this stage.");
     }
 
-    const map = await loadWorkflowMap(tx, org.id);
-    const current = isInquiryStageKey(existing.currentStage)
-      ? existing.currentStage
-      : "inquiry";
-    const config = map[current];
-    if (!config.approvalRequired || !isInquiryApprovalRoleKey(config.approvalRequiredBy)) {
-      throw new Error("This stage does not require approval.");
+    const stage = stageOf(existing);
+    const config = (await loadWorkflowMap(tx, org.id))[stage];
+    if (!config.approvalRequired || config.approvalRequiredBy === "") {
+      throw new UserError("This stage does not require approval.");
+    }
+    const approver = approvalRoleLabel(config.approvalRequiredBy);
+    if (!org.access.departments.includes(config.approvalRequiredBy)) {
+      throw new UserError(`Only ${approver} can approve this stage.`);
+    }
+    if (await hasApproval(tx, inquiryId, stage)) {
+      throw new UserError("This stage is already approved.");
     }
 
-    const depts = await ensureLinkedApproverStaff(tx, org.id, userId);
-    if (!depts.includes(config.approvalRequiredBy)) {
-      throw new Error(
-        `Only ${config.approvalRequiredBy === "management" ? "Management" : "Engineering Department"} can approve this stage.`,
-      );
-    }
-
-    const [already] = await tx
-      .select({ id: inquiryStageApprovals.id })
-      .from(inquiryStageApprovals)
-      .where(
-        and(
-          eq(inquiryStageApprovals.inquiryId, inquiryId),
-          eq(inquiryStageApprovals.stageKey, current),
-        ),
-      )
-      .limit(1);
-    if (already) {
-      throw new Error("This stage is already approved.");
-    }
-
-    const now = new Date();
     await tx.insert(inquiryStageApprovals).values({
-      id: crypto.randomUUID(),
       organizationId: org.id,
       inquiryId,
-      stageKey: current,
+      stageKey: stage,
       requiredBy: config.approvalRequiredBy,
       approvedByUserId: userId,
-      approvedAt: now,
-      createdAt: now,
-      updatedAt: now,
+    });
+    await recordEvent(tx, org, userId, inquiryId, {
+      from: stage,
+      to: stage,
+      note: `Approved by ${approver}`,
     });
 
-    await tx.insert(inquiryStageEvents).values({
-      id: crypto.randomUUID(),
-      organizationId: org.id,
-      inquiryId,
-      fromStage: current,
-      toStage: current,
-      actorUserId: userId,
-      occurredAt: now,
-      note: `Approved by ${config.approvalRequiredBy}`,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    const [row] = await tx
-      .select({
-        inquiry: inquiries,
-        assignedName: staffMembers.fullName,
-      })
-      .from(inquiries)
-      .leftJoin(staffMembers, eq(staffMembers.id, inquiries.assignedStaffId))
-      .where(eq(inquiries.id, inquiryId))
-      .limit(1);
-    if (!row) throw new Error("Could not approve stage.");
-    const lineMap = await loadLineItems(tx, [inquiryId]);
-    const extras = await loadInquiryExtras(tx, row.inquiry, userId, map);
-    return toInquiryView(
-      row.inquiry,
-      lineMap.get(inquiryId) ?? [],
-      row.assignedName ?? null,
-      extras,
-    );
+    return reloadInquiryView(tx, org, inquiryId);
   });
 }
 
@@ -985,155 +861,51 @@ export async function moveInquiryStageForUser(
   direction: "previous" | "next",
 ): Promise<InquiryView> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
-    if (!org) throw new Error("Company not found.");
+    const org = await requireOrg(tx, userId, orgCode);
+    const existing = await requireWorkableInquiry(
+      tx,
+      org,
+      inquiryId,
+      "Assign a person before moving stages.",
+    );
 
-    const [existing] = await tx
-      .select()
-      .from(inquiries)
-      .where(
-        and(eq(inquiries.id, inquiryId), eq(inquiries.organizationId, org.id)),
-      )
-      .limit(1);
-
-    if (!existing) throw new Error("Inquiry not found.");
-    if (!existing.assignedStaffId) {
-      throw new Error("Assign a person before moving stages.");
+    const current = stageOf(existing);
+    const toStage = adjacentInquiryStages(current)[direction];
+    if (!toStage) {
+      throw new UserError("No further stage in that direction.");
     }
-
-    const current = isInquiryStageKey(existing.currentStage)
-      ? existing.currentStage
-      : "inquiry";
-    const index = INQUIRY_STAGES.findIndex((stage) => stage.key === current);
-    const targetIndex = direction === "next" ? index + 1 : index - 1;
-    if (targetIndex < 0 || targetIndex >= INQUIRY_STAGES.length) {
-      throw new Error("No further stage in that direction.");
-    }
-    const toStage = INQUIRY_STAGES[targetIndex]!.key;
-    assertAdjacentStageMove(current, toStage);
 
     const map = await loadWorkflowMap(tx, org.id);
-    const currentConfig = map[current];
-
-    if (direction === "next" && currentConfig.approvalRequired) {
-      const [approval] = await tx
-        .select({ id: inquiryStageApprovals.id })
-        .from(inquiryStageApprovals)
-        .where(
-          and(
-            eq(inquiryStageApprovals.inquiryId, inquiryId),
-            eq(inquiryStageApprovals.stageKey, current),
-          ),
-        )
-        .limit(1);
-      if (!approval) {
-        const who =
-          currentConfig.approvalRequiredBy === "engineering"
-            ? "Engineering Department"
-            : "Management";
-        throw new Error(`Approval required by ${who} before moving to the next stage.`);
+    if (direction === "next" && map[current].approvalRequired) {
+      if (!(await hasApproval(tx, inquiryId, current))) {
+        throw new UserError(
+          `Approval required by ${approvalRoleLabel(map[current].approvalRequiredBy)} before moving to the next stage.`,
+        );
       }
     }
 
-    const previousDept = departmentForStage(map, current);
-    const nextDept = departmentForStage(map, toStage);
-    const now = new Date();
+    // Going back reopens the earlier stage, so it must be approved again.
+    if (direction === "previous") {
+      await clearApproval(tx, org, userId, inquiryId, toStage, "moved back");
+    }
 
+    const nextOwner = departmentForStage(map, toStage);
     await tx
       .update(inquiries)
       .set({
         currentStage: toStage,
-        owningDepartmentKey: nextDept,
-        assignedStaffId: previousDept === nextDept ? existing.assignedStaffId : null,
-        updatedAt: now,
+        owningDepartmentKey: nextOwner,
+        // A new department picks its own person.
+        assignedStaffId:
+          nextOwner === ownerOf(existing) ? existing.assignedStaffId : null,
+        updatedAt: new Date(),
       })
       .where(eq(inquiries.id, inquiryId));
-
-    await tx.insert(inquiryStageEvents).values({
-      id: crypto.randomUUID(),
-      organizationId: org.id,
-      inquiryId,
-      fromStage: current,
-      toStage,
-      actorUserId: userId,
-      occurredAt: now,
-      note: "",
-      createdAt: now,
-      updatedAt: now,
+    await recordEvent(tx, org, userId, inquiryId, {
+      from: current,
+      to: toStage,
     });
 
-    const [row] = await tx
-      .select({
-        inquiry: inquiries,
-        assignedName: staffMembers.fullName,
-      })
-      .from(inquiries)
-      .leftJoin(staffMembers, eq(staffMembers.id, inquiries.assignedStaffId))
-      .where(eq(inquiries.id, inquiryId))
-      .limit(1);
-    if (!row) throw new Error("Could not move inquiry stage.");
-    const lineMap = await loadLineItems(tx, [inquiryId]);
-    const extras = await loadInquiryExtras(tx, row.inquiry, userId, map);
-    return toInquiryView(
-      row.inquiry,
-      lineMap.get(inquiryId) ?? [],
-      row.assignedName ?? null,
-      extras,
-    );
+    return reloadInquiryView(tx, org, inquiryId);
   });
-}
-
-/** Create visitor-linked starter inquiry inside an existing tenant transaction. */
-export async function createStarterInquiryInTx(
-  tx: DbTransaction,
-  args: {
-    userId: string;
-    organizationId: string;
-    customerName: string;
-    notes: string;
-    sourceVisitorId: string;
-  },
-): Promise<string> {
-  const map = await loadWorkflowMap(tx, args.organizationId);
-
-  const id = crypto.randomUUID();
-  const now = new Date();
-  const owningDepartmentKey = departmentForStage(map, "inquiry");
-
-  await tx.insert(inquiries).values({
-    id,
-    organizationId: args.organizationId,
-    customerName: args.customerName,
-    contact: "",
-    deliveryExpectedOn: "",
-    notes: args.notes,
-    currentStage: "inquiry",
-    owningDepartmentKey,
-    assignedStaffId: null,
-    source: "reception_visitor",
-    sourceVisitorId: args.sourceVisitorId,
-    createdByUserId: args.userId,
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  await tx.insert(inquiryStageEvents).values({
-    id: crypto.randomUUID(),
-    organizationId: args.organizationId,
-    inquiryId: id,
-    fromStage: "",
-    toStage: "inquiry",
-    actorUserId: args.userId,
-    occurredAt: now,
-    note: "From Reception visitor",
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  await tx
-    .update(visitorLogs)
-    .set({ inquiryId: id, updatedAt: now })
-    .where(eq(visitorLogs.id, args.sourceVisitorId));
-
-  return id;
 }

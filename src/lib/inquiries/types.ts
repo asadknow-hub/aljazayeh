@@ -66,6 +66,10 @@ export type InquiryView = {
   approvalRequiredBy: InquiryApprovalRoleKey | "";
   currentStageApproved: boolean;
   canApproveCurrentStage: boolean;
+  /** The signed-in person may edit, comment on and move this inquiry. */
+  canWork: boolean;
+  /** The signed-in person may choose who handles this inquiry. */
+  canAssign: boolean;
   lineItems: InquiryLineItemView[];
   comments: InquiryCommentView[];
   activityLogs: InquiryActivityLogView[];

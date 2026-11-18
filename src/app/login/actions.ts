@@ -3,9 +3,10 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { authenticateUser } from "@/lib/auth/authenticate";
+import { UserError } from "@/lib/errors";
 import { clearSession, setSession } from "@/lib/auth/session";
 import { companyPath } from "@/lib/org/code";
-import { getDefaultOrganization } from "@/lib/org/queries";
+import { listUserOrganizations } from "@/lib/org/queries";
 import { recordSuccessfulLogin } from "@/lib/profile/queries";
 
 export type LoginState = {
@@ -27,7 +28,14 @@ export async function login(
   const password = String(formData.get("password") ?? "");
   const next = safeNextPath(formData.get("next"));
 
-  const user = await authenticateUser(username, password);
+  let user: Awaited<ReturnType<typeof authenticateUser>>;
+  try {
+    user = await authenticateUser(username, password);
+  } catch (error) {
+    // A locked login explains itself; anything else is a real failure.
+    if (error instanceof UserError) return { error: error.message };
+    throw error;
+  }
   if (!user) {
     return { error: "Invalid username or password." };
   }
@@ -54,12 +62,13 @@ export async function login(
     redirect(next);
   }
 
-  const defaultOrg = await getDefaultOrganization(user.userId);
-  if (defaultOrg) {
-    redirect(companyPath(defaultOrg.code));
-  }
+  // Go straight to the default company, or the only one they work for.
+  const organizations = await listUserOrganizations(user.userId);
+  const landing =
+    organizations.find((org) => org.isDefault) ??
+    (organizations.length === 1 ? organizations[0] : null);
 
-  redirect("/");
+  redirect(landing ? companyPath(landing.code) : "/");
 }
 
 export async function logout(): Promise<void> {

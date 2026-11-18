@@ -2,13 +2,7 @@ import "server-only";
 
 import { desc, eq, sql } from "drizzle-orm";
 import { db, withTenantContext } from "@/db/client";
-import {
-  userContracts,
-  userLoginEvents,
-  userSalary,
-  users,
-} from "@/db/schema";
-import { syncAdminContactToUserOrgs } from "@/lib/company-settings/admin-contact";
+import { userContracts, userLoginEvents, userSalary, users } from "@/db/schema";
 import type {
   ContractView,
   LoginActivityItem,
@@ -16,6 +10,9 @@ import type {
   ProfileSettingsBundle,
   SalaryView,
 } from "@/lib/profile/types";
+import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { UserError } from "@/lib/errors";
+import { assertValidPassword } from "@/lib/staff/validate";
 
 const emptySalary: SalaryView = {
   amount: "0",
@@ -151,29 +148,17 @@ export async function recordSuccessfulLogin(
 export async function updateUserFullName(userId: string, fullName: string) {
   const value = fullName.trim();
   if (!value) {
-    throw new Error("Name is required.");
+    throw new UserError("Name is required.");
   }
   if (value.length > 120) {
-    throw new Error("Name must be 120 characters or fewer.");
+    throw new UserError("Name must be 120 characters or fewer.");
   }
 
   return withTenantContext(userId, async (tx) => {
-    const [current] = await tx
-      .select({ email: users.email })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
     await tx
       .update(users)
       .set({ fullName: value, updatedAt: new Date() })
       .where(eq(users.id, userId));
-
-    await syncAdminContactToUserOrgs(tx, userId, {
-      adminName: value,
-      adminEmail: current?.email?.trim() ?? "",
-    });
-
     return value;
   });
 }
@@ -181,29 +166,17 @@ export async function updateUserFullName(userId: string, fullName: string) {
 export async function updateUserEmail(userId: string, email: string) {
   const value = email.trim().toLowerCase();
   if (!value) {
-    throw new Error("Email is required.");
+    throw new UserError("Email is required.");
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-    throw new Error("Email must be a valid email address.");
+    throw new UserError("Email must be a valid email address.");
   }
 
   return withTenantContext(userId, async (tx) => {
-    const [current] = await tx
-      .select({ fullName: users.fullName })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
     await tx
       .update(users)
       .set({ email: value, updatedAt: new Date() })
       .where(eq(users.id, userId));
-
-    await syncAdminContactToUserOrgs(tx, userId, {
-      adminName: current?.fullName?.trim() ?? "",
-      adminEmail: value,
-    });
-
     return value;
   });
 }
@@ -216,16 +189,12 @@ export async function updateUserPassword(
     confirmPassword: string;
   },
 ) {
-  const { hashPassword, verifyPassword } = await import("@/lib/auth/password");
-
   if (!input.currentPassword) {
-    throw new Error("Current password is required.");
+    throw new UserError("Current password is required.");
   }
-  if (input.newPassword.length < 6) {
-    throw new Error("New password must be at least 6 characters.");
-  }
+  assertValidPassword(input.newPassword);
   if (input.newPassword !== input.confirmPassword) {
-    throw new Error("New password and confirmation do not match.");
+    throw new UserError("New password and confirmation do not match.");
   }
 
   return withTenantContext(userId, async (tx) => {
@@ -236,12 +205,12 @@ export async function updateUserPassword(
       .limit(1);
 
     if (!user) {
-      throw new Error("User not found.");
+      throw new UserError("User not found.");
     }
 
     const ok = await verifyPassword(input.currentPassword, user.passwordHash);
     if (!ok) {
-      throw new Error("Current password is incorrect.");
+      throw new UserError("Current password is incorrect.");
     }
 
     const passwordHash = await hashPassword(input.newPassword);
@@ -255,7 +224,7 @@ export async function updateUserPassword(
 export async function upsertUserSalary(userId: string, input: SalaryView) {
   const amount = input.amount.trim();
   if (!amount || Number.isNaN(Number(amount)) || Number(amount) < 0) {
-    throw new Error("Salary amount must be a valid non-negative number.");
+    throw new UserError("Salary amount must be a valid non-negative number.");
   }
   const currency = input.currency.trim().toUpperCase() || "AED";
   const payFrequency = input.payFrequency.trim() || "monthly";
@@ -298,7 +267,7 @@ export async function upsertUserSalary(userId: string, input: SalaryView) {
 export async function upsertUserContract(userId: string, input: ContractView) {
   const title = input.title.trim();
   if (!title) {
-    throw new Error("Contract title is required.");
+    throw new UserError("Contract title is required.");
   }
 
   const values = {
@@ -319,7 +288,7 @@ export async function upsertUserContract(userId: string, input: ContractView) {
         .limit(1);
 
       if (!existing) {
-        throw new Error("Contract not found.");
+        throw new UserError("Contract not found.");
       }
 
       await tx

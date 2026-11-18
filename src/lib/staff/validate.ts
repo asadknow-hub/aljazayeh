@@ -1,14 +1,16 @@
+import { isIsoDate } from "@/lib/datetime/calendar";
 import {
   isAssignableDepartmentKey,
   type StaffRoleKey,
 } from "@/lib/departments/catalog";
 import type {
   StaffContractInput,
-  StaffInput,
+  StaffLoginInput,
   StaffProfileInput,
   StaffSalaryInput,
   StaffStatus,
 } from "@/lib/staff/types";
+import { UserError } from "@/lib/errors";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const STATUSES = new Set<StaffStatus>(["active", "inactive"]);
@@ -27,14 +29,10 @@ function normalizeDepartments(keys: string[]): StaffRoleKey[] {
   );
 
   if (departmentKeys.length === 0) {
-    throw new Error("Select at least one department.");
+    throw new UserError("Select at least one department.");
   }
 
   return departmentKeys;
-}
-
-export function normalizeStaffInput(input: StaffInput): StaffInput {
-  return normalizeStaffProfileInput(input);
 }
 
 export function normalizeStaffProfileInput(
@@ -42,28 +40,36 @@ export function normalizeStaffProfileInput(
 ): StaffProfileInput {
   const fullName = clean(input.fullName);
   if (!fullName) {
-    throw new Error("Full name is required.");
+    throw new UserError("Full name is required.");
   }
   if (fullName.length > 120) {
-    throw new Error("Full name must be 120 characters or fewer.");
+    throw new UserError("Full name must be 120 characters or fewer.");
   }
 
   const email = clean(input.email).toLowerCase();
   if (email && !EMAIL_PATTERN.test(email)) {
-    throw new Error("Email must be a valid email address.");
+    throw new UserError("Email must be a valid email address.");
+  }
+
+  const joinedOn = clean(input.joinedOn);
+  if (joinedOn && !isIsoDate(joinedOn)) {
+    throw new UserError("Joining date is not a valid date.");
   }
 
   const status = input.status;
   if (!STATUSES.has(status)) {
-    throw new Error("Invalid staff status.");
+    throw new UserError("Invalid staff status.");
   }
 
   return {
     fullName,
     email,
     phone: clean(input.phone),
+    homeCountryContact: clean(input.homeCountryContact),
+    passportNumber: clean(input.passportNumber).toUpperCase(),
     jobTitle: clean(input.jobTitle),
     employeeCode: clean(input.employeeCode),
+    joinedOn,
     status,
     notes: clean(input.notes),
     departmentKeys: normalizeDepartments(input.departmentKeys),
@@ -75,7 +81,7 @@ export function normalizeStaffSalaryInput(
 ): StaffSalaryInput {
   const salaryAmount = clean(input.salaryAmount) || "0";
   if (Number.isNaN(Number(salaryAmount)) || Number(salaryAmount) < 0) {
-    throw new Error("Salary must be a valid non-negative number.");
+    throw new UserError("Salary must be a valid non-negative number.");
   }
 
   return {
@@ -97,4 +103,28 @@ export function normalizeStaffContractInput(
     contractEndDate: clean(input.contractEndDate),
     contractNotes: clean(input.contractNotes),
   };
+}
+
+export const MIN_PASSWORD_LENGTH = 8;
+const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,31}$/;
+
+export function assertValidPassword(password: string): string {
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    throw new UserError(
+      `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
+    );
+  }
+  return password;
+}
+
+export function normalizeStaffLoginInput(
+  input: StaffLoginInput,
+): StaffLoginInput {
+  const username = clean(input.username).toLowerCase();
+  if (!USERNAME_PATTERN.test(username)) {
+    throw new UserError(
+      "Username must be 3-32 characters: letters, numbers, dots, dashes or underscores.",
+    );
+  }
+  return { username, password: assertValidPassword(input.password) };
 }

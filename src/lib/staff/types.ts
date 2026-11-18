@@ -6,15 +6,29 @@ export type StaffProfileInput = {
   fullName: string;
   email: string;
   phone: string;
+  homeCountryContact: string;
+  passportNumber: string;
   jobTitle: string;
   employeeCode: string;
+  /** First working day as YYYY-MM-DD, or empty if not recorded. */
+  joinedOn: string;
   status: StaffStatus;
   notes: string;
   departmentKeys: StaffRoleKey[];
 };
 
-/** Create/update payload used by the Add Staff modal. */
-export type StaffInput = StaffProfileInput;
+export type StaffLoginInput = {
+  username: string;
+  password: string;
+};
+
+/** The few fields other screens need to pick a person from a list. */
+export type StaffOption = {
+  id: string;
+  fullName: string;
+  jobTitle: string;
+  status: StaffStatus;
+};
 
 export type StaffSalaryInput = {
   salaryAmount: string;
@@ -37,6 +51,10 @@ export type StaffView = StaffProfileInput &
   StaffContractInput & {
     id: string;
     organizationId: string;
+    /** Company administrator. */
+    isAdmin: boolean;
+    /** Username this person signs in with, or null if they have no login. */
+    loginUsername: string | null;
     createdAt: string;
     updatedAt: string;
   };
@@ -51,13 +69,15 @@ export const STAFF_DETAIL_SECTIONS = [
   "salary",
   "contract",
   "vacation",
-  "login-activity",
+  "login",
   "actions",
 ] as const;
 
 export type StaffDetailSection = (typeof STAFF_DETAIL_SECTIONS)[number];
 
-export function isStaffDetailSection(value: string): value is StaffDetailSection {
+export function isStaffDetailSection(
+  value: string,
+): value is StaffDetailSection {
   return (STAFF_DETAIL_SECTIONS as readonly string[]).includes(value);
 }
 

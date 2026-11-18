@@ -1,18 +1,32 @@
 import "server-only";
 
-import { and, asc, desc, eq } from "drizzle-orm";
-import { withTenantContext } from "@/db/client";
+import { and, desc, eq, gte, lt, lte, ne } from "drizzle-orm";
+import { withTenantContext, type DbTransaction } from "@/db/client";
 import {
-  memberships,
-  organizations,
+  organizationSettings,
+  staffDepartmentAssignments,
   staffMembers,
   vacationRequests,
 } from "@/db/schema";
+import { assertCan, can } from "@/lib/access/access";
 import { insertStaffActivityLog } from "@/lib/activity/record";
-import { normalizeOrgCode } from "@/lib/org/code";
+import { addDays, durationInYearsAndMonths } from "@/lib/datetime/calendar";
+import { departmentLabel } from "@/lib/departments/catalog";
+import { UserError } from "@/lib/errors";
+import { isUuid } from "@/lib/ids";
+import { requireOrg, resolveOrg, type ResolvedOrg } from "@/lib/org/resolve";
+import type { SignoffDecision } from "@/lib/signoffs/chains";
+import { verifyApprovalPin } from "@/lib/signoffs/credentials";
+import {
+  assertChainStaffed,
+  isSignerOf,
+  loadSignoffState,
+  signAsPreparer,
+  signNextStep,
+} from "@/lib/signoffs/queries";
 import {
   leaveTypeLabel,
-  parseSelectedDatesJson,
+  type LeaveDocument,
   type LeaveType,
   type VacationRequestInput,
   type VacationRequestView,
@@ -20,152 +34,98 @@ import {
 } from "@/lib/vacation/types";
 import { normalizeVacationRequestInput } from "@/lib/vacation/validate";
 
-async function resolveOrgId(
-  tx: Parameters<Parameters<typeof withTenantContext>[1]>[0],
-  userId: string,
-  orgCode: string,
-) {
-  const code = normalizeOrgCode(orgCode);
-  const [org] = await tx
-    .select({ id: organizations.id, code: organizations.code })
-    .from(organizations)
-    .innerJoin(
-      memberships,
-      and(
-        eq(memberships.organizationId, organizations.id),
-        eq(memberships.userId, userId),
-      ),
-    )
-    .where(eq(organizations.code, code))
-    .limit(1);
+const DOCUMENT_TYPE = "leave_request";
 
-  return org ?? null;
-}
+type RequestRow = typeof vacationRequests.$inferSelect;
 
 function toView(
-  row: typeof vacationRequests.$inferSelect,
-  staffName: string,
-  staffJobTitle: string,
+  row: RequestRow,
+  staff: { fullName: string; jobTitle: string },
 ): VacationRequestView {
-  const selectedDates = parseSelectedDatesJson(row.selectedDates);
   return {
     id: row.id,
-    organizationId: row.organizationId,
     staffId: row.staffId,
-    staffName,
-    staffJobTitle,
+    staffName: staff.fullName,
+    staffJobTitle: staff.jobTitle,
     startDate: row.startDate,
     endDate: row.endDate,
-    selectedDates,
-    dayCount: row.dayCount || selectedDates.length,
+    returnDate: addDays(row.endDate, 1),
+    dayCount: row.dayCount,
     leaveType: row.leaveType as LeaveType,
     reason: row.reason,
     status: row.status as VacationStatus,
-    requestedByUserId: row.requestedByUserId,
-    reviewedByUserId: row.reviewedByUserId,
-    reviewedAt: row.reviewedAt ? row.reviewedAt.toISOString() : null,
-    reviewNote: row.reviewNote,
     createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
-export async function listPendingVacationRequestsForUser(
-  userId: string,
-  orgCode: string,
+async function loadRequests(
+  tx: DbTransaction,
+  organizationId: string,
+  filter: { staffId?: string; status?: VacationStatus } = {},
 ): Promise<VacationRequestView[]> {
-  return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
-    if (!org) return [];
+  const rows = await tx
+    .select({
+      request: vacationRequests,
+      fullName: staffMembers.fullName,
+      jobTitle: staffMembers.jobTitle,
+    })
+    .from(vacationRequests)
+    .innerJoin(staffMembers, eq(staffMembers.id, vacationRequests.staffId))
+    .where(
+      and(
+        eq(vacationRequests.organizationId, organizationId),
+        filter.staffId
+          ? eq(vacationRequests.staffId, filter.staffId)
+          : undefined,
+        filter.status ? eq(vacationRequests.status, filter.status) : undefined,
+      ),
+    )
+    .orderBy(desc(vacationRequests.createdAt));
 
-    const rows = await tx
-      .select({
-        request: vacationRequests,
-        staffName: staffMembers.fullName,
-        staffJobTitle: staffMembers.jobTitle,
-      })
-      .from(vacationRequests)
-      .innerJoin(staffMembers, eq(staffMembers.id, vacationRequests.staffId))
-      .where(
-        and(
-          eq(vacationRequests.organizationId, org.id),
-          eq(vacationRequests.status, "pending"),
-        ),
-      )
-      .orderBy(asc(vacationRequests.startDate), asc(staffMembers.fullName));
-
-    return rows.map((row) =>
-      toView(row.request, row.staffName, row.staffJobTitle),
-    );
-  });
+  return rows.map((row) => toView(row.request, row));
 }
 
+/** Every leave request of the company, for Reception. */
 export async function listOrgVacationRequestsForUser(
   userId: string,
   orgCode: string,
 ): Promise<VacationRequestView[]> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
-    if (!org) return [];
-
-    const rows = await tx
-      .select({
-        request: vacationRequests,
-        staffName: staffMembers.fullName,
-        staffJobTitle: staffMembers.jobTitle,
-      })
-      .from(vacationRequests)
-      .innerJoin(staffMembers, eq(staffMembers.id, vacationRequests.staffId))
-      .where(eq(vacationRequests.organizationId, org.id))
-      .orderBy(
-        desc(vacationRequests.createdAt),
-        asc(staffMembers.fullName),
-      );
-
-    return rows.map((row) =>
-      toView(row.request, row.staffName, row.staffJobTitle),
-    );
+    const org = await resolveOrg(tx, userId, orgCode);
+    if (!org || !can.useReception(org.access)) return [];
+    return loadRequests(tx, org.id);
   });
 }
 
+/** One person's leave history, for their staff page. */
 export async function listStaffVacationRequestsForUser(
   userId: string,
   orgCode: string,
   staffId: string,
 ): Promise<VacationRequestView[]> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
+    const org = await resolveOrg(tx, userId, orgCode);
+    if (!org || !can.manageStaff(org.access) || !isUuid(staffId)) return [];
+    return loadRequests(tx, org.id, { staffId });
+  });
+}
+
+/** Leave requests whose next signature is the signed-in person's. */
+export async function listVacationsAwaitingMySignature(
+  userId: string,
+  orgCode: string,
+): Promise<VacationRequestView[]> {
+  return withTenantContext(userId, async (tx) => {
+    const org = await resolveOrg(tx, userId, orgCode);
     if (!org) return [];
 
-    const [staff] = await tx
-      .select({
-        id: staffMembers.id,
-        fullName: staffMembers.fullName,
-        jobTitle: staffMembers.jobTitle,
-      })
-      .from(staffMembers)
-      .where(
-        and(
-          eq(staffMembers.id, staffId),
-          eq(staffMembers.organizationId, org.id),
-        ),
-      )
-      .limit(1);
-
-    if (!staff) return [];
-
-    const rows = await tx
-      .select()
-      .from(vacationRequests)
-      .where(
-        and(
-          eq(vacationRequests.organizationId, org.id),
-          eq(vacationRequests.staffId, staffId),
-        ),
-      )
-      .orderBy(desc(vacationRequests.startDate), desc(vacationRequests.createdAt));
-
-    return rows.map((row) => toView(row, staff.fullName, staff.jobTitle));
+    const pending = await loadRequests(tx, org.id, { status: "pending" });
+    const mine: VacationRequestView[] = [];
+    for (const request of pending) {
+      const state = await loadSignoffState(tx, org, DOCUMENT_TYPE, request.id);
+      if (state.canSign) mine.push(request);
+    }
+    return mine;
   });
 }
 
@@ -177,10 +137,9 @@ export async function createVacationRequestForUser(
   const normalized = normalizeVacationRequestInput(input);
 
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
-    if (!org) {
-      throw new Error("Company not found.");
-    }
+    const org = await requireOrg(tx, userId, orgCode);
+    assertCan(can.useReception(org.access));
+    await assertChainStaffed(tx, org, DOCUMENT_TYPE);
 
     const [staff] = await tx
       .select()
@@ -192,138 +151,219 @@ export async function createVacationRequestForUser(
         ),
       )
       .limit(1);
-
     if (!staff) {
-      throw new Error("Employee not found.");
+      throw new UserError("Employee not found.");
+    }
+    if (staff.joinedOn && normalized.startDate < staff.joinedOn) {
+      throw new UserError("The leave starts before this person joined.");
     }
 
-    const id = crypto.randomUUID();
-    const now = new Date();
-
-    await tx.insert(vacationRequests).values({
-      id,
-      organizationId: org.id,
-      staffId: staff.id,
-      startDate: normalized.startDate,
-      endDate: normalized.endDate,
-      selectedDates: JSON.stringify(normalized.selectedDates),
-      dayCount: normalized.dayCount,
-      leaveType: normalized.leaveType,
-      reason: normalized.reason,
-      status: "pending",
-      requestedByUserId: userId,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    await insertStaffActivityLog(tx, {
-      organizationId: org.id,
-      staffId: staff.id,
-      occurredAt: now,
-      category: "vacation",
-      action: "requested",
-      summary: "Vacation requested",
-      details: normalized.reason
-        ? `${leaveTypeLabel(normalized.leaveType)} · ${normalized.reason}`
-        : leaveTypeLabel(normalized.leaveType),
-      status: "pending",
-      dayCount: normalized.dayCount,
-      referenceType: "vacation_request",
-      referenceId: id,
-      actorUserId: userId,
-    });
-
-    const [row] = await tx
-      .select()
+    // One leave at a time: nothing pending or approved may overlap.
+    const [overlap] = await tx
+      .select({ id: vacationRequests.id })
       .from(vacationRequests)
-      .where(eq(vacationRequests.id, id))
-      .limit(1);
-
-    if (!row) {
-      throw new Error("Could not create vacation request.");
-    }
-
-    return toView(row, staff.fullName, staff.jobTitle);
-  });
-}
-
-export async function reviewVacationRequestForUser(
-  userId: string,
-  orgCode: string,
-  requestId: string,
-  decision: "approved" | "rejected",
-  reviewNote = "",
-): Promise<VacationRequestView> {
-  return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrgId(tx, userId, orgCode);
-    if (!org) {
-      throw new Error("Company not found.");
-    }
-
-    const [existing] = await tx
-      .select({
-        request: vacationRequests,
-        staffName: staffMembers.fullName,
-        staffJobTitle: staffMembers.jobTitle,
-      })
-      .from(vacationRequests)
-      .innerJoin(staffMembers, eq(staffMembers.id, vacationRequests.staffId))
       .where(
         and(
-          eq(vacationRequests.id, requestId),
-          eq(vacationRequests.organizationId, org.id),
+          eq(vacationRequests.staffId, staff.id),
+          ne(vacationRequests.status, "rejected"),
+          lte(vacationRequests.startDate, normalized.endDate),
+          gte(vacationRequests.endDate, normalized.startDate),
         ),
       )
       .limit(1);
-
-    if (!existing) {
-      throw new Error("Vacation request not found.");
+    if (overlap) {
+      throw new UserError(
+        `${staff.fullName} already has a leave request covering some of these days.`,
+      );
     }
 
-    if (existing.request.status !== "pending") {
-      throw new Error("This request has already been processed.");
-    }
-
-    const now = new Date();
-    await tx
-      .update(vacationRequests)
-      .set({
-        status: decision,
-        reviewedByUserId: userId,
-        reviewedAt: now,
-        reviewNote: reviewNote.trim(),
-        updatedAt: now,
+    const [created] = await tx
+      .insert(vacationRequests)
+      .values({
+        organizationId: org.id,
+        staffId: staff.id,
+        startDate: normalized.startDate,
+        endDate: normalized.endDate,
+        dayCount: normalized.dayCount,
+        leaveType: normalized.leaveType,
+        reason: normalized.reason,
+        jobHandledBy: normalized.jobHandledBy,
+        leaveAvailableDays: normalized.leaveAvailableDays,
+        officeComments: normalized.officeComments,
+        requestedByUserId: userId,
       })
-      .where(eq(vacationRequests.id, requestId));
+      .returning();
+    await signAsPreparer(tx, org, userId, DOCUMENT_TYPE, created!.id);
 
     await insertStaffActivityLog(tx, {
       organizationId: org.id,
-      staffId: existing.request.staffId,
-      occurredAt: now,
+      staffId: staff.id,
       category: "vacation",
-      action: decision,
-      summary:
-        decision === "approved" ? "Vacation approved" : "Vacation rejected",
-      details: existing.request.reason
-        ? `${leaveTypeLabel(existing.request.leaveType)} · ${existing.request.reason}`
-        : leaveTypeLabel(existing.request.leaveType),
-      status: decision,
-      dayCount: existing.request.dayCount,
+      action: "requested",
+      summary: "Vacation requested",
+      details: describeLeave(created!),
+      status: "pending",
+      dayCount: normalized.dayCount,
       referenceType: "vacation_request",
-      referenceId: requestId,
+      referenceId: created!.id,
       actorUserId: userId,
     });
 
-    const [row] = await tx
-      .select()
+    return toView(created!, staff);
+  });
+}
+
+function describeLeave(row: RequestRow): string {
+  const type = leaveTypeLabel(row.leaveType);
+  return row.reason ? `${type} · ${row.reason}` : type;
+}
+
+async function findRequest(
+  tx: DbTransaction,
+  org: ResolvedOrg,
+  requestId: string,
+) {
+  if (!isUuid(requestId)) return null;
+  const [row] = await tx
+    .select({ request: vacationRequests, staff: staffMembers })
+    .from(vacationRequests)
+    .innerJoin(staffMembers, eq(staffMembers.id, vacationRequests.staffId))
+    .where(
+      and(
+        eq(vacationRequests.id, requestId),
+        eq(vacationRequests.organizationId, org.id),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * The Leave Request Application form with its signatures. Open to Reception
+ * and leadership, to the person the leave is for, and to whoever signs next.
+ */
+export async function getLeaveDocumentForUser(
+  userId: string,
+  orgCode: string,
+  requestId: string,
+): Promise<LeaveDocument | null> {
+  return withTenantContext(userId, async (tx) => {
+    const org = await resolveOrg(tx, userId, orgCode);
+    if (!org) return null;
+    const found = await findRequest(tx, org, requestId);
+    if (!found) return null;
+    const { request, staff } = found;
+
+    const signoffs = await loadSignoffState(tx, org, DOCUMENT_TYPE, request.id);
+    const mayView =
+      can.useReception(org.access) ||
+      staff.id === org.access.staffId ||
+      (await isSignerOf(tx, org, DOCUMENT_TYPE));
+    if (!mayView) return null;
+
+    const departments = await tx
+      .select({ key: staffDepartmentAssignments.departmentKey })
+      .from(staffDepartmentAssignments)
+      .where(eq(staffDepartmentAssignments.staffId, staff.id));
+
+    const [previous] = await tx
+      .select({ endDate: vacationRequests.endDate })
       .from(vacationRequests)
-      .where(eq(vacationRequests.id, requestId))
+      .where(
+        and(
+          eq(vacationRequests.staffId, staff.id),
+          eq(vacationRequests.status, "approved"),
+          lt(vacationRequests.endDate, request.startDate),
+        ),
+      )
+      .orderBy(desc(vacationRequests.endDate))
       .limit(1);
 
-    if (!row) {
-      throw new Error("Could not update vacation request.");
+    const [settings] = await tx
+      .select({
+        nameArabic: organizationSettings.nameArabic,
+        logoImage: organizationSettings.logoImage,
+      })
+      .from(organizationSettings)
+      .where(eq(organizationSettings.organizationId, org.id))
+      .limit(1);
+
+    return {
+      ...toView(request, staff),
+      company: {
+        name: org.name,
+        nameArabic: settings?.nameArabic ?? "",
+        logoImage: settings?.logoImage ?? null,
+      },
+      employee: {
+        designation: staff.jobTitle,
+        department: departments
+          .map((item) => departmentLabel(item.key))
+          .join(", "),
+        localContact: staff.phone,
+        homeCountryContact: staff.homeCountryContact,
+        passportNumber: staff.passportNumber,
+        joinedOn: staff.joinedOn ?? "",
+        workingDuration: staff.joinedOn
+          ? durationInYearsAndMonths(staff.joinedOn, request.startDate)
+          : "",
+        previousReturn: previous ? addDays(previous.endDate, 1) : "",
+      },
+      jobHandledBy: request.jobHandledBy,
+      leaveAvailableDays: request.leaveAvailableDays,
+      officeComments: request.officeComments,
+      signoffs,
+    };
+  });
+}
+
+/** Approve or reject as the next signer, confirming with the approval PIN. */
+export async function signVacationRequestForUser(
+  userId: string,
+  orgCode: string,
+  requestId: string,
+  input: { pin: string; decision: SignoffDecision; remarks: string },
+): Promise<VacationStatus> {
+  await verifyApprovalPin(userId, input.pin);
+
+  return withTenantContext(userId, async (tx) => {
+    const org = await requireOrg(tx, userId, orgCode);
+    const found = await findRequest(tx, org, requestId);
+    if (!found) throw new UserError("Leave request not found.");
+    const { request } = found;
+
+    const state = await signNextStep(
+      tx,
+      org,
+      userId,
+      DOCUMENT_TYPE,
+      request.id,
+      input,
+    );
+
+    if (state.status !== "pending") {
+      await tx
+        .update(vacationRequests)
+        .set({ status: state.status, updatedAt: new Date() })
+        .where(eq(vacationRequests.id, request.id));
+      await insertStaffActivityLog(tx, {
+        organizationId: org.id,
+        staffId: request.staffId,
+        category: "vacation",
+        action: state.status,
+        summary:
+          state.status === "approved"
+            ? "Vacation approved"
+            : "Vacation rejected",
+        details: describeLeave(request),
+        status: state.status,
+        dayCount: request.dayCount,
+        referenceType: "vacation_request",
+        referenceId: request.id,
+        actorUserId: userId,
+      });
     }
 
-    return toView(row, existing.staffName, existing.staffJobTitle);
+    return state.status;
   });
 }

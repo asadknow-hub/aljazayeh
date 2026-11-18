@@ -73,9 +73,6 @@ export const STAFF_ASSIGNABLE_ROLES = [
 
 export type StaffRoleKey = (typeof STAFF_ASSIGNABLE_ROLES)[number]["key"];
 
-/** @deprecated Use STAFF_ASSIGNABLE_ROLES */
-export const ASSIGNABLE_DEPARTMENTS = STAFF_ASSIGNABLE_ROLES;
-
 export function departmentPath(orgCode: string, slug: DepartmentSlug): string {
   return `/${orgCode}/${slug}`;
 }
