@@ -1,0 +1,60 @@
+import type { CompanySettingsInput } from "@/lib/company-settings/types";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function clean(value: string): string {
+  return value.trim();
+}
+
+function assertEmail(label: string, value: string) {
+  if (!value) return;
+  if (!EMAIL_PATTERN.test(value)) {
+    throw new Error(`${label} must be a valid email address.`);
+  }
+}
+
+function assertUrl(label: string, value: string) {
+  if (!value) return;
+  try {
+    const parsed = new URL(value.includes("://") ? value : `https://${value}`);
+    if (!parsed.hostname.includes(".")) {
+      throw new Error("invalid");
+    }
+  } catch {
+    throw new Error(`${label} must be a valid URL.`);
+  }
+}
+
+export function normalizeCompanySettingsInput(
+  input: CompanySettingsInput,
+): CompanySettingsInput {
+  const companyName = clean(input.companyName);
+  if (!companyName) {
+    throw new Error("Company name is required.");
+  }
+
+  const email = clean(input.email);
+  const adminEmail = clean(input.adminEmail).toLowerCase();
+  const websiteUrl = clean(input.websiteUrl);
+  const instagramUrl = clean(input.instagramUrl);
+  const facebookUrl = clean(input.facebookUrl);
+
+  assertEmail("Email", email);
+  assertEmail("Admin email", adminEmail);
+  assertUrl("Website link", websiteUrl);
+  assertUrl("Instagram page", instagramUrl);
+  assertUrl("Facebook page", facebookUrl);
+
+  return {
+    companyName,
+    telephoneNumber: clean(input.telephoneNumber),
+    phoneNumber: clean(input.phoneNumber),
+    whatsappNumber: clean(input.whatsappNumber),
+    email,
+    websiteUrl,
+    instagramUrl,
+    facebookUrl,
+    adminName: clean(input.adminName),
+    adminEmail,
+  };
+}
