@@ -12,15 +12,6 @@ export const INQUIRY_STAGES = [
 
 export type InquiryStageKey = (typeof INQUIRY_STAGES)[number]["key"];
 
-export const INVOICE_STAGE_KEYS = [
-  "proforma_invoice",
-  "progress_invoice",
-  "tax_invoice",
-  "receipt_voucher",
-] as const satisfies readonly InquiryStageKey[];
-
-export type InvoiceStageKey = (typeof INVOICE_STAGE_KEYS)[number];
-
 export const INQUIRY_WORKFLOW_DEPARTMENTS = [
   { key: "sales", label: "Sales" },
   { key: "admin", label: "Admin" },

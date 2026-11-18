@@ -182,17 +182,17 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
     <main className="relative flex flex-1 flex-col p-4 sm:p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-display text-lg font-semibold text-zinc-900">
+          <h2 className="font-display text-lg font-semibold text-slate-900">
             Staff
           </h2>
-          <p className="mt-1 text-sm text-zinc-600">
+          <p className="mt-1 text-sm text-slate-600">
             Create and manage people for {org.name}, assigned to departments.
           </p>
         </div>
         <button
           type="button"
           onClick={openCreate}
-          className="bg-header px-3 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control"
+          className="btn btn-primary"
         >
           Add staff
         </button>
@@ -202,23 +202,23 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search name, title, department…"
-          className="w-full max-w-md border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-header"
+          placeholder="Search name, profession, department…"
+          className="field w-full max-w-md"
         />
       </div>
 
       {error && !editorOpen ? (
-        <div className="mb-3 border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="mb-3 border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 rounded-lg">
           {error}
         </div>
       ) : null}
 
-      <div className="overflow-x-auto border border-zinc-300 bg-white">
+      <div className="card overflow-x-auto">
         <table className="w-full min-w-[58rem] border-collapse text-left text-sm">
           <thead>
-            <tr className="border-b border-zinc-200 bg-zinc-50 text-[11px] tracking-wide text-zinc-500 uppercase">
+            <tr className="border-b border-slate-200 bg-slate-50 text-[11px] tracking-wide text-slate-500 uppercase">
               <th className="px-3 py-2 font-medium">Name</th>
-              <th className="px-3 py-2 font-medium">Title</th>
+              <th className="px-3 py-2 font-medium">Profession</th>
               <th className="px-3 py-2 font-medium">Departments</th>
               <th className="px-3 py-2 font-medium">Salary</th>
               <th className="px-3 py-2 font-medium">Last salary paid on</th>
@@ -231,7 +231,7 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
               <tr>
                 <td
                   colSpan={7}
-                  className="px-3 py-8 text-center text-sm text-zinc-500"
+                  className="px-3 py-8 text-center text-sm text-slate-500"
                 >
                   {staff.length === 0
                     ? "No staff yet. Add the first person."
@@ -246,28 +246,28 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                   tabIndex={0}
                   onClick={() => openStaff(item)}
                   onKeyDown={(event) => onRowKeyDown(event, item)}
-                  className="cursor-pointer border-b border-zinc-100 align-top last:border-b-0 transition hover:bg-zinc-50"
+                  className="cursor-pointer border-b border-slate-100 align-top last:border-b-0 transition hover:bg-slate-50"
                 >
                   <td className="px-3 py-3">
-                    <p className="font-medium text-zinc-900">{item.fullName}</p>
+                    <p className="font-medium text-slate-900">{item.fullName}</p>
                     {item.employeeCode ? (
-                      <p className="mt-0.5 font-mono text-[11px] text-zinc-500">
+                      <p className="mt-0.5 font-mono text-[11px] text-slate-500">
                         {item.employeeCode}
                       </p>
                     ) : null}
                   </td>
-                  <td className="px-3 py-3 text-zinc-700">
+                  <td className="px-3 py-3 text-slate-700">
                     {item.jobTitle || "—"}
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex flex-wrap gap-1">
                       {item.departmentKeys.length === 0 ? (
-                        <span className="text-zinc-400">—</span>
+                        <span className="text-slate-400">—</span>
                       ) : (
                         item.departmentKeys.map((key) => (
                           <span
                             key={key}
-                            className="border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[11px] text-zinc-700"
+                            className="border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] text-slate-700 rounded-md"
                           >
                             {departmentLabel(key)}
                           </span>
@@ -275,13 +275,13 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                       )}
                     </div>
                   </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-zinc-700">
+                  <td className="px-3 py-3 whitespace-nowrap text-slate-700">
                     {formatStaffSalary(item.salaryAmount, item.salaryCurrency)}
                   </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-zinc-700">
+                  <td className="px-3 py-3 whitespace-nowrap text-slate-700">
                     {item.lastSalaryPaidOn || "—"}
                   </td>
-                  <td className="px-3 py-3 text-zinc-700">
+                  <td className="px-3 py-3 text-slate-700">
                     {statusLabel(item.status)}
                   </td>
                   <td className="px-3 py-3">
@@ -289,7 +289,7 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                       type="button"
                       onClick={(event) => requestDelete(item, event)}
                       disabled={deletingId === item.id}
-                      className="border border-red-200 bg-white px-2 py-1 text-xs font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-45"
+                      className="border border-red-200 bg-white px-2 py-1 text-xs font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-45 rounded-lg"
                     >
                       {deletingId === item.id ? "Deleting…" : "Delete"}
                     </button>
@@ -307,20 +307,20 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="staff-editor-title"
-            className="max-h-[90vh] w-full max-w-2xl overflow-auto border border-zinc-300 bg-white shadow-lg"
+            className="card max-h-[90vh] w-full max-w-2xl overflow-auto shadow-lg"
           >
             {createSuccess ? (
               <>
-                <div className="border-b border-zinc-200 px-4 py-3 sm:px-5">
+                <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
                   <h3
                     id="staff-editor-title"
-                    className="font-display text-base font-semibold text-zinc-900"
+                    className="font-display text-base font-semibold text-slate-900"
                   >
                     Staff created
                   </h3>
                 </div>
                 <div className="px-4 py-5 sm:px-5">
-                  <div className="flex items-start gap-3 border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900">
+                  <div className="flex items-start gap-3 border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900 rounded-lg">
                     <svg
                       viewBox="0 0 24 24"
                       aria-hidden="true"
@@ -347,11 +347,11 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center justify-end gap-2 border-t border-zinc-200 px-4 py-3 sm:px-5">
+                <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-4 py-3 sm:px-5">
                   <button
                     type="button"
                     onClick={closeEditor}
-                    className="bg-header px-3 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control"
+                    className="btn btn-primary"
                   >
                     Done
                   </button>
@@ -359,21 +359,21 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
               </>
             ) : (
               <form onSubmit={onSubmit}>
-                <div className="border-b border-zinc-200 px-4 py-3 sm:px-5">
+                <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
                   <h3
                     id="staff-editor-title"
-                    className="font-display text-base font-semibold text-zinc-900"
+                    className="font-display text-base font-semibold text-slate-900"
                   >
                     Add staff
                   </h3>
-                  <p className="mt-1 text-sm text-zinc-600">
+                  <p className="mt-1 text-sm text-slate-600">
                     Departments are required. Management is the admin role.
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 px-4 py-4 sm:grid-cols-2 sm:px-5">
                   <label className="flex flex-col gap-1.5 sm:col-span-2">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Full name
                     </span>
                     <input
@@ -385,12 +385,12 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                         }))
                       }
                       required
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
-                      Job title
+                    <span className="field-label">
+                      Profession
                     </span>
                     <input
                       value={form.jobTitle}
@@ -400,11 +400,11 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                           jobTitle: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Employee code
                     </span>
                     <input
@@ -415,11 +415,11 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                           employeeCode: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Joining date
                     </span>
                     <input
@@ -431,11 +431,11 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                           joinedOn: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Email
                     </span>
                     <input
@@ -447,11 +447,11 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                           email: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Phone
                     </span>
                     <input
@@ -462,11 +462,11 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                           phone: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Home country contact number
                     </span>
                     <input
@@ -477,11 +477,11 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                           homeCountryContact: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Passport number
                     </span>
                     <input
@@ -492,11 +492,11 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                           passportNumber: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Status
                     </span>
                     <select
@@ -507,7 +507,7 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                           status: event.target.value as StaffStatus,
                         }))
                       }
-                      className="border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     >
                       {STAFF_STATUSES.map((item) => (
                         <option key={item.value} value={item.value}>
@@ -517,7 +517,7 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                     </select>
                   </label>
                   <label className="flex flex-col gap-1.5 sm:col-span-2">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Notes
                     </span>
                     <textarea
@@ -529,15 +529,15 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                         }))
                       }
                       rows={3}
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
 
                   <fieldset className="sm:col-span-2">
-                    <legend className="text-[12px] font-medium text-zinc-700">
+                    <legend className="field-label">
                       Departments <span className="text-red-600">*</span>
                     </legend>
-                    <p className="mt-1 text-xs text-zinc-500">
+                    <p className="mt-1 text-xs text-slate-500">
                       Required. Choose one or more roles/departments.
                     </p>
                     <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -546,7 +546,7 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                         return (
                           <label
                             key={role.key}
-                            className="flex cursor-pointer items-center gap-2 border border-zinc-200 px-3 py-2 text-sm text-zinc-800 transition hover:bg-zinc-50"
+                            className="flex cursor-pointer items-center gap-2 border border-slate-200 px-3 py-2 text-sm text-slate-800 transition hover:bg-slate-50 rounded-lg"
                           >
                             <input
                               type="checkbox"
@@ -563,24 +563,24 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                 </div>
 
                 {error ? (
-                  <div className="border-t border-zinc-200 px-4 py-3 text-sm text-red-700 sm:px-5">
+                  <div className="border-t border-slate-200 px-4 py-3 text-sm text-red-700 sm:px-5">
                     {error}
                   </div>
                 ) : null}
 
-                <div className="flex items-center justify-end gap-2 border-t border-zinc-200 px-4 py-3 sm:px-5">
+                <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-4 py-3 sm:px-5">
                   <button
                     type="button"
                     onClick={closeEditor}
                     disabled={pending}
-                    className="border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-45"
+                    className="btn btn-secondary"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={!canCreate}
-                    className="bg-header px-3 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control disabled:cursor-not-allowed disabled:opacity-45"
+                    className="btn btn-primary"
                   >
                     {pending ? "Saving…" : "Create staff"}
                   </button>

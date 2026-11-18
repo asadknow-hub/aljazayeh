@@ -90,42 +90,42 @@ export function VisitorsPanel({
     <div className="w-full max-w-4xl">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="font-display text-xl font-semibold text-zinc-900">
+          <h2 className="font-display text-xl font-semibold text-slate-900">
             Visitors
           </h2>
-          <p className="mt-1 text-sm text-zinc-600">
+          <p className="mt-1 text-sm text-slate-600">
             Log walk-in visitors and calls handled at reception.
           </p>
         </div>
         <button
           type="button"
           onClick={openCreate}
-          className="shrink-0 bg-header px-3 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control"
+          className="btn btn-primary shrink-0"
         >
           Log a Visitor/Call
         </button>
       </div>
 
-      <div className="mt-4 border border-zinc-300 bg-white">
-        <div className="border-b border-zinc-200 px-4 py-3 sm:px-5">
-          <h3 className="font-display text-base font-semibold text-zinc-900">
+      <div className="card mt-4">
+        <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
+          <h3 className="font-display text-base font-semibold text-slate-900">
             Visitor log
           </h3>
         </div>
 
         {visitors.length === 0 ? (
-          <p className="px-4 py-5 text-sm text-zinc-600 sm:px-5">
+          <p className="px-4 py-5 text-sm text-slate-600 sm:px-5">
             No visitors logged yet.
           </p>
         ) : (
-          <ul className="divide-y divide-zinc-200">
+          <ul className="divide-y divide-slate-200">
             {visitors.map((item) => (
               <li
                 key={item.id}
                 className="grid grid-cols-3 items-center gap-3 px-4 py-3 sm:px-5"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-zinc-900">
+                  <p className="truncate text-sm font-medium text-slate-900">
                     {item.fullName}
                   </p>
                   {item.inquiryId ? (
@@ -134,10 +134,10 @@ export function VisitorsPanel({
                     </p>
                   ) : null}
                 </div>
-                <p className="truncate text-center text-sm text-zinc-600">
+                <p className="truncate text-center text-sm text-slate-600">
                   {visitorPurposeLabel(item.purpose)}
                 </p>
-                <p className="truncate text-right text-sm text-zinc-500">
+                <p className="truncate text-right text-sm text-slate-500">
                   {formatFriendlyDateTime(new Date(item.visitedAt))}
                 </p>
               </li>
@@ -152,20 +152,20 @@ export function VisitorsPanel({
             role="dialog"
             aria-modal="true"
             aria-labelledby="visitor-log-title"
-            className="max-h-[90vh] w-full max-w-lg overflow-auto border border-zinc-300 bg-white shadow-lg"
+            className="card max-h-[90vh] w-full max-w-lg overflow-auto shadow-lg"
           >
             {createSuccess && createdItem ? (
               <>
-                <div className="border-b border-zinc-200 px-4 py-3 sm:px-5">
+                <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
                   <h3
                     id="visitor-log-title"
-                    className="font-display text-base font-semibold text-zinc-900"
+                    className="font-display text-base font-semibold text-slate-900"
                   >
                     Visitor logged
                   </h3>
                 </div>
                 <div className="px-4 py-5 sm:px-5">
-                  <div className="flex items-start gap-3 border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900">
+                  <div className="flex items-start gap-3 border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900 rounded-lg">
                     <svg
                       viewBox="0 0 24 24"
                       aria-hidden="true"
@@ -202,11 +202,11 @@ export function VisitorsPanel({
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center justify-end border-t border-zinc-200 px-4 py-3 sm:px-5">
+                <div className="flex items-center justify-end border-t border-slate-200 px-4 py-3 sm:px-5">
                   <button
                     type="button"
                     onClick={closeEditor}
-                    className="bg-header px-3 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control"
+                    className="btn btn-primary"
                   >
                     Done
                   </button>
@@ -214,21 +214,21 @@ export function VisitorsPanel({
               </>
             ) : (
               <form onSubmit={onSubmit}>
-                <div className="border-b border-zinc-200 px-4 py-3 sm:px-5">
+                <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
                   <h3
                     id="visitor-log-title"
-                    className="font-display text-base font-semibold text-zinc-900"
+                    className="font-display text-base font-semibold text-slate-900"
                   >
                     Log a Visitor/Call
                   </h3>
-                  <p className="mt-1 text-sm text-zinc-600">
+                  <p className="mt-1 text-sm text-slate-600">
                     Record who visited or called and why.
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 px-4 py-4 sm:grid-cols-2 sm:px-5">
                   <label className="flex flex-col gap-1.5 sm:col-span-2">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Name
                     </span>
                     <input
@@ -240,12 +240,12 @@ export function VisitorsPanel({
                           fullName: event.target.value,
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
 
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Date
                     </span>
                     <input
@@ -260,12 +260,12 @@ export function VisitorsPanel({
                           visitDate: event.target.value.slice(0, 10),
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
 
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Time
                     </span>
                     <input
@@ -278,12 +278,12 @@ export function VisitorsPanel({
                           visitTime: event.target.value.slice(0, 5),
                         }))
                       }
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
 
                   <label className="flex flex-col gap-1.5 sm:col-span-2">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Purpose
                     </span>
                     <select
@@ -294,7 +294,7 @@ export function VisitorsPanel({
                           purpose: event.target.value as VisitorPurpose,
                         }))
                       }
-                      className="border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     >
                       {VISITOR_PURPOSES.map((item) => (
                         <option key={item.value} value={item.value}>
@@ -303,14 +303,14 @@ export function VisitorsPanel({
                       ))}
                     </select>
                     {form.purpose === "inquiry" ? (
-                      <span className="text-xs text-zinc-500">
+                      <span className="text-xs text-slate-500">
                         Inquiry purpose sends a starter inquiry to Admin.
                       </span>
                     ) : null}
                   </label>
 
                   <label className="flex flex-col gap-1.5 sm:col-span-2">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Notes
                     </span>
                     <textarea
@@ -322,30 +322,30 @@ export function VisitorsPanel({
                         }))
                       }
                       rows={3}
-                      className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-header"
+                      className="field"
                     />
                   </label>
                 </div>
 
                 {error ? (
-                  <div className="border-t border-zinc-200 px-4 py-3 text-sm text-red-700 sm:px-5">
+                  <div className="border-t border-slate-200 px-4 py-3 text-sm text-red-700 sm:px-5">
                     {error}
                   </div>
                 ) : null}
 
-                <div className="flex items-center justify-end gap-2 border-t border-zinc-200 px-4 py-3 sm:px-5">
+                <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-4 py-3 sm:px-5">
                   <button
                     type="button"
                     onClick={closeEditor}
                     disabled={pending}
-                    className="border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-45"
+                    className="btn btn-secondary"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={pending || !form.fullName.trim()}
-                    className="bg-header px-3 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control disabled:cursor-not-allowed disabled:opacity-45"
+                    className="btn btn-primary"
                   >
                     {pending ? "Saving…" : "Save log"}
                   </button>

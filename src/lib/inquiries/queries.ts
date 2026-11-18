@@ -8,6 +8,7 @@ import {
   inquiryLineItems,
   inquiryStageApprovals,
   inquiryStageEvents,
+  inquiryStageRecords,
   inquiryWorkflowSettings,
   staffDepartmentAssignments,
   staffMembers,
@@ -21,7 +22,8 @@ import {
   departmentForStage,
   INQUIRY_APPROVAL_ROLES,
   INQUIRY_STAGES,
-  INVOICE_STAGE_KEYS,
+  INQUIRY_WORKFLOW_DEPARTMENTS,
+  inquiryStageIndex,
   inquiryStageLabel,
   isInquiryApprovalRoleKey,
   isInquiryStageKey,
@@ -30,21 +32,36 @@ import {
   type InquiryWorkflowDepartmentKey,
   type InquiryWorkflowMap,
 } from "@/lib/inquiries/stages";
+import {
+  INQUIRY_HEADER_FIELDS,
+  inquiryTotals,
+  STAGE_DEFINITIONS,
+} from "@/lib/inquiries/stage-forms";
 import type {
+  AssignableStaff,
   InquiryActivityLogView,
   InquiryCommentView,
-  InquiryCreateInput,
-  InquiryUpdateInput,
+  InquiryLineItemInput,
+  InquiryLineItemView,
+  InquiryStageInput,
+  InquiryStatus,
+  InquiryStepView,
+  InquirySummary,
   InquiryView,
 } from "@/lib/inquiries/types";
 import {
-  normalizeInquiryCreateInput,
+  missingStageFields,
   normalizeInquiryWorkflowMap,
+  normalizeLineItems,
+  normalizeStageFields,
 } from "@/lib/inquiries/validate";
+import { appDateValue } from "@/lib/datetime/format";
+import { nextDocumentNumber } from "@/lib/documents/numbering";
 import { requireOrg, resolveOrg, type ResolvedOrg } from "@/lib/org/resolve";
 import { isUuid } from "@/lib/ids";
 
 type InquiryRow = typeof inquiries.$inferSelect;
+type StageRecordRow = typeof inquiryStageRecords.$inferSelect;
 
 function stageOf(row: InquiryRow): InquiryStageKey {
   return isInquiryStageKey(row.currentStage) ? row.currentStage : "inquiry";
@@ -54,6 +71,12 @@ function ownerOf(row: InquiryRow): InquiryWorkflowDepartmentKey {
   return isInquiryWorkflowDepartmentKey(row.owningDepartmentKey)
     ? row.owningDepartmentKey
     : "admin";
+}
+
+function statusOf(row: InquiryRow): InquiryStatus {
+  return row.status === "completed" || row.status === "cancelled"
+    ? row.status
+    : "open";
 }
 
 function approvalRoleLabel(key: string): string {
@@ -155,8 +178,25 @@ export async function saveInquiryWorkflowMapForUser(
 
 /* --------------------------------- reading -------------------------------- */
 
+function toLineItemView(
+  row: typeof inquiryLineItems.$inferSelect,
+): InquiryLineItemView {
+  return {
+    id: row.id,
+    description: row.description,
+    // Quantities are shown without trailing zeros: 12, not 12.00.
+    quantity: String(Number(row.quantity)),
+    unit: row.unit,
+    unitPrice: String(row.unitPrice),
+    deliveredQuantity:
+      row.deliveredQuantity === null
+        ? ""
+        : String(Number(row.deliveredQuantity)),
+  };
+}
+
 async function loadLineItems(tx: DbTransaction, inquiryIds: string[]) {
-  const byInquiry = new Map<string, InquiryView["lineItems"]>();
+  const byInquiry = new Map<string, InquiryLineItemView[]>();
   if (inquiryIds.length === 0) return byInquiry;
 
   const rows = await tx
@@ -167,14 +207,35 @@ async function loadLineItems(tx: DbTransaction, inquiryIds: string[]) {
 
   for (const row of rows) {
     const list = byInquiry.get(row.inquiryId) ?? [];
-    list.push({
-      id: row.id,
-      description: row.description,
-      quantity: String(row.quantity),
-      unitPrice: String(row.unitPrice),
-      sortOrder: row.sortOrder,
-    });
+    list.push(toLineItemView(row));
     byInquiry.set(row.inquiryId, list);
+  }
+  return byInquiry;
+}
+
+/** The saved record of each step, per inquiry. */
+async function loadStageRecords(
+  tx: DbTransaction,
+  inquiryIds: string[],
+  stage?: InquiryStageKey,
+) {
+  const byInquiry = new Map<string, Map<string, StageRecordRow>>();
+  if (inquiryIds.length === 0) return byInquiry;
+
+  const rows = await tx
+    .select()
+    .from(inquiryStageRecords)
+    .where(
+      and(
+        inArray(inquiryStageRecords.inquiryId, inquiryIds),
+        stage ? eq(inquiryStageRecords.stageKey, stage) : undefined,
+      ),
+    );
+
+  for (const row of rows) {
+    const records = byInquiry.get(row.inquiryId) ?? new Map();
+    records.set(row.stageKey, row);
+    byInquiry.set(row.inquiryId, records);
   }
   return byInquiry;
 }
@@ -195,55 +256,61 @@ async function loadDisplayNames(
   return names;
 }
 
-type InquiryDetails = Pick<
-  InquiryView,
-  | "createdByName"
-  | "comments"
-  | "activityLogs"
-  | "approvalRequired"
-  | "approvalRequiredBy"
-  | "currentStageApproved"
-  | "canApproveCurrentStage"
->;
+/**
+ * The answers of the Inquiry step. The ones every list and document needs
+ * (customer, title, …) are columns of the inquiry; the rest are in its
+ * step record.
+ */
+function inquiryStepFields(
+  row: InquiryRow,
+  record: StageRecordRow | undefined,
+): Record<string, string> {
+  return {
+    ...(record?.fields ?? {}),
+    customerName: row.customerName,
+    contact: row.contact,
+    title: row.title,
+    jobType: row.jobType,
+    deliveryExpectedOn: row.deliveryExpectedOn,
+    details: row.notes,
+  };
+}
 
-const NO_DETAILS: InquiryDetails = {
-  createdByName: "",
-  comments: [],
-  activityLogs: [],
-  approvalRequired: false,
-  approvalRequiredBy: "",
-  currentStageApproved: false,
-  canApproveCurrentStage: false,
-};
-
-function toInquiryView(
+function toSummary(
   row: InquiryRow,
   access: OrgAccess,
-  lineItems: InquiryView["lineItems"],
+  items: InquiryLineItemView[],
+  quotation: StageRecordRow | undefined,
   assignedStaffName: string | null,
-  details: InquiryDetails = NO_DETAILS,
-): InquiryView {
+): InquirySummary {
   const owner = ownerOf(row);
+  const open = statusOf(row) === "open";
   return {
     id: row.id,
-    organizationId: row.organizationId,
+    number: row.inquiryNumber,
+    title: row.title,
     customerName: row.customerName,
     contact: row.contact,
     deliveryExpectedOn: row.deliveryExpectedOn,
-    notes: row.notes,
+    jobType: row.jobType,
+    status: statusOf(row),
     currentStage: stageOf(row),
+    daysInStage: Math.max(
+      0,
+      Math.floor((Date.now() - row.stageEnteredAt.getTime()) / 86_400_000),
+    ),
+    overdue:
+      open &&
+      row.deliveryExpectedOn !== "" &&
+      row.deliveryExpectedOn < appDateValue(),
     owningDepartmentKey: owner,
     assignedStaffId: row.assignedStaffId,
     assignedStaffName,
-    source: row.source === "reception_visitor" ? "reception_visitor" : "admin",
-    sourceVisitorId: row.sourceVisitorId,
-    createdByUserId: row.createdByUserId,
-    canWork: can.workInquiry(access, owner),
-    canAssign: can.assignInquiry(access, owner),
-    lineItems,
+    totals: inquiryTotals(items, quotation?.fields),
+    canWork: open && can.workInquiry(access, owner),
+    canAssign: open && can.assignInquiry(access, owner),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
-    ...details,
   };
 }
 
@@ -252,9 +319,10 @@ async function loadInquiryList(
   org: ResolvedOrg,
   filter: {
     department?: InquiryWorkflowDepartmentKey;
-    stages?: readonly InquiryStageKey[];
+    assignedStaffId?: string;
+    openOnly?: boolean;
   } = {},
-): Promise<InquiryView[]> {
+): Promise<InquirySummary[]> {
   const rows = await tx
     .select({ inquiry: inquiries, assignedName: staffMembers.fullName })
     .from(inquiries)
@@ -265,23 +333,24 @@ async function loadInquiryList(
         filter.department
           ? eq(inquiries.owningDepartmentKey, filter.department)
           : undefined,
-        filter.stages
-          ? inArray(inquiries.currentStage, [...filter.stages])
+        filter.assignedStaffId
+          ? eq(inquiries.assignedStaffId, filter.assignedStaffId)
           : undefined,
+        filter.openOnly ? eq(inquiries.status, "open") : undefined,
       ),
     )
     .orderBy(desc(inquiries.updatedAt));
 
-  const lineItems = await loadLineItems(
-    tx,
-    rows.map((row) => row.inquiry.id),
-  );
+  const ids = rows.map((row) => row.inquiry.id);
+  const lineItems = await loadLineItems(tx, ids);
+  const quotations = await loadStageRecords(tx, ids, "quotation");
 
   return rows.map((row) =>
-    toInquiryView(
+    toSummary(
       row.inquiry,
       org.access,
       lineItems.get(row.inquiry.id) ?? [],
+      quotations.get(row.inquiry.id)?.get("quotation"),
       row.assignedName,
     ),
   );
@@ -291,7 +360,7 @@ async function loadInquiryList(
 export async function listInquiriesForUser(
   userId: string,
   orgCode: string,
-): Promise<InquiryView[]> {
+): Promise<InquirySummary[]> {
   return withTenantContext(userId, async (tx) => {
     const org = await resolveOrg(tx, userId, orgCode);
     if (!org || !can.viewAllInquiries(org.access)) return [];
@@ -299,12 +368,12 @@ export async function listInquiriesForUser(
   });
 }
 
-/** Inquiries whose current stage is handled by one department. */
+/** Inquiries whose current step is handled by one department. */
 export async function listInquiriesForDepartment(
   userId: string,
   orgCode: string,
   departmentKey: InquiryWorkflowDepartmentKey,
-): Promise<InquiryView[]> {
+): Promise<InquirySummary[]> {
   return withTenantContext(userId, async (tx) => {
     const org = await resolveOrg(tx, userId, orgCode);
     if (!org || !can.openDepartment(org.access, departmentKey)) return [];
@@ -312,19 +381,55 @@ export async function listInquiriesForDepartment(
   });
 }
 
-/** A department's inquiries that are currently at an invoicing stage. */
-export async function listInvoiceQueueForUser(
+type InquiryTask = {
+  inquiry: InquirySummary;
+  /** Why it is on this person's list. */
+  reason: "assigned" | "approval";
+};
+
+/**
+ * Open inquiries waiting on the signed-in person: the ones assigned to them,
+ * and the ones whose current step needs an approval they can give.
+ */
+export async function listInquiryTasksForUser(
   userId: string,
   orgCode: string,
-  departmentKey: InquiryWorkflowDepartmentKey,
-): Promise<InquiryView[]> {
+): Promise<InquiryTask[]> {
   return withTenantContext(userId, async (tx) => {
     const org = await resolveOrg(tx, userId, orgCode);
-    if (!org || !can.openDepartment(org.access, departmentKey)) return [];
-    return loadInquiryList(tx, org, {
-      department: departmentKey,
-      stages: INVOICE_STAGE_KEYS,
+    if (!org) return [];
+
+    const mine = await loadInquiryList(tx, org, {
+      assignedStaffId: org.access.staffId,
+      openOnly: true,
     });
+    const tasks: InquiryTask[] = mine.map((inquiry) => ({
+      inquiry,
+      reason: "assigned",
+    }));
+
+    const map = await loadWorkflowMap(tx, org.id);
+    const approvable = INQUIRY_STAGES.filter((stage) => {
+      const config = map[stage.key];
+      return (
+        config.approvalRequired &&
+        config.approvalRequiredBy !== "" &&
+        org.access.departments.includes(config.approvalRequiredBy)
+      );
+    }).map((stage) => stage.key as string);
+    if (approvable.length === 0) return tasks;
+
+    const waiting = (await loadInquiryList(tx, org, { openOnly: true })).filter(
+      (inquiry) =>
+        approvable.includes(inquiry.currentStage) &&
+        // Approval is asked for once someone is working on the step.
+        inquiry.assignedStaffId !== null,
+    );
+    for (const inquiry of waiting) {
+      if (await hasApproval(tx, inquiry.id, inquiry.currentStage)) continue;
+      tasks.push({ inquiry, reason: "approval" });
+    }
+    return tasks;
   });
 }
 
@@ -344,13 +449,35 @@ async function findInquiry(
   return row ?? null;
 }
 
+/** The department that must approve the inquiry's current step, if any. */
+function approverOf(
+  map: InquiryWorkflowMap,
+  row: InquiryRow,
+): InquiryWorkflowMap[InquiryStageKey]["approvalRequiredBy"] {
+  const config = map[stageOf(row)];
+  return config.approvalRequired ? config.approvalRequiredBy : "";
+}
+
+/** Whoever owns, oversees or must approve an inquiry may open it. */
+function canView(
+  org: ResolvedOrg,
+  map: InquiryWorkflowMap,
+  row: InquiryRow,
+): boolean {
+  const approver = approverOf(map, row);
+  return (
+    can.viewInquiry(org.access, ownerOf(row)) ||
+    (approver !== "" && org.access.departments.includes(approver))
+  );
+}
+
 async function requireInquiry(
   tx: DbTransaction,
   org: ResolvedOrg,
   inquiryId: string,
 ): Promise<InquiryRow> {
   const row = await findInquiry(tx, org, inquiryId);
-  if (!row || !can.viewInquiry(org.access, ownerOf(row))) {
+  if (!row || !canView(org, await loadWorkflowMap(tx, org.id), row)) {
     throw new UserError("Inquiry not found.");
   }
   return row;
@@ -374,14 +501,19 @@ async function hasApproval(
   return Boolean(approval);
 }
 
-/** The full inquiry as shown on its page: comments, history, approval state. */
+/** The full inquiry as shown on its page: every step, notes and history. */
 async function loadInquiryView(
   tx: DbTransaction,
   org: ResolvedOrg,
   row: InquiryRow,
 ): Promise<InquiryView> {
   const stage = stageOf(row);
-  const config = (await loadWorkflowMap(tx, org.id))[stage];
+  const status = statusOf(row);
+  const map = await loadWorkflowMap(tx, org.id);
+  const config = map[stage];
+  const records =
+    (await loadStageRecords(tx, [row.id])).get(row.id) ??
+    new Map<string, StageRecordRow>();
 
   const commentRows = await tx
     .select()
@@ -399,13 +531,52 @@ async function loadInquiryView(
     row.createdByUserId,
     ...commentRows.map((comment) => comment.authorUserId),
     ...eventRows.map((event) => event.actorUserId),
+    ...[...records.values()].map((record) => record.completedByUserId),
   ]);
   const createdByName = names.get(row.createdByUserId) ?? "";
+
+  const currentIndex = inquiryStageIndex(stage);
+  const steps: InquiryStepView[] = INQUIRY_STAGES.map((item, index) => {
+    const record = records.get(item.key);
+    const state =
+      status === "completed" || index < currentIndex
+        ? "done"
+        : index === currentIndex
+          ? "current"
+          : "locked";
+    return {
+      key: item.key,
+      number: index + 1,
+      label: item.label,
+      departmentKey: departmentForStage(map, item.key),
+      state,
+      documentNumber:
+        item.key === "inquiry"
+          ? row.inquiryNumber
+          : (record?.documentNumber ?? ""),
+      // A step that has not been reached shows nothing yet.
+      fields:
+        state === "locked"
+          ? {}
+          : item.key === "inquiry"
+            ? inquiryStepFields(row, record)
+            : (record?.fields ?? {}),
+      completedAt:
+        state === "done" ? (record?.completedAt?.toISOString() ?? null) : null,
+      completedByName:
+        state === "done" && record?.completedByUserId
+          ? (names.get(record.completedByUserId) ?? null)
+          : null,
+      approvalRequired: map[item.key].approvalRequired,
+      approvalRequiredBy: map[item.key].approvalRequired
+        ? map[item.key].approvalRequiredBy
+        : "",
+    };
+  });
 
   const comments: InquiryCommentView[] = commentRows.map((comment) => ({
     id: comment.id,
     body: comment.body,
-    authorUserId: comment.authorUserId,
     authorName: names.get(comment.authorUserId) ?? "",
     createdAt: comment.createdAt.toISOString(),
   }));
@@ -415,11 +586,9 @@ async function loadInquiryView(
       id: `created-${row.id}`,
       label:
         row.source === "reception_visitor"
-          ? "Created from Reception visitor"
-          : "Created in Admin",
-      detail: row.notes
-        ? `Initial notes: ${row.notes}`
-        : "Inquiry opened at Inquiry stage",
+          ? "Started from a Reception visitor"
+          : "Inquiry created",
+      detail: "",
       actorName: createdByName,
       occurredAt: row.createdAt.toISOString(),
     },
@@ -428,11 +597,11 @@ async function loadInquiryView(
       .filter((event) => event.fromStage)
       .map((event) => ({
         id: event.id,
-        // A stage move, or something that happened within a stage.
+        // A step change, or something that happened within a step.
         label:
           event.fromStage === event.toStage
             ? event.note
-            : `Moved ${inquiryStageLabel(event.fromStage)} → ${inquiryStageLabel(event.toStage)}`,
+            : `${inquiryStageLabel(event.fromStage)} → ${inquiryStageLabel(event.toStage)}`,
         detail:
           event.fromStage === event.toStage
             ? inquiryStageLabel(event.toStage)
@@ -444,7 +613,7 @@ async function loadInquiryView(
       })),
   ];
 
-  const approvalRequired = config.approvalRequired;
+  const approvalRequired = status === "open" && config.approvalRequired;
   const currentStageApproved =
     approvalRequired && (await hasApproval(tx, row.id, stage));
 
@@ -455,27 +624,32 @@ async function loadInquiryView(
         .where(eq(staffMembers.id, row.assignedStaffId))
         .limit(1)
     : [];
-  const lineItems = await loadLineItems(tx, [row.id]);
+  const lineItems = (await loadLineItems(tx, [row.id])).get(row.id) ?? [];
 
-  return toInquiryView(
-    row,
-    org.access,
-    lineItems.get(row.id) ?? [],
-    assigned?.fullName ?? null,
-    {
-      createdByName,
-      comments,
-      activityLogs,
-      approvalRequired,
-      approvalRequiredBy: config.approvalRequiredBy,
-      currentStageApproved,
-      canApproveCurrentStage:
-        approvalRequired &&
-        !currentStageApproved &&
-        config.approvalRequiredBy !== "" &&
-        org.access.departments.includes(config.approvalRequiredBy),
-    },
-  );
+  return {
+    ...toSummary(
+      row,
+      org.access,
+      lineItems,
+      records.get("quotation"),
+      assigned?.fullName ?? null,
+    ),
+    closeReason: row.closeReason,
+    closedAt: row.closedAt?.toISOString() ?? null,
+    source: row.source === "reception_visitor" ? "reception_visitor" : "admin",
+    createdByName,
+    steps,
+    lineItems,
+    currentStageApproved,
+    canApproveCurrentStage:
+      approvalRequired &&
+      !currentStageApproved &&
+      config.approvalRequiredBy !== "" &&
+      org.access.departments.includes(config.approvalRequiredBy),
+    canClose: status !== "completed" && can.assignInquiry(org.access, ownerOf(row)),
+    comments,
+    activityLogs,
+  };
 }
 
 /** Re-read an inquiry after changing it and return the fresh view. */
@@ -498,14 +672,16 @@ export async function getInquiryForUser(
     const org = await resolveOrg(tx, userId, orgCode);
     if (!org) return null;
     const row = await findInquiry(tx, org, inquiryId);
-    if (!row || !can.viewInquiry(org.access, ownerOf(row))) return null;
+    if (!row || !canView(org, await loadWorkflowMap(tx, org.id), row)) {
+      return null;
+    }
     return loadInquiryView(tx, org, row);
   });
 }
 
 /* --------------------------------- writing -------------------------------- */
 
-/** Something that happened to an inquiry; a stage move when `to` differs. */
+/** Something that happened to an inquiry; a step change when `to` differs. */
 async function recordEvent(
   tx: DbTransaction,
   org: ResolvedOrg,
@@ -553,25 +729,187 @@ async function clearApproval(
   }
 }
 
-async function replaceLineItems(
+/** Create or change the saved record of one step. */
+async function writeStageRecord(
   tx: DbTransaction,
+  org: ResolvedOrg,
   inquiryId: string,
-  items: InquiryCreateInput["lineItems"],
+  stage: InquiryStageKey,
+  values: Partial<
+    Pick<
+      StageRecordRow,
+      | "fields"
+      | "documentNumber"
+      | "handledByStaffId"
+      | "completedAt"
+      | "completedByUserId"
+    >
+  >,
 ) {
   await tx
-    .delete(inquiryLineItems)
-    .where(eq(inquiryLineItems.inquiryId, inquiryId));
-  if (items.length === 0) return;
+    .insert(inquiryStageRecords)
+    .values({ organizationId: org.id, inquiryId, stageKey: stage, ...values })
+    .onConflictDoUpdate({
+      target: [inquiryStageRecords.inquiryId, inquiryStageRecords.stageKey],
+      set: { ...values, updatedAt: new Date() },
+    });
+}
 
-  await tx.insert(inquiryLineItems).values(
-    items.map((item, index) => ({
-      inquiryId,
+/**
+ * Save the job's items the way the step allows: the Inquiry step lists what
+ * is wanted, the Quotation step also prices it, and the Delivery Note step
+ * only records what was delivered. Other steps do not change items.
+ */
+async function saveLineItems(
+  tx: DbTransaction,
+  inquiryId: string,
+  stage: InquiryStageKey,
+  items: InquiryLineItemInput[],
+) {
+  const mode = STAGE_DEFINITIONS[stage].items;
+  if (mode === "summary" || mode === "none") return;
+
+  const existing = await tx
+    .select()
+    .from(inquiryLineItems)
+    .where(eq(inquiryLineItems.inquiryId, inquiryId));
+  const existingIds = new Set(existing.map((row) => row.id));
+  const now = new Date();
+
+  if (mode === "delivery") {
+    for (const item of items) {
+      if (!item.id || !existingIds.has(item.id)) continue;
+      await tx
+        .update(inquiryLineItems)
+        .set({
+          deliveredQuantity: item.deliveredQuantity || null,
+          updatedAt: now,
+        })
+        .where(eq(inquiryLineItems.id, item.id));
+    }
+    return;
+  }
+
+  const kept = new Set(
+    items.flatMap((item) =>
+      item.id && existingIds.has(item.id) ? [item.id] : [],
+    ),
+  );
+  const removed = existing.filter((row) => !kept.has(row.id));
+  if (removed.length > 0) {
+    await tx.delete(inquiryLineItems).where(
+      inArray(
+        inquiryLineItems.id,
+        removed.map((row) => row.id),
+      ),
+    );
+  }
+
+  for (const [index, item] of items.entries()) {
+    const values = {
       description: item.description,
       quantity: item.quantity,
-      unitPrice: item.unitPrice,
+      unit: item.unit,
       sortOrder: index,
-    })),
-  );
+      // Prices belong to the quotation; the Inquiry step leaves them alone.
+      ...(mode === "priced" ? { unitPrice: item.unitPrice } : {}),
+    };
+    if (item.id && kept.has(item.id)) {
+      await tx
+        .update(inquiryLineItems)
+        .set({ ...values, updatedAt: now })
+        .where(eq(inquiryLineItems.id, item.id));
+    } else {
+      await tx.insert(inquiryLineItems).values({ inquiryId, ...values });
+    }
+  }
+}
+
+/** Save what was typed into one step. Returns the answers as stored. */
+async function saveStageAnswers(
+  tx: DbTransaction,
+  org: ResolvedOrg,
+  row: InquiryRow,
+  stage: InquiryStageKey,
+  input: InquiryStageInput,
+): Promise<Record<string, string>> {
+  const fields = normalizeStageFields(stage, input.fields);
+  const items = normalizeLineItems(input.lineItems);
+
+  if (stage === "inquiry") {
+    if (!fields.customerName) {
+      throw new UserError("Enter the customer's name.");
+    }
+    await tx
+      .update(inquiries)
+      .set({
+        customerName: fields.customerName,
+        contact: fields.contact ?? "",
+        title: fields.title ?? "",
+        jobType: fields.jobType || "local",
+        deliveryExpectedOn: fields.deliveryExpectedOn ?? "",
+        notes: fields.details ?? "",
+        updatedAt: new Date(),
+      })
+      .where(eq(inquiries.id, row.id));
+  } else {
+    await tx
+      .update(inquiries)
+      .set({ updatedAt: new Date() })
+      .where(eq(inquiries.id, row.id));
+  }
+
+  // The step's document gets its number the first time the step is saved.
+  const [record] = await tx
+    .select({ documentNumber: inquiryStageRecords.documentNumber })
+    .from(inquiryStageRecords)
+    .where(
+      and(
+        eq(inquiryStageRecords.inquiryId, row.id),
+        eq(inquiryStageRecords.stageKey, stage),
+      ),
+    )
+    .limit(1);
+  const counterKey = STAGE_DEFINITIONS[stage].counterKey;
+  const needsNumber =
+    stage !== "inquiry" && counterKey !== null && !record?.documentNumber;
+
+  const header = new Set<string>(INQUIRY_HEADER_FIELDS);
+  await writeStageRecord(tx, org, row.id, stage, {
+    fields:
+      stage === "inquiry"
+        ? Object.fromEntries(
+            Object.entries(fields).filter(([key]) => !header.has(key)),
+          )
+        : fields,
+    ...(needsNumber
+      ? { documentNumber: await nextDocumentNumber(tx, org, counterKey) }
+      : {}),
+  });
+  await saveLineItems(tx, row.id, stage, items);
+
+  return fields;
+}
+
+/** Everything an approval covers, to tell whether a save changed it. */
+async function approvedContent(
+  tx: DbTransaction,
+  inquiryId: string,
+  stage: InquiryStageKey,
+): Promise<string> {
+  const [row] = await tx
+    .select()
+    .from(inquiries)
+    .where(eq(inquiries.id, inquiryId))
+    .limit(1);
+  const record = (await loadStageRecords(tx, [inquiryId], stage))
+    .get(inquiryId)
+    ?.get(stage);
+  const items = (await loadLineItems(tx, [inquiryId])).get(inquiryId) ?? [];
+  return JSON.stringify([
+    row && stage === "inquiry" ? inquiryStepFields(row, record) : record?.fields,
+    items,
+  ]);
 }
 
 async function insertInquiry(
@@ -580,52 +918,52 @@ async function insertInquiry(
   userId: string,
   values: {
     customerName: string;
-    contact?: string;
-    deliveryExpectedOn?: string;
     notes: string;
     source: "admin" | "reception_visitor";
     sourceVisitorId?: string;
   },
-): Promise<string> {
+): Promise<InquiryRow> {
   const map = await loadWorkflowMap(tx, org.id);
-  const id = crypto.randomUUID();
+  const [row] = await tx
+    .insert(inquiries)
+    .values({
+      organizationId: org.id,
+      inquiryNumber: await nextDocumentNumber(tx, org, "INQ"),
+      customerName: values.customerName,
+      notes: values.notes,
+      currentStage: "inquiry",
+      owningDepartmentKey: departmentForStage(map, "inquiry"),
+      source: values.source,
+      sourceVisitorId: values.sourceVisitorId ?? null,
+      createdByUserId: userId,
+    })
+    .returning();
+  await recordEvent(tx, org, userId, row!.id, { from: "", to: "inquiry" });
 
-  await tx.insert(inquiries).values({
-    id,
-    organizationId: org.id,
-    customerName: values.customerName,
-    contact: values.contact ?? "",
-    deliveryExpectedOn: values.deliveryExpectedOn ?? "",
-    notes: values.notes,
-    currentStage: "inquiry",
-    owningDepartmentKey: departmentForStage(map, "inquiry"),
-    source: values.source,
-    sourceVisitorId: values.sourceVisitorId ?? null,
-    createdByUserId: userId,
-  });
-  await recordEvent(tx, org, userId, id, { from: "", to: "inquiry" });
-
-  return id;
+  return row!;
 }
 
 export async function createInquiryForUser(
   userId: string,
   orgCode: string,
-  input: InquiryCreateInput,
+  input: InquiryStageInput,
 ): Promise<InquiryView> {
-  const normalized = normalizeInquiryCreateInput(input);
-
   return withTenantContext(userId, async (tx) => {
     const org = await requireOrg(tx, userId, orgCode);
     assertCan(can.createInquiry(org.access));
 
-    const id = await insertInquiry(tx, org, userId, {
-      ...normalized,
+    const customerName = String(input.fields?.customerName ?? "").trim();
+    if (!customerName) {
+      throw new UserError("Enter the customer's name.");
+    }
+    const row = await insertInquiry(tx, org, userId, {
+      customerName,
+      notes: "",
       source: "admin",
     });
-    await replaceLineItems(tx, id, normalized.lineItems);
+    await saveStageAnswers(tx, org, row, "inquiry", input);
 
-    return reloadInquiryView(tx, org, id);
+    return reloadInquiryView(tx, org, row.id);
   });
 }
 
@@ -636,7 +974,7 @@ export async function createStarterInquiryInTx(
   userId: string,
   visitor: { id: string; fullName: string; notes: string },
 ): Promise<string> {
-  const id = await insertInquiry(tx, org, userId, {
+  const row = await insertInquiry(tx, org, userId, {
     customerName: visitor.fullName,
     notes: visitor.notes,
     source: "reception_visitor",
@@ -645,10 +983,10 @@ export async function createStarterInquiryInTx(
 
   await tx
     .update(visitorLogs)
-    .set({ inquiryId: id, updatedAt: new Date() })
+    .set({ inquiryId: row.id, updatedAt: new Date() })
     .where(eq(visitorLogs.id, visitor.id));
 
-  return id;
+  return row.id;
 }
 
 /** Load an inquiry the user is about to work on and check they may. */
@@ -660,17 +998,155 @@ async function requireWorkableInquiry(
 ): Promise<InquiryRow> {
   const row = await requireInquiry(tx, org, inquiryId);
   assertCan(can.workInquiry(org.access, ownerOf(row)));
+  requireOpen(row);
   if (!row.assignedStaffId) throw new UserError(unassignedMessage);
   return row;
 }
 
-export async function updateInquiryForUser(
+function requireOpen(row: InquiryRow) {
+  if (statusOf(row) !== "open") {
+    throw new UserError("This inquiry is closed.");
+  }
+}
+
+/**
+ * Save the current step. With `complete`, also finish it and hand the
+ * inquiry to the next step, whose department then assigns its own person.
+ * Completing the last step closes the inquiry.
+ */
+export async function saveInquiryStageForUser(
   userId: string,
   orgCode: string,
   inquiryId: string,
-  input: InquiryUpdateInput,
+  input: InquiryStageInput,
+  options: { complete: boolean },
 ): Promise<InquiryView> {
-  const normalized = normalizeInquiryCreateInput(input);
+  return withTenantContext(userId, async (tx) => {
+    const org = await requireOrg(tx, userId, orgCode);
+    const existing = await requireWorkableInquiry(
+      tx,
+      org,
+      inquiryId,
+      "Assign someone before working on this step.",
+    );
+    const stage = stageOf(existing);
+
+    const before = await approvedContent(tx, inquiryId, stage);
+    const fields = await saveStageAnswers(tx, org, existing, stage, input);
+    if ((await approvedContent(tx, inquiryId, stage)) !== before) {
+      await clearApproval(tx, org, userId, inquiryId, stage, "step changed");
+    }
+    if (!options.complete) return reloadInquiryView(tx, org, inquiryId);
+
+    const missing = missingStageFields(stage, fields);
+    if (missing.length > 0) {
+      throw new UserError(`Fill in before moving on: ${missing.join(", ")}.`);
+    }
+    const items = (await loadLineItems(tx, [inquiryId])).get(inquiryId) ?? [];
+    const mode = STAGE_DEFINITIONS[stage].items;
+    if (mode === "priced" && items.length === 0) {
+      throw new UserError("Add at least one priced item to the quotation.");
+    }
+    if (mode === "delivery" && items.some((item) => !item.deliveredQuantity)) {
+      throw new UserError("Enter the delivered quantity for every item.");
+    }
+
+    const map = await loadWorkflowMap(tx, org.id);
+    if (map[stage].approvalRequired && !(await hasApproval(tx, inquiryId, stage))) {
+      throw new UserError(
+        `Approval required by ${approvalRoleLabel(map[stage].approvalRequiredBy)} before moving to the next step.`,
+      );
+    }
+
+    await writeStageRecord(tx, org, inquiryId, stage, {
+      handledByStaffId: existing.assignedStaffId,
+      completedAt: new Date(),
+      completedByUserId: userId,
+    });
+
+    const next = adjacentInquiryStages(stage).next;
+    if (next) {
+      await enterStage(tx, org, userId, existing, next, map);
+    } else {
+      await tx
+        .update(inquiries)
+        .set({
+          status: "completed",
+          closedAt: new Date(),
+          assignedStaffId: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(inquiries.id, inquiryId));
+      await recordEvent(tx, org, userId, inquiryId, {
+        from: stage,
+        to: stage,
+        note: "Inquiry completed",
+      });
+    }
+
+    return reloadInquiryView(tx, org, inquiryId);
+  });
+}
+
+/**
+ * Move an inquiry to another step. A step that is new to this inquiry starts
+ * unassigned; one that was worked on before goes back to whoever handled it,
+ * if they are still in that department.
+ */
+async function enterStage(
+  tx: DbTransaction,
+  org: ResolvedOrg,
+  userId: string,
+  row: InquiryRow,
+  toStage: InquiryStageKey,
+  map: InquiryWorkflowMap,
+  note = "",
+) {
+  const owner = departmentForStage(map, toStage);
+  const [record] = await tx
+    .select({ handledByStaffId: inquiryStageRecords.handledByStaffId })
+    .from(inquiryStageRecords)
+    .where(
+      and(
+        eq(inquiryStageRecords.inquiryId, row.id),
+        eq(inquiryStageRecords.stageKey, toStage),
+      ),
+    )
+    .limit(1);
+  const previousHandler = record?.handledByStaffId
+    ? (await loadAssignableStaff(tx, org.id, owner)).find(
+        (staff) => staff.id === record.handledByStaffId,
+      )
+    : undefined;
+
+  await tx
+    .update(inquiries)
+    .set({
+      currentStage: toStage,
+      owningDepartmentKey: owner,
+      assignedStaffId: previousHandler?.id ?? null,
+      stageEnteredAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(inquiries.id, row.id));
+  await recordEvent(tx, org, userId, row.id, {
+    from: stageOf(row),
+    to: toStage,
+    note,
+  });
+}
+
+/** Return an inquiry to the step before, saying what has to be fixed. */
+export async function sendInquiryBackForUser(
+  userId: string,
+  orgCode: string,
+  inquiryId: string,
+  reason: string,
+): Promise<InquiryView> {
+  const why = reason.trim();
+  if (!why) {
+    throw new UserError("Say why it is being sent back.");
+  }
 
   return withTenantContext(userId, async (tx) => {
     const org = await requireOrg(tx, userId, orgCode);
@@ -678,26 +1154,31 @@ export async function updateInquiryForUser(
       tx,
       org,
       inquiryId,
-      "Assign someone before editing this inquiry.",
+      "Assign someone before sending this back.",
     );
+    const stage = stageOf(existing);
+    const previous = adjacentInquiryStages(stage).previous;
+    if (!previous) {
+      throw new UserError("This is the first step.");
+    }
 
-    await tx
-      .update(inquiries)
-      .set({
-        customerName: normalized.customerName,
-        contact: normalized.contact,
-        deliveryExpectedOn: normalized.deliveryExpectedOn,
-        updatedAt: new Date(),
-      })
-      .where(eq(inquiries.id, inquiryId));
-    await replaceLineItems(tx, inquiryId, normalized.lineItems);
-    await clearApproval(
+    // The earlier step is open again, so it must be approved again.
+    await clearApproval(tx, org, userId, inquiryId, previous, "sent back");
+    await writeStageRecord(tx, org, inquiryId, previous, {
+      completedAt: null,
+      completedByUserId: null,
+    });
+    await writeStageRecord(tx, org, inquiryId, stage, {
+      handledByStaffId: existing.assignedStaffId,
+    });
+    await enterStage(
       tx,
       org,
       userId,
-      inquiryId,
-      stageOf(existing),
-      "inquiry changed",
+      existing,
+      previous,
+      await loadWorkflowMap(tx, org.id),
+      `Sent back: ${why}`,
     );
 
     return reloadInquiryView(tx, org, inquiryId);
@@ -712,17 +1193,13 @@ export async function addInquiryCommentForUser(
 ): Promise<InquiryView> {
   const text = body.trim();
   if (!text) {
-    throw new UserError("Enter a comment.");
+    throw new UserError("Enter a note.");
   }
 
   return withTenantContext(userId, async (tx) => {
     const org = await requireOrg(tx, userId, orgCode);
-    await requireWorkableInquiry(
-      tx,
-      org,
-      inquiryId,
-      "Assign someone before posting comments.",
-    );
+    // Anyone who can open the inquiry can leave a note on it.
+    await requireInquiry(tx, org, inquiryId);
 
     await tx.insert(inquiryComments).values({
       organizationId: org.id,
@@ -735,16 +1212,27 @@ export async function addInquiryCommentForUser(
   });
 }
 
-/** Active staff of one department, for the "Assign person" list. */
-export async function listAssignableStaffForDepartment(
+/** Active staff of each department the user may assign work in. */
+export async function listAssignableStaffForUser(
   userId: string,
   orgCode: string,
-  departmentKey: InquiryWorkflowDepartmentKey,
-): Promise<{ id: string; fullName: string; jobTitle: string }[]> {
+): Promise<Partial<Record<InquiryWorkflowDepartmentKey, AssignableStaff[]>>> {
   return withTenantContext(userId, async (tx) => {
     const org = await resolveOrg(tx, userId, orgCode);
-    if (!org || !can.assignInquiry(org.access, departmentKey)) return [];
-    return loadAssignableStaff(tx, org.id, departmentKey);
+    if (!org) return {};
+
+    const staff: Partial<
+      Record<InquiryWorkflowDepartmentKey, AssignableStaff[]>
+    > = {};
+    for (const department of INQUIRY_WORKFLOW_DEPARTMENTS) {
+      if (!can.assignInquiry(org.access, department.key)) continue;
+      staff[department.key] = await loadAssignableStaff(
+        tx,
+        org.id,
+        department.key,
+      );
+    }
+    return staff;
   });
 }
 
@@ -752,7 +1240,7 @@ async function loadAssignableStaff(
   tx: DbTransaction,
   organizationId: string,
   departmentKey: InquiryWorkflowDepartmentKey,
-) {
+): Promise<AssignableStaff[]> {
   return tx
     .select({
       id: staffMembers.id,
@@ -787,6 +1275,7 @@ export async function assignInquiryForUser(
     const existing = await requireInquiry(tx, org, inquiryId);
     const owner = ownerOf(existing);
     assertCan(can.assignInquiry(org.access, owner));
+    requireOpen(existing);
 
     const assignee = (await loadAssignableStaff(tx, org.id, owner)).find(
       (staff) => staff.id === staffId,
@@ -820,21 +1309,22 @@ export async function approveInquiryStageForUser(
   return withTenantContext(userId, async (tx) => {
     const org = await requireOrg(tx, userId, orgCode);
     const existing = await requireInquiry(tx, org, inquiryId);
+    requireOpen(existing);
     if (!existing.assignedStaffId) {
-      throw new UserError("Assign a person before approving this stage.");
+      throw new UserError("Assign a person before approving this step.");
     }
 
     const stage = stageOf(existing);
     const config = (await loadWorkflowMap(tx, org.id))[stage];
     if (!config.approvalRequired || config.approvalRequiredBy === "") {
-      throw new UserError("This stage does not require approval.");
+      throw new UserError("This step does not require approval.");
     }
     const approver = approvalRoleLabel(config.approvalRequiredBy);
     if (!org.access.departments.includes(config.approvalRequiredBy)) {
-      throw new UserError(`Only ${approver} can approve this stage.`);
+      throw new UserError(`Only ${approver} can approve this step.`);
     }
     if (await hasApproval(tx, inquiryId, stage)) {
-      throw new UserError("This stage is already approved.");
+      throw new UserError("This step is already approved.");
     }
 
     await tx.insert(inquiryStageApprovals).values({
@@ -854,56 +1344,73 @@ export async function approveInquiryStageForUser(
   });
 }
 
-export async function moveInquiryStageForUser(
+/** Close an inquiry that is not going ahead, keeping everything recorded. */
+export async function closeInquiryForUser(
   userId: string,
   orgCode: string,
   inquiryId: string,
-  direction: "previous" | "next",
+  reason: string,
 ): Promise<InquiryView> {
+  const why = reason.trim();
+  if (!why) {
+    throw new UserError("Say why this inquiry is being closed.");
+  }
+
   return withTenantContext(userId, async (tx) => {
     const org = await requireOrg(tx, userId, orgCode);
-    const existing = await requireWorkableInquiry(
-      tx,
-      org,
-      inquiryId,
-      "Assign a person before moving stages.",
-    );
+    const existing = await requireInquiry(tx, org, inquiryId);
+    assertCan(can.assignInquiry(org.access, ownerOf(existing)));
+    requireOpen(existing);
 
-    const current = stageOf(existing);
-    const toStage = adjacentInquiryStages(current)[direction];
-    if (!toStage) {
-      throw new UserError("No further stage in that direction.");
-    }
-
-    const map = await loadWorkflowMap(tx, org.id);
-    if (direction === "next" && map[current].approvalRequired) {
-      if (!(await hasApproval(tx, inquiryId, current))) {
-        throw new UserError(
-          `Approval required by ${approvalRoleLabel(map[current].approvalRequiredBy)} before moving to the next stage.`,
-        );
-      }
-    }
-
-    // Going back reopens the earlier stage, so it must be approved again.
-    if (direction === "previous") {
-      await clearApproval(tx, org, userId, inquiryId, toStage, "moved back");
-    }
-
-    const nextOwner = departmentForStage(map, toStage);
     await tx
       .update(inquiries)
       .set({
-        currentStage: toStage,
-        owningDepartmentKey: nextOwner,
-        // A new department picks its own person.
-        assignedStaffId:
-          nextOwner === ownerOf(existing) ? existing.assignedStaffId : null,
+        status: "cancelled",
+        closeReason: why,
+        closedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(inquiries.id, inquiryId));
+    const stage = stageOf(existing);
     await recordEvent(tx, org, userId, inquiryId, {
-      from: current,
-      to: toStage,
+      from: stage,
+      to: stage,
+      note: `Closed as lost: ${why}`,
+    });
+
+    return reloadInquiryView(tx, org, inquiryId);
+  });
+}
+
+/** Bring a closed-as-lost inquiry back to the step it stopped at. */
+export async function reopenInquiryForUser(
+  userId: string,
+  orgCode: string,
+  inquiryId: string,
+): Promise<InquiryView> {
+  return withTenantContext(userId, async (tx) => {
+    const org = await requireOrg(tx, userId, orgCode);
+    const existing = await requireInquiry(tx, org, inquiryId);
+    assertCan(can.assignInquiry(org.access, ownerOf(existing)));
+    if (statusOf(existing) !== "cancelled") {
+      throw new UserError("Only an inquiry closed as lost can be reopened.");
+    }
+
+    await tx
+      .update(inquiries)
+      .set({
+        status: "open",
+        closeReason: "",
+        closedAt: null,
+        stageEnteredAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(inquiries.id, inquiryId));
+    const stage = stageOf(existing);
+    await recordEvent(tx, org, userId, inquiryId, {
+      from: stage,
+      to: stage,
+      note: "Reopened",
     });
 
     return reloadInquiryView(tx, org, inquiryId);

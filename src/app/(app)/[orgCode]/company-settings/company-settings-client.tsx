@@ -267,12 +267,12 @@ export function CompanySettingsClient({
   return (
     <main className="relative flex min-h-0 flex-1 flex-col">
       <div className="pointer-events-none fixed top-14 right-4 z-30 sm:right-6">
-        <div className="pointer-events-auto flex items-center gap-2 border border-zinc-200 bg-white px-2 py-1.5 shadow-sm">
+        <div className="pointer-events-auto flex items-center gap-2 border border-slate-200 bg-white px-2 py-1.5 shadow-sm rounded-lg">
           <button
             type="button"
             onClick={onCancel}
             disabled={pending}
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:border-zinc-400 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-45"
+            className="btn btn-secondary hover:border-slate-400"
           >
             Cancel
           </button>
@@ -280,7 +280,7 @@ export function CompanySettingsClient({
             type="submit"
             form="company-settings-form"
             disabled={!canSave}
-            className="bg-header px-3 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control disabled:cursor-not-allowed disabled:opacity-45"
+            className="btn btn-primary"
           >
             {pending ? "Saving…" : "Save"}
           </button>
@@ -288,12 +288,12 @@ export function CompanySettingsClient({
       </div>
 
       <div className="flex min-h-0 flex-1 items-start">
-        <aside className="sticky top-12 z-10 flex h-[calc(100dvh-3rem)] w-44 shrink-0 flex-col overflow-y-auto border-r border-zinc-200 bg-white sm:w-56">
-          <div className="border-b border-zinc-200 px-3 py-3">
-            <p className="truncate font-display text-sm font-semibold text-zinc-900">
+        <aside className="sticky top-12 z-10 flex h-[calc(100dvh-3rem)] w-44 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-white sm:w-56">
+          <div className="border-b border-slate-200 px-3 py-3">
+            <p className="truncate font-display text-sm font-semibold text-slate-900">
               Company Settings
             </p>
-            <p className="mt-0.5 truncate text-xs text-zinc-500">
+            <p className="mt-0.5 truncate text-xs text-slate-500">
               {form.organizationCode}
             </p>
           </div>
@@ -312,10 +312,10 @@ export function CompanySettingsClient({
                   type="button"
                   onClick={() => selectSection(item.key)}
                   className={[
-                    "px-3 py-2 text-left text-sm transition",
+                    "cursor-pointer rounded-lg px-3 py-2 text-left text-sm transition-colors",
                     active
-                      ? "bg-header text-header-fg"
-                      : "text-zinc-700 hover:bg-zinc-100",
+                      ? "bg-primary text-white"
+                      : "text-slate-700 hover:bg-slate-100",
                   ].join(" ")}
                 >
                   {item.label}
@@ -329,15 +329,15 @@ export function CompanySettingsClient({
           <form
             id="company-settings-form"
             onSubmit={onSubmit}
-            className="w-full max-w-4xl border border-zinc-300 bg-white"
+            className="card w-full max-w-4xl"
           >
             {section === "company" ? (
               <>
-                <div className="border-b border-zinc-200 px-4 py-3 sm:px-5">
-                  <h2 className="font-display text-base font-semibold text-zinc-900">
+                <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
+                  <h2 className="font-display text-base font-semibold text-slate-900">
                     Company profile
                   </h2>
-                  <p className="mt-1 text-sm text-zinc-600">
+                  <p className="mt-1 text-sm text-slate-600">
                     Contact details and public admin for this company.
                   </p>
                 </div>
@@ -351,7 +351,7 @@ export function CompanySettingsClient({
                         field.key === "companyName" ? "sm:col-span-2" : "",
                       ].join(" ")}
                     >
-                      <span className="text-[12px] font-medium text-zinc-700">
+                      <span className="field-label">
                         {field.label}
                       </span>
                       <input
@@ -362,17 +362,17 @@ export function CompanySettingsClient({
                         }
                         placeholder={field.placeholder}
                         autoComplete={field.autoComplete}
-                        className="border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-header"
+                        className="field text-slate-900 transition"
                       />
                     </label>
                   ))}
                 </div>
 
-                <div className="border-t border-zinc-200 px-4 py-3 sm:px-5">
-                  <h3 className="font-display text-sm font-semibold text-zinc-900">
+                <div className="border-t border-slate-200 px-4 py-3 sm:px-5">
+                  <h3 className="font-display text-sm font-semibold text-slate-900">
                     Who is the Admin of this company
                   </h3>
-                  <p className="mt-1 text-sm text-zinc-600">
+                  <p className="mt-1 text-sm text-slate-600">
                     The main contact person for this company.
                   </p>
                 </div>
@@ -380,7 +380,7 @@ export function CompanySettingsClient({
                 <div className="grid grid-cols-1 gap-4 px-4 py-4 sm:grid-cols-2 sm:px-5">
                   {ADMIN_FIELDS.map((field) => (
                     <label key={field.key} className="flex flex-col gap-1.5">
-                      <span className="text-[12px] font-medium text-zinc-700">
+                      <span className="field-label">
                         {field.label}
                       </span>
                       <input
@@ -391,17 +391,17 @@ export function CompanySettingsClient({
                         }
                         placeholder={field.placeholder}
                         autoComplete={field.autoComplete}
-                        className="border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-header"
+                        className="field text-slate-900 transition"
                       />
                     </label>
                   ))}
                 </div>
 
-                <div className="border-t border-zinc-200 px-4 py-3 sm:px-5">
-                  <h3 className="font-display text-sm font-semibold text-zinc-900">
+                <div className="border-t border-slate-200 px-4 py-3 sm:px-5">
+                  <h3 className="font-display text-sm font-semibold text-slate-900">
                     Printed forms
                   </h3>
-                  <p className="mt-1 text-sm text-zinc-600">
+                  <p className="mt-1 text-sm text-slate-600">
                     Text that appears on forms printed from the system.
                   </p>
                 </div>
@@ -412,7 +412,7 @@ export function CompanySettingsClient({
                     initialLogo={form.logoImage}
                   />
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Company name in Arabic
                     </span>
                     <input
@@ -421,11 +421,11 @@ export function CompanySettingsClient({
                       onChange={(event) =>
                         updateField("nameArabic", event.target.value)
                       }
-                      className="max-w-sm border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-header"
+                      className="field max-w-sm text-slate-900 transition"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[12px] font-medium text-zinc-700">
+                    <span className="field-label">
                       Notes under the attendance sheet (one per line)
                     </span>
                     <textarea
@@ -435,7 +435,7 @@ export function CompanySettingsClient({
                         updateField("attendanceSheetNotes", event.target.value)
                       }
                       placeholder="FOR ANY CLARIFICATION AFTER 6.10PM END OF DUTY HOURS ASK FROM OFFICE"
-                      className="border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-header"
+                      className="field text-slate-900 transition"
                     />
                   </label>
                 </div>
@@ -447,25 +447,26 @@ export function CompanySettingsClient({
               />
             ) : (
               <>
-                <div className="border-b border-zinc-200 px-4 py-3 sm:px-5">
-                  <h2 className="font-display text-base font-semibold text-zinc-900">
+                <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
+                  <h2 className="font-display text-base font-semibold text-slate-900">
                     Inquiry Settings
                   </h2>
-                  <p className="mt-1 text-sm text-zinc-600">
-                    Map each locked stage to a department and optional
-                    approval. Stage order cannot change.
+                  <p className="mt-1 text-sm text-slate-600">
+                    Choose which department handles each step of an inquiry
+                    and whether it needs approval before moving on. The order
+                    of the steps is fixed.
                   </p>
                 </div>
 
                 <div className="overflow-x-auto px-3 py-4 sm:px-5">
                   <table className="w-full min-w-[44rem] border-collapse border border-[#b4b4b4] text-sm">
                     <thead>
-                      <tr className="bg-[#e7e6e6] text-left text-[12px] font-semibold uppercase tracking-wide text-zinc-700">
-                        <th className="w-10 border border-[#b4b4b4] px-2 py-2 text-center font-semibold text-zinc-500">
+                      <tr className="bg-[#e7e6e6] text-left text-[12px] font-semibold uppercase tracking-wide text-slate-700">
+                        <th className="w-10 border border-[#b4b4b4] px-2 py-2 text-center font-semibold text-slate-500">
                           #
                         </th>
                         <th className="border border-[#b4b4b4] px-3 py-2">
-                          Stages
+                          Steps
                         </th>
                         <th className="border border-[#b4b4b4] px-3 py-2">
                           Handled by Department
@@ -490,7 +491,7 @@ export function CompanySettingsClient({
                             }
                           >
                             <td className="relative overflow-visible border border-[#b4b4b4] px-2 py-3 text-center align-middle">
-                              <span className="relative z-[1] inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-header bg-white text-[11px] font-bold text-header shadow-sm">
+                              <span className="relative z-[1] inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-primary bg-white text-[11px] font-bold text-primary shadow-sm">
                                 {index + 1}
                               </span>
                               {!isLast ? (
@@ -503,7 +504,7 @@ export function CompanySettingsClient({
                                 </span>
                               ) : null}
                             </td>
-                            <td className="border border-[#b4b4b4] px-3 py-2.5 align-middle font-medium text-zinc-900">
+                            <td className="border border-[#b4b4b4] px-3 py-2.5 align-middle font-medium text-slate-900">
                               {stage.label}
                             </td>
                             <td className="border border-[#b4b4b4] p-0 align-middle">
@@ -552,7 +553,7 @@ export function CompanySettingsClient({
                                       .value as InquiryApprovalRoleKey,
                                   })
                                 }
-                                className="h-full w-full border-0 bg-transparent px-3 py-2.5 text-sm outline-none disabled:cursor-not-allowed disabled:bg-[#f0f0f0] disabled:text-zinc-400 focus:bg-[#fff8e1]"
+                                className="h-full w-full border-0 bg-transparent px-3 py-2.5 text-sm outline-none disabled:cursor-not-allowed disabled:bg-[#f0f0f0] disabled:text-slate-400 focus:bg-[#fff8e1]"
                               >
                                 {!config.approvalRequired ? (
                                   <option value="">—</option>
@@ -574,7 +575,7 @@ export function CompanySettingsClient({
             )}
 
             {error ? (
-              <div className="border-t border-zinc-200 px-4 py-3 text-sm text-red-700 sm:px-5">
+              <div className="border-t border-slate-200 px-4 py-3 text-sm text-red-700 sm:px-5">
                 {error}
               </div>
             ) : null}

@@ -56,12 +56,12 @@ export function ReceptionClient({
   return (
     <main className="relative flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-0 flex-1 items-start">
-        <aside className="sticky top-12 z-10 flex h-[calc(100dvh-3rem)] w-44 shrink-0 flex-col overflow-y-auto border-r border-zinc-200 bg-white sm:w-56">
-          <div className="border-b border-zinc-200 px-3 py-3">
-            <p className="truncate font-display text-sm font-semibold text-zinc-900">
+        <aside className="sticky top-12 z-10 flex h-[calc(100dvh-3rem)] w-44 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-white sm:w-56">
+          <div className="border-b border-slate-200 px-3 py-3">
+            <p className="truncate font-display text-sm font-semibold text-slate-900">
               Reception
             </p>
-            <p className="mt-0.5 truncate text-xs text-zinc-500">{org.name}</p>
+            <p className="mt-0.5 truncate text-xs text-slate-500">{org.name}</p>
           </div>
           <nav className="flex flex-col gap-0.5 p-2 sm:p-3">
             {RECEPTION_SECTIONS.map((item) => (
@@ -70,10 +70,10 @@ export function ReceptionClient({
                 type="button"
                 onClick={() => selectSection(item.key)}
                 className={[
-                  "px-3 py-2 text-left text-sm transition",
+                  "cursor-pointer rounded-lg px-3 py-2 text-left text-sm transition-colors",
                   item.key === section
-                    ? "bg-header text-header-fg"
-                    : "text-zinc-700 hover:bg-zinc-100",
+                    ? "bg-primary text-white"
+                    : "text-slate-700 hover:bg-slate-100",
                 ].join(" ")}
               >
                 {item.label}

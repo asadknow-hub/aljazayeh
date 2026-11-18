@@ -37,8 +37,8 @@ const emptyForm: VacationRequestInput = {
 };
 
 const inputClass =
-  "border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-header";
-const labelClass = "text-[12px] font-medium text-zinc-700";
+  "field";
+const labelClass = "field-label";
 
 /** Reception → Vacation: raise leave requests and follow their approval. */
 export function LeavePanel({
@@ -93,10 +93,10 @@ export function LeavePanel({
     <div className="w-full max-w-4xl">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-display text-xl font-semibold text-zinc-900">
+          <h2 className="font-display text-xl font-semibold text-slate-900">
             Vacation
           </h2>
-          <p className="mt-1 text-sm text-zinc-600">
+          <p className="mt-1 text-sm text-slate-600">
             Raise a leave request for an employee and follow its approval.
           </p>
         </div>
@@ -108,7 +108,7 @@ export function LeavePanel({
             setError(null);
             setEditorOpen(true);
           }}
-          className="bg-header px-3 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control disabled:opacity-45"
+          className="btn btn-primary"
         >
           New leave request
         </button>
@@ -121,10 +121,10 @@ export function LeavePanel({
             type="button"
             onClick={() => setFilter(item.key)}
             className={[
-              "border px-3 py-1.5 text-sm font-medium transition",
+              "border px-3 py-1.5 text-sm font-medium transition rounded-lg",
               filter === item.key
-                ? "border-header bg-header text-header-fg"
-                : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50",
+                ? "border-primary bg-primary text-white"
+                : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
             ].join(" ")}
           >
             {item.label}
@@ -132,25 +132,25 @@ export function LeavePanel({
         ))}
       </div>
 
-      <div className="mt-4 border border-zinc-300 bg-white">
+      <div className="card mt-4">
         {visible.length === 0 ? (
-          <p className="px-4 py-5 text-sm text-zinc-600 sm:px-5">
+          <p className="px-4 py-5 text-sm text-slate-600 sm:px-5">
             {FILTERS.find((item) => item.key === filter)!.empty}
           </p>
         ) : (
-          <ul className="divide-y divide-zinc-200">
+          <ul className="divide-y divide-slate-200">
             {visible.map((item) => (
               <li key={item.id}>
                 <Link
                   href={`/${orgCode}/leave/${item.id}`}
-                  className="flex flex-col gap-1 px-4 py-3 transition hover:bg-zinc-50 sm:flex-row sm:items-start sm:justify-between sm:px-5"
+                  className="flex flex-col gap-1 px-4 py-3 transition hover:bg-slate-50 sm:flex-row sm:items-start sm:justify-between sm:px-5"
                 >
                   <span className="min-w-0">
-                    <span className="block text-sm font-medium text-zinc-900">
+                    <span className="block text-sm font-medium text-slate-900">
                       {item.staffName}
                       {item.staffJobTitle ? ` · ${item.staffJobTitle}` : ""}
                     </span>
-                    <span className="mt-0.5 block text-sm text-zinc-600">
+                    <span className="mt-0.5 block text-sm text-slate-600">
                       {leaveTypeLabel(item.leaveType)} ·{" "}
                       {formatLeavePeriod(
                         item.startDate,
@@ -159,7 +159,7 @@ export function LeavePanel({
                       )}
                     </span>
                   </span>
-                  <span className="shrink-0 text-xs font-medium text-zinc-700">
+                  <span className="shrink-0 text-xs font-medium text-slate-700">
                     {filter === "completed"
                       ? "Completed"
                       : vacationStatusLabel(item.status)}
@@ -172,7 +172,7 @@ export function LeavePanel({
       </div>
 
       {activeStaff.length === 0 ? (
-        <p className="mt-4 text-sm text-zinc-600">
+        <p className="mt-4 text-sm text-slate-600">
           Add staff members first before raising a leave request.
         </p>
       ) : null}
@@ -184,16 +184,16 @@ export function LeavePanel({
             role="dialog"
             aria-modal="true"
             aria-labelledby="leave-request-title"
-            className="max-h-[90vh] w-full max-w-2xl overflow-auto border border-zinc-300 bg-white shadow-lg"
+            className="card max-h-[90vh] w-full max-w-2xl overflow-auto shadow-lg"
           >
-            <div className="border-b border-zinc-200 px-4 py-3 sm:px-5">
+            <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
               <h3
                 id="leave-request-title"
-                className="font-display text-base font-semibold text-zinc-900"
+                className="font-display text-base font-semibold text-slate-900"
               >
                 New leave request
               </h3>
-              <p className="mt-1 text-sm text-zinc-600">
+              <p className="mt-1 text-sm text-slate-600">
                 The employee&apos;s details come from their staff record. After
                 saving, the form goes round for signatures.
               </p>
@@ -238,7 +238,7 @@ export function LeavePanel({
                   className={inputClass}
                 />
               </label>
-              <p className="text-sm text-zinc-600 sm:col-span-2">
+              <p className="text-sm text-slate-600 sm:col-span-2">
                 {days === null
                   ? "Choose both dates to see the number of days."
                   : `Leave requested for ${vacationDayCountLabel(days)}. Back on duty the day after the last day.`}
@@ -271,7 +271,7 @@ export function LeavePanel({
                 />
               </label>
 
-              <p className="border-t border-zinc-200 pt-3 text-sm font-medium text-zinc-900 sm:col-span-2">
+              <p className="border-t border-slate-200 pt-3 text-sm font-medium text-slate-900 sm:col-span-2">
                 Office use (optional)
               </p>
               <label className="flex flex-col gap-1.5">
@@ -309,26 +309,26 @@ export function LeavePanel({
 
             {error ? (
               <p
-                className="border-t border-zinc-200 px-4 py-3 text-sm text-red-700 sm:px-5"
+                className="border-t border-slate-200 px-4 py-3 text-sm text-red-700 sm:px-5"
                 role="alert"
               >
                 {error}
               </p>
             ) : null}
 
-            <div className="flex items-center justify-end gap-2 border-t border-zinc-200 px-4 py-3 sm:px-5">
+            <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-4 py-3 sm:px-5">
               <button
                 type="button"
                 disabled={pending}
                 onClick={() => setEditorOpen(false)}
-                className="border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-45"
+                className="btn btn-secondary"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={pending}
-                className="bg-header px-3 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control disabled:opacity-45"
+                className="btn btn-primary"
               >
                 {pending ? "Saving…" : "Save and send for signatures"}
               </button>

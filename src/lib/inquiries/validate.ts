@@ -6,68 +6,109 @@ import {
   type InquiryWorkflowMap,
   type InquiryWorkflowStageConfig,
 } from "@/lib/inquiries/stages";
-import type {
-  InquiryCreateInput,
-  InquiryLineItemInput,
-} from "@/lib/inquiries/types";
+import { STAGE_DEFINITIONS } from "@/lib/inquiries/stage-forms";
+import type { InquiryLineItemInput } from "@/lib/inquiries/types";
 import { UserError } from "@/lib/errors";
 
-function clean(value: string): string {
-  return value.trim();
+const MAX_TEXT_LENGTH = 4000;
+
+function numberOrThrow(value: string, label: string): number {
+  const parsed = Number(value);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    throw new UserError(`${label} must be a number.`);
+  }
+  return parsed;
 }
 
-function normalizeLineItems(
+/**
+ * Tidy the answers of one step and reject values that make no sense (a word
+ * where a date belongs). Answers the step does not ask for are dropped.
+ */
+export function normalizeStageFields(
+  stage: InquiryStageKey,
+  raw: Record<string, string>,
+): Record<string, string> {
+  const fields: Record<string, string> = {};
+
+  for (const field of STAGE_DEFINITIONS[stage].fields) {
+    const value = String(raw?.[field.key] ?? "").trim();
+    if (!value) {
+      fields[field.key] = "";
+      continue;
+    }
+    if (value.length > MAX_TEXT_LENGTH) {
+      throw new UserError(`${field.label} is too long.`);
+    }
+
+    switch (field.type) {
+      case "date":
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+          throw new UserError(`${field.label} is not a valid date.`);
+        }
+        fields[field.key] = value;
+        break;
+      case "amount":
+        fields[field.key] = numberOrThrow(value, field.label).toFixed(2);
+        break;
+      case "number":
+        fields[field.key] = String(numberOrThrow(value, field.label));
+        break;
+      case "choice":
+        if (!field.options?.some((option) => option.value === value)) {
+          throw new UserError(`Choose one of the options for ${field.label}.`);
+        }
+        fields[field.key] = value;
+        break;
+      case "yesno":
+        fields[field.key] = value === "yes" ? "yes" : "";
+        break;
+      default:
+        fields[field.key] = value;
+    }
+  }
+
+  return fields;
+}
+
+/** The questions of a step that must be answered before it is completed. */
+export function missingStageFields(
+  stage: InquiryStageKey,
+  fields: Record<string, string>,
+): string[] {
+  return STAGE_DEFINITIONS[stage].fields
+    .filter((field) => field.required && !fields[field.key])
+    .map((field) => field.label);
+}
+
+export function normalizeLineItems(
   items: InquiryLineItemInput[],
 ): InquiryLineItemInput[] {
   return (items ?? [])
     .map((item) => ({
-      description: clean(item.description),
-      quantity: clean(item.quantity) || "1",
-      unitPrice: clean(item.unitPrice) || "0",
+      id: item.id,
+      description: String(item.description ?? "").trim(),
+      quantity: String(item.quantity ?? "").trim(),
+      unit: String(item.unit ?? "").trim(),
+      unitPrice: String(item.unitPrice ?? "").trim(),
+      deliveredQuantity: String(item.deliveredQuantity ?? "").trim(),
     }))
-    .filter(
-      (item) =>
-        item.description ||
-        Number(item.quantity) !== 0 ||
-        Number(item.unitPrice) !== 0,
-    )
+    // A row left completely blank was never meant to be an item.
+    .filter((item) => item.id || item.description || Number(item.unitPrice))
     .map((item) => {
-      const quantity = Number(item.quantity);
-      const unitPrice = Number(item.unitPrice);
-      if (Number.isNaN(quantity) || quantity < 0) {
-        throw new UserError("Line item quantity must be a valid number.");
-      }
-      if (Number.isNaN(unitPrice) || unitPrice < 0) {
-        throw new UserError("Line item price must be a valid number.");
+      if (!item.description) {
+        throw new UserError("Describe every item, or remove the empty row.");
       }
       return {
-        description: item.description || "Item",
-        quantity: quantity.toFixed(2),
-        unitPrice: unitPrice.toFixed(2),
+        id: item.id,
+        description: item.description,
+        quantity: numberOrThrow(item.quantity || "1", "Quantity").toFixed(2),
+        unit: item.unit || "Nos",
+        unitPrice: numberOrThrow(item.unitPrice || "0", "Price").toFixed(2),
+        deliveredQuantity: item.deliveredQuantity
+          ? numberOrThrow(item.deliveredQuantity, "Delivered quantity").toFixed(2)
+          : "",
       };
     });
-}
-
-export function normalizeInquiryCreateInput(
-  input: InquiryCreateInput,
-): InquiryCreateInput {
-  const customerName = clean(input.customerName);
-  if (!customerName) {
-    throw new UserError("Enter a customer name.");
-  }
-
-  const deliveryExpectedOn = clean(input.deliveryExpectedOn);
-  if (deliveryExpectedOn && !/^\d{4}-\d{2}-\d{2}$/.test(deliveryExpectedOn)) {
-    throw new UserError("Delivery expected date is invalid.");
-  }
-
-  return {
-    customerName,
-    contact: clean(input.contact),
-    deliveryExpectedOn,
-    notes: clean(input.notes),
-    lineItems: normalizeLineItems(input.lineItems),
-  };
 }
 
 export function normalizeInquiryWorkflowMap(

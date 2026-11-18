@@ -50,6 +50,13 @@
       "when": 1795038292170,
       "tag": "0006_login_lock",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795041041283,
+      "tag": "0007_inquiry_steps",
+      "breakpoints": true
     }
   ]
 }

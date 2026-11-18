@@ -184,52 +184,52 @@ function AddCompanyForm({ onClose }: Pick<AddCompanyDialogProps, "onClose">) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-10 w-full max-w-md border border-zinc-300 bg-white shadow-lg"
+        className="card relative z-10 w-full max-w-md shadow-lg"
       >
-        <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2">
-          <h2 id={titleId} className="text-sm font-semibold text-zinc-900">
+        <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
+          <h2 id={titleId} className="text-sm font-semibold text-slate-900">
             Add company
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="px-2 py-1 text-xs text-zinc-500 hover:text-zinc-800"
+            className="px-2 py-1 text-xs text-slate-500 hover:text-slate-800"
           >
             Close
           </button>
         </div>
 
         <form onSubmit={onSubmit} className="flex flex-col gap-3 p-3">
-          <p className="text-xs leading-5 text-zinc-500">
+          <p className="text-xs leading-5 text-slate-500">
             Companies are organizations — the canonical tenant for departments,
             teams, ops, accounts, quotations, and invoices.
           </p>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-zinc-700">
+            <span className="text-xs font-medium text-slate-700">
               Company name
             </span>
             <input
               ref={nameRef}
               value={name}
               onChange={(event) => onNameChange(event.target.value)}
-              className="h-9 border border-zinc-300 bg-white px-2 text-sm text-zinc-950 outline-none focus:border-zinc-500"
+              className="h-9 border border-slate-300 bg-white px-2 text-sm text-slate-950 outline-none focus:border-slate-500 rounded-lg"
               placeholder="e.g. AlJazayeh Trading"
               required
             />
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-zinc-700">Code</span>
+            <span className="text-xs font-medium text-slate-700">Code</span>
             <div className="relative">
               <input
                 value={code}
                 onChange={(event) => onCodeChange(event.target.value)}
                 className={[
-                  "h-9 w-full border bg-white py-0 pr-9 pl-2 text-sm tracking-wide text-zinc-950 outline-none",
+                  "h-9 w-full border bg-white py-0 pr-9 pl-2 text-sm tracking-wide text-slate-950 outline-none rounded-lg",
                   showCodeStatus && (!codeFormatOk || codeReserved || !codeAvailable)
                     ? "border-red-500 focus:border-red-600"
-                    : "border-zinc-300 focus:border-zinc-500",
+                    : "border-slate-300 focus:border-slate-500",
                 ].join(" ")}
                 placeholder="Auto from name"
                 maxLength={ORG_CODE_MAX_LENGTH}
@@ -270,18 +270,18 @@ function AddCompanyForm({ onClose }: Pick<AddCompanyDialogProps, "onClose">) {
             </p>
           ) : null}
 
-          <div className="flex items-center justify-end gap-2 border-t border-zinc-100 pt-3">
+          <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
             <button
               type="button"
               onClick={onClose}
-              className="h-8 px-3 text-xs text-zinc-600 hover:text-zinc-900"
+              className="h-8 px-3 text-xs text-slate-600 hover:text-slate-900"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!canSubmit}
-              className="h-8 bg-header px-3 text-xs font-medium text-header-fg hover:bg-header-control-hover disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn btn-primary btn-sm h-8 hover:bg-primary-hover-hover"
             >
               {pending ? "Saving…" : "Add company"}
             </button>

@@ -55,7 +55,7 @@ export default async function AttendanceSheetPage({
         month={month}
         group={group}
       />
-      <div className="overflow-x-auto border border-zinc-300 bg-white p-3 print:overflow-visible print:border-0 print:p-0">
+      <div className="card overflow-x-auto p-3 print:overflow-visible print:rounded-none print:border-0 print:p-0 print:shadow-none">
         <AttendanceSheetView sheet={sheet} />
       </div>
     </main>

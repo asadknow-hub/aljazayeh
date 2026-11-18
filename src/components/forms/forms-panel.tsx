@@ -16,8 +16,8 @@ import {
 import type { StaffOption } from "@/lib/staff/types";
 
 const inputClass =
-  "w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-header";
-const labelClass = "text-[12px] font-medium text-zinc-700";
+  "field w-full";
+const labelClass = "field-label";
 
 const STATUS_LABEL: Record<ApprovalFormView["status"], string> = {
   pending: "Awaiting approval",
@@ -125,46 +125,46 @@ export function FormsPanel({
     <div className="w-full max-w-5xl">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-display text-xl font-semibold text-zinc-900">
+          <h2 className="font-display text-xl font-semibold text-slate-900">
             {definition.listLabel}
           </h2>
-          <p className="mt-1 text-sm text-zinc-600">
+          <p className="mt-1 text-sm text-slate-600">
             Raise a {definition.itemLabel} and follow its approval.
           </p>
         </div>
         <button
           type="button"
           onClick={openEditor}
-          className="bg-header px-3 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control"
+          className="btn btn-primary"
         >
           New {definition.itemLabel}
         </button>
       </div>
 
-      <div className="mt-4 border border-zinc-300 bg-white">
+      <div className="card mt-4">
         {forms.length === 0 ? (
-          <p className="px-4 py-5 text-sm text-zinc-600 sm:px-5">
+          <p className="px-4 py-5 text-sm text-slate-600 sm:px-5">
             Nothing here yet.
           </p>
         ) : (
-          <ul className="divide-y divide-zinc-200">
+          <ul className="divide-y divide-slate-200">
             {forms.map((form) => (
               <li key={form.id}>
                 <Link
                   href={`/${orgCode}/forms/${form.id}`}
-                  className="flex flex-col gap-1 px-4 py-3 transition hover:bg-zinc-50 sm:flex-row sm:items-start sm:justify-between sm:px-5"
+                  className="flex flex-col gap-1 px-4 py-3 transition hover:bg-slate-50 sm:flex-row sm:items-start sm:justify-between sm:px-5"
                 >
                   <span className="min-w-0">
-                    <span className="block text-sm font-medium text-zinc-900">
+                    <span className="block text-sm font-medium text-slate-900">
                       {form.summary}
                       {form.amount ? ` · AED ${formatAmount(form.amount)}` : ""}
                     </span>
-                    <span className="mt-0.5 block text-xs text-zinc-500">
+                    <span className="mt-0.5 block text-xs text-slate-500">
                       {form.referenceNo} ·{" "}
                       {formatFriendlyDate(new Date(form.createdAt))}
                     </span>
                   </span>
-                  <span className="shrink-0 text-xs font-medium text-zinc-700">
+                  <span className="shrink-0 text-xs font-medium text-slate-700">
                     {STATUS_LABEL[form.status]}
                   </span>
                 </Link>
@@ -181,16 +181,16 @@ export function FormsPanel({
             role="dialog"
             aria-modal="true"
             aria-labelledby="new-form-title"
-            className="max-h-[90vh] w-full max-w-5xl overflow-auto border border-zinc-300 bg-white shadow-lg"
+            className="card max-h-[90vh] w-full max-w-5xl overflow-auto shadow-lg"
           >
-            <div className="border-b border-zinc-200 px-4 py-3 sm:px-5">
+            <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
               <h3
                 id="new-form-title"
-                className="font-display text-base font-semibold text-zinc-900"
+                className="font-display text-base font-semibold text-slate-900"
               >
                 New {definition.itemLabel}
               </h3>
-              <p className="mt-1 text-sm text-zinc-600">
+              <p className="mt-1 text-sm text-slate-600">
                 After saving, the form goes round for signatures.
               </p>
             </div>
@@ -239,35 +239,35 @@ export function FormsPanel({
             </div>
 
             {definition.lineColumns.length > 0 ? (
-              <div className="border-t border-zinc-200 px-4 py-4 sm:px-5">
+              <div className="border-t border-slate-200 px-4 py-4 sm:px-5">
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[52rem] border-collapse text-sm">
                     <thead>
                       <tr>
-                        <th className="w-8 border border-zinc-300 bg-zinc-100 px-2 py-1.5 text-left text-xs font-medium">
+                        <th className="w-8 border border-slate-300 bg-slate-100 px-2 py-1.5 text-left text-xs font-medium">
                           SN
                         </th>
                         {definition.lineColumns.map((column) => (
                           <th
                             key={column.key}
-                            className="border border-zinc-300 bg-zinc-100 px-2 py-1.5 text-left text-xs font-medium"
+                            className="border border-slate-300 bg-slate-100 px-2 py-1.5 text-left text-xs font-medium"
                           >
                             {column.label}
                           </th>
                         ))}
-                        <th className="w-8 border border-zinc-300 bg-zinc-100" />
+                        <th className="w-8 border border-slate-300 bg-slate-100" />
                       </tr>
                     </thead>
                     <tbody>
                       {lines.map((line, index) => (
                         <tr key={index}>
-                          <td className="border border-zinc-300 px-2 text-xs text-zinc-600">
+                          <td className="border border-slate-300 px-2 text-xs text-slate-600">
                             {index + 1}
                           </td>
                           {definition.lineColumns.map((column) => (
                             <td
                               key={column.key}
-                              className="border border-zinc-300"
+                              className="border border-slate-300"
                             >
                               <input
                                 aria-label={`${column.label}, line ${index + 1}`}
@@ -284,11 +284,11 @@ export function FormsPanel({
                                     ),
                                   )
                                 }
-                                className="w-full bg-transparent px-2 py-1.5 text-sm outline-none focus:bg-zinc-50"
+                                className="w-full bg-transparent px-2 py-1.5 text-sm outline-none focus:bg-slate-50"
                               />
                             </td>
                           ))}
-                          <td className="border border-zinc-300 text-center">
+                          <td className="border border-slate-300 text-center">
                             <button
                               type="button"
                               aria-label={`Remove line ${index + 1}`}
@@ -300,7 +300,7 @@ export function FormsPanel({
                                   ),
                                 )
                               }
-                              className="px-2 text-zinc-500 hover:text-red-700 disabled:opacity-30"
+                              className="px-2 text-slate-500 hover:text-red-700 disabled:opacity-30"
                             >
                               ×
                             </button>
@@ -315,7 +315,7 @@ export function FormsPanel({
                   onClick={() =>
                     setLines((current) => [...current, emptyLine()])
                   }
-                  className="mt-2 border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50"
+                  className="btn btn-secondary btn-sm mt-2"
                 >
                   Add line
                 </button>
@@ -323,32 +323,32 @@ export function FormsPanel({
             ) : null}
 
             {amount !== null ? (
-              <p className="border-t border-zinc-200 px-4 py-3 text-sm font-medium text-zinc-900 sm:px-5">
+              <p className="border-t border-slate-200 px-4 py-3 text-sm font-medium text-slate-900 sm:px-5">
                 Total: AED {formatAmount(amount)}
               </p>
             ) : null}
             {error ? (
               <p
-                className="border-t border-zinc-200 px-4 py-3 text-sm text-red-700 sm:px-5"
+                className="border-t border-slate-200 px-4 py-3 text-sm text-red-700 sm:px-5"
                 role="alert"
               >
                 {error}
               </p>
             ) : null}
 
-            <div className="flex items-center justify-end gap-2 border-t border-zinc-200 px-4 py-3 sm:px-5">
+            <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-4 py-3 sm:px-5">
               <button
                 type="button"
                 disabled={pending}
                 onClick={() => setEditorOpen(false)}
-                className="border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-45"
+                className="btn btn-secondary"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={pending}
-                className="bg-header px-3 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control disabled:opacity-45"
+                className="btn btn-primary"
               >
                 {pending ? "Saving…" : "Save and send for signatures"}
               </button>

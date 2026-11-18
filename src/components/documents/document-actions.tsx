@@ -39,14 +39,14 @@ export function DocumentActions({
       <div className="flex items-center justify-between gap-2">
         <Link
           href={backHref}
-          className="border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+          className="btn btn-secondary"
         >
           Back
         </Link>
         <button
           type="button"
           onClick={() => window.print()}
-          className="bg-header px-4 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control"
+          className="btn btn-primary"
         >
           Print
         </button>

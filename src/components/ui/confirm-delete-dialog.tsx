@@ -52,23 +52,23 @@ function ConfirmDeleteDialogBody({
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-delete-title"
-        className="w-full max-w-md border border-zinc-300 bg-white shadow-lg"
+        className="card w-full max-w-md shadow-lg"
       >
-        <div className="border-b border-zinc-200 px-4 py-3">
+        <div className="border-b border-slate-200 px-4 py-3">
           <h3
             id="confirm-delete-title"
-            className="font-display text-base font-semibold text-zinc-900"
+            className="font-display text-base font-semibold text-slate-900"
           >
             {title}
           </h3>
         </div>
-        <div className="px-4 py-4 text-sm text-zinc-700">{message}</div>
-        <div className="flex items-center justify-end gap-2 border-t border-zinc-200 px-4 py-3">
+        <div className="px-4 py-4 text-sm text-slate-700">{message}</div>
+        <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-4 py-3">
           <button
             type="button"
             onClick={onCancel}
             disabled={pending}
-            className="border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-45"
+            className="btn btn-secondary"
           >
             Cancel
           </button>
@@ -76,7 +76,7 @@ function ConfirmDeleteDialogBody({
             type="button"
             onClick={onConfirm}
             disabled={!canDelete}
-            className="border border-red-300 bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-45"
+            className="border border-red-300 bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-45 rounded-lg"
           >
             {pending
               ? "Deleting…"

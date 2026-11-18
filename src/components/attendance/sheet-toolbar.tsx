@@ -33,7 +33,7 @@ export function SheetToolbar({
       <div className="flex flex-wrap items-center gap-2">
         <Link
           href={backHref}
-          className="border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50"
+          className="btn btn-secondary"
         >
           Back
         </Link>
@@ -44,7 +44,7 @@ export function SheetToolbar({
             if (event.target.value) go({ month: event.target.value });
           }}
           aria-label="Month"
-          className="border border-zinc-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-header"
+          className="field"
         />
         <div className="flex">
           {ATTENDANCE_GROUPS.map((item) => (
@@ -53,10 +53,10 @@ export function SheetToolbar({
               type="button"
               onClick={() => go({ group: item.key })}
               className={[
-                "border px-3 py-1.5 text-sm font-medium transition",
+                "border px-3 py-1.5 text-sm font-medium transition rounded-lg",
                 item.key === group
-                  ? "border-header bg-header text-header-fg"
-                  : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50",
+                  ? "border-primary bg-primary text-white"
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
               ].join(" ")}
             >
               {item.label}
@@ -67,7 +67,7 @@ export function SheetToolbar({
       <button
         type="button"
         onClick={() => window.print()}
-        className="bg-header px-4 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control"
+        className="btn btn-primary"
       >
         Print
       </button>

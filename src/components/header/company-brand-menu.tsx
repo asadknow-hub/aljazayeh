@@ -94,10 +94,10 @@ export function CompanyBrandMenu() {
       {open ? (
         <div
           role="menu"
-          className="absolute top-full left-0 z-50 mt-2 w-56 overflow-hidden border border-zinc-200 bg-white shadow-sm"
+          className="absolute top-full left-0 z-50 mt-2 w-56 overflow-hidden border border-slate-200 bg-white shadow-sm rounded-lg"
         >
-          <div className="border-b border-zinc-100 px-3 py-2">
-            <p className="text-[11px] tracking-wide text-zinc-400 uppercase">
+          <div className="border-b border-slate-100 px-3 py-2">
+            <p className="text-[11px] tracking-wide text-slate-400 uppercase">
               Companies
             </p>
           </div>
@@ -114,26 +114,26 @@ export function CompanyBrandMenu() {
                     router.push(companyPath(org.code));
                   }}
                   className={[
-                    "flex w-full flex-col items-start px-3 py-2 text-left transition hover:bg-zinc-50",
-                    active ? "bg-zinc-50" : "",
+                    "flex w-full flex-col items-start px-3 py-2 text-left transition hover:bg-slate-50",
+                    active ? "bg-slate-50" : "",
                   ].join(" ")}
                 >
-                  <span className="truncate text-sm font-medium text-zinc-900">
+                  <span className="truncate text-sm font-medium text-slate-900">
                     {org.name}
                   </span>
-                  <span className="font-mono text-[10px] tracking-wide text-zinc-500">
+                  <span className="font-mono text-[10px] tracking-wide text-slate-500">
                     {org.code}
                   </span>
                 </button>
               );
             })}
           </div>
-          <div className="border-t border-zinc-100 p-1">
+          <div className="border-t border-slate-100 p-1">
             <Link
               href="/"
               role="menuitem"
               onClick={() => setOpen(false)}
-              className="block px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50"
+              className="block px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
             >
               Select Company
             </Link>
