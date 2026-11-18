@@ -21,10 +21,11 @@ import {
   getInquiryWorkflowMapForUser,
   listInquiriesForDepartment,
   listInquiriesForUser,
-  moveInquiryStageForUser,
+  saveInquiryStageForUser,
   saveInquiryWorkflowMapForUser,
-  updateInquiryForUser,
+  sendInquiryBackForUser,
 } from "@/lib/inquiries/queries";
+import type { InquiryStageInput } from "@/lib/inquiries/types";
 import {
   createOrganizationForUser,
   listUserOrganizations,
@@ -387,10 +388,23 @@ describe("inquiry pipeline", () => {
     assert.deepEqual(await listInquiriesForUser(people.sara.userId, ORG), []);
   });
 
+  // What Sales fills in on the Inquiry step.
+  const inquiryStep = (lineItems: InquiryStageInput["lineItems"] = []) => ({
+    fields: {
+      customerName: "Walk-in Customer",
+      contact: "050 123 4567",
+      title: "Stainless handrail",
+      jobType: "local",
+    },
+    lineItems,
+  });
+
   test("nothing happens until someone in the department is assigned", async () => {
     await refused(
-      moveInquiryStageForUser(people.sara.userId, ORG, inquiryId, "next"),
-      /Assign a person/,
+      saveInquiryStageForUser(people.sara.userId, ORG, inquiryId, inquiryStep(), {
+        complete: true,
+      }),
+      /Assign someone/,
     );
     await refused(
       assignInquiryForUser(
@@ -410,14 +424,27 @@ describe("inquiry pipeline", () => {
     assert.equal(assigned.assignedStaffName, "Sara");
   });
 
-  test("a stage that needs approval cannot be passed without it", async () => {
+  test("a step that needs approval cannot be passed without it", async () => {
     await refused(
-      moveInquiryStageForUser(people.sara.userId, ORG, inquiryId, "next"),
+      saveInquiryStageForUser(people.sara.userId, ORG, inquiryId, inquiryStep(), {
+        complete: true,
+      }),
       /Approval required by Management/,
     );
     await refused(
       approveInquiryStageForUser(people.sara.userId, ORG, inquiryId),
       /Only Management/,
+    );
+    // The refused attempt saved nothing, so the step is still as it was.
+    const view = await getInquiryForUser(people.sara.userId, ORG, inquiryId);
+    assert.equal(view?.title, "");
+
+    await saveInquiryStageForUser(
+      people.sara.userId,
+      ORG,
+      inquiryId,
+      inquiryStep(),
+      { complete: false },
     );
     const approved = await approveInquiryStageForUser(
       people.mona.userId,
@@ -427,35 +454,55 @@ describe("inquiry pipeline", () => {
     assert.equal(approved.currentStageApproved, true);
   });
 
-  test("changing an inquiry after approval voids the approval", async () => {
-    const edited = await updateInquiryForUser(
+  test("changing a step after approval voids the approval", async () => {
+    // Saving again without changing anything keeps the approval.
+    const same = await saveInquiryStageForUser(
       people.sara.userId,
       ORG,
       inquiryId,
-      {
-        customerName: "Walk-in Customer",
-        contact: "",
-        deliveryExpectedOn: "",
-        notes: "",
-        lineItems: [
-          { description: "Handrail", quantity: "12", unitPrice: "950" },
-        ],
-      },
+      inquiryStep(),
+      { complete: false },
+    );
+    assert.equal(same.currentStageApproved, true);
+
+    const edited = await saveInquiryStageForUser(
+      people.sara.userId,
+      ORG,
+      inquiryId,
+      inquiryStep([
+        {
+          description: "Handrail",
+          quantity: "12",
+          unit: "m",
+          unitPrice: "",
+          deliveredQuantity: "",
+        },
+      ]),
+      { complete: false },
     );
     assert.equal(edited.currentStageApproved, false);
     await refused(
-      moveInquiryStageForUser(people.sara.userId, ORG, inquiryId, "next"),
+      saveInquiryStageForUser(
+        people.sara.userId,
+        ORG,
+        inquiryId,
+        { fields: inquiryStep().fields, lineItems: edited.lineItems },
+        { complete: true },
+      ),
       /Approval required/,
     );
     await approveInquiryStageForUser(people.mona.userId, ORG, inquiryId);
   });
 
-  test("moving on hands the inquiry to the next department", async () => {
-    const moved = await moveInquiryStageForUser(
+  test("completing a step hands the inquiry to the next department, unassigned", async () => {
+    const current = await getInquiryForUser(people.sara.userId, ORG, inquiryId);
+    assert.ok(current);
+    const moved = await saveInquiryStageForUser(
       people.sara.userId,
       ORG,
       inquiryId,
-      "next",
+      { fields: inquiryStep().fields, lineItems: current.lineItems },
+      { complete: true },
     );
     assert.equal(moved.currentStage, "quotation");
     assert.equal(moved.owningDepartmentKey, "accounts");
@@ -464,6 +511,10 @@ describe("inquiry pipeline", () => {
       null,
       "the new department assigns its own person",
     );
+    assert.equal(moved.steps[0]?.state, "done");
+    assert.equal(moved.steps[0]?.completedByName, "Sara");
+    assert.equal(moved.steps[1]?.state, "current");
+    assert.equal(moved.steps[2]?.state, "locked");
 
     // Sales no longer has it. Management still sees it, but only the
     // department that owns an inquiry works on it.
@@ -473,31 +524,43 @@ describe("inquiry pipeline", () => {
     );
     assert.ok(await getInquiryForUser(people.mona.userId, ORG, inquiryId));
     await denied(
-      updateInquiryForUser(people.mona.userId, ORG, inquiryId, {
-        customerName: "Changed",
-        contact: "",
-        deliveryExpectedOn: "",
-        notes: "",
-        lineItems: [],
-      }),
+      saveInquiryStageForUser(
+        people.mona.userId,
+        ORG,
+        inquiryId,
+        { fields: {}, lineItems: [] },
+        { complete: false },
+      ),
     );
   });
 
-  test("moving back reopens the earlier stage for approval", async () => {
+  test("sending back reopens the earlier step for approval, with its handler", async () => {
     const accountant = await addPerson("Aziz", ["accounts"]);
     await assignInquiryForUser(owner, ORG, inquiryId, accountant.staffId);
-    const back = await moveInquiryStageForUser(
+    await refused(
+      sendInquiryBackForUser(accountant.userId, ORG, inquiryId, " "),
+      /why/,
+    );
+    const back = await sendInquiryBackForUser(
       accountant.userId,
       ORG,
       inquiryId,
-      "previous",
+      "Phone number is wrong",
     );
     assert.equal(back.currentStage, "inquiry");
     const view = await getInquiryForUser(owner, ORG, inquiryId);
     assert.ok(view);
     assert.equal(view.currentStageApproved, false);
+    assert.equal(
+      view.assignedStaffName,
+      "Sara",
+      "it returns to whoever handled that step",
+    );
     assert.ok(
       view.activityLogs.some((log) => /Approval cleared/.test(log.label)),
+    );
+    assert.ok(
+      view.activityLogs.some((log) => /Phone number is wrong/.test(log.detail)),
     );
   });
 

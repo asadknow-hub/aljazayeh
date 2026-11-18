@@ -8,9 +8,9 @@ import {
 import { formTypesRaisedIn } from "@/lib/forms/definitions";
 import { listApprovalFormsForUser } from "@/lib/forms/queries";
 import {
+  listAssignableStaffForUser,
   listInquiriesForDepartment,
   listInquiriesForUser,
-  listInvoiceQueueForUser,
 } from "@/lib/inquiries/queries";
 import { isInquiryWorkflowDepartmentKey } from "@/lib/inquiries/stages";
 import { firstParam, loadOrgPage } from "@/lib/org/page";
@@ -37,13 +37,13 @@ export default async function DepartmentPage({
     departmentSections(dept).find((item) => item.key === section)?.key ??
     "inquiries";
 
-  // The Admin workspace shows the full pipeline; others what they own.
+  // The Admin workspace shows every inquiry; others what they handle.
   const formTypes = formTypesRaisedIn(dept);
-  const [inquiries, invoiceQueue, ...formLists] = await Promise.all([
+  const [inquiries, assignable, ...formLists] = await Promise.all([
     dept === "admin"
       ? listInquiriesForUser(session.userId, org.code)
       : listInquiriesForDepartment(session.userId, org.code, dept),
-    listInvoiceQueueForUser(session.userId, org.code, dept),
+    listAssignableStaffForUser(session.userId, org.code),
     ...formTypes.map((type) =>
       listApprovalFormsForUser(session.userId, org.code, type),
     ),
@@ -55,7 +55,8 @@ export default async function DepartmentPage({
       departmentKey={dept}
       initialSection={initialSection}
       inquiries={inquiries}
-      invoiceQueue={invoiceQueue}
+      myStaffId={org.access.staffId}
+      assignable={assignable}
       forms={Object.fromEntries(
         formTypes.map((type, index) => [type, formLists[index]]),
       )}

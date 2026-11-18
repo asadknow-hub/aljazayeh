@@ -38,7 +38,7 @@ npm run dev
 ```
 
 To look around with data already in place, load the demo company (staff, logins, attendance,
-forms at different stages of approval):
+forms at different stages of approval, inquiries at different steps):
 
 ```bash
 npm run db:demo

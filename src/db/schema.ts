@@ -556,7 +556,11 @@ export const inquiryWorkflowSettings = pgTable(
   ],
 );
 
-/** CRM inquiry header. Always starts in Admin at stage inquiry. */
+/**
+ * One job, from the customer's first request to the money being received.
+ * It moves through the steps in src/lib/inquiries; what each step recorded
+ * is in inquiry_stage_records.
+ */
 export const inquiries = pgTable(
   "inquiries",
   {
@@ -564,11 +568,23 @@ export const inquiries = pgTable(
     organizationId: uuid("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
+    /** Running number, e.g. AJE/INQ/2026/0001. */
+    inquiryNumber: text("inquiry_number").notNull().default(""),
+    title: text("title").notNull().default(""),
     customerName: text("customer_name").notNull(),
     contact: text("contact").notNull().default(""),
+    /** local, or export for jobs shipped abroad. */
+    jobType: text("job_type").notNull().default("local"),
     deliveryExpectedOn: text("delivery_expected_on").notNull().default(""),
     notes: text("notes").notNull().default(""),
+    /** open, completed (paid) or cancelled (the customer did not go ahead). */
+    status: text("status").notNull().default("open"),
+    closeReason: text("close_reason").notNull().default(""),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
     currentStage: text("current_stage").notNull().default("inquiry"),
+    stageEnteredAt: timestamp("stage_entered_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     owningDepartmentKey: text("owning_department_key").notNull().default("admin"),
     assignedStaffId: uuid("assigned_staff_id").references(() => staffMembers.id, {
       onDelete: "set null",
@@ -590,7 +606,51 @@ export const inquiries = pgTable(
       table.organizationId,
       table.owningDepartmentKey,
     ),
+    uniqueIndex("inquiries_org_number_uidx")
+      .on(table.organizationId, table.inquiryNumber)
+      .where(sql`${table.inquiryNumber} <> ''`),
     ...orgMemberRecords("inquiries"),
+  ],
+);
+
+/**
+ * What one step of an inquiry recorded: its answers as entered, the number
+ * of the document it produced, and who completed it.
+ */
+export const inquiryStageRecords = pgTable(
+  "inquiry_stage_records",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    inquiryId: uuid("inquiry_id")
+      .notNull()
+      .references(() => inquiries.id, { onDelete: "cascade" }),
+    stageKey: text("stage_key").notNull(),
+    documentNumber: text("document_number").notNull().default(""),
+    fields: jsonb("fields")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
+    /** The person who was handling the step, so it returns to them. */
+    handledByStaffId: uuid("handled_by_staff_id").references(
+      () => staffMembers.id,
+      { onDelete: "set null" },
+    ),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    completedByUserId: uuid("completed_by_user_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("inquiry_stage_records_inquiry_stage_uidx").on(
+      table.inquiryId,
+      table.stageKey,
+    ),
+    index("inquiry_stage_records_org_idx").on(table.organizationId),
+    ...orgMemberRecords("inquiry_stage_records"),
   ],
 );
 
@@ -639,9 +699,15 @@ export const inquiryLineItems = pgTable(
     quantity: numeric("quantity", { precision: 14, scale: 2 })
       .notNull()
       .default("1"),
+    unit: text("unit").notNull().default("Nos"),
     unitPrice: numeric("unit_price", { precision: 14, scale: 2 })
       .notNull()
       .default("0"),
+    /** Entered on the delivery note; empty until then. */
+    deliveredQuantity: numeric("delivered_quantity", {
+      precision: 14,
+      scale: 2,
+    }),
     sortOrder: integer("sort_order").notNull().default(0),
     ...timestamps,
   },

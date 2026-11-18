@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import { InquiryDetailClient } from "@/components/inquiries/inquiry-detail-client";
-import { getInquiryForUser } from "@/lib/inquiries/queries";
+import {
+  getInquiryForUser,
+  listAssignableStaffForUser,
+} from "@/lib/inquiries/queries";
 import { isInquiryWorkflowDepartmentKey } from "@/lib/inquiries/stages";
 import { loadOrgPage } from "@/lib/org/page";
 
@@ -17,16 +20,19 @@ export default async function DepartmentInquiryPage({
   const { session, org } = await loadOrgPage(orgCode);
 
   // Returns nothing for inquiries this person is not allowed to see.
-  const inquiry = await getInquiryForUser(session.userId, org.code, inquiryId);
+  const [inquiry, assignable] = await Promise.all([
+    getInquiryForUser(session.userId, org.code, inquiryId),
+    listAssignableStaffForUser(session.userId, org.code),
+  ]);
   if (!inquiry) notFound();
-  // The Admin workspace lists every inquiry; others only the ones they own.
-  if (dept !== "admin" && inquiry.owningDepartmentKey !== dept) notFound();
 
   return (
     <InquiryDetailClient
       orgCode={org.code}
       initialInquiry={inquiry}
       backHref={`/${org.code}/${dept}?section=inquiries`}
+      myStaffId={org.access.staffId}
+      assignable={assignable}
     />
   );
 }

@@ -7,20 +7,25 @@ import {
   addInquiryCommentForUser,
   approveInquiryStageForUser,
   assignInquiryForUser,
+  closeInquiryForUser,
   createInquiryForUser,
-  listAssignableStaffForDepartment,
-  moveInquiryStageForUser,
+  reopenInquiryForUser,
+  saveInquiryStageForUser,
   saveInquiryWorkflowMapForUser,
-  updateInquiryForUser,
+  sendInquiryBackForUser,
 } from "@/lib/inquiries/queries";
-import type {
-  InquiryWorkflowDepartmentKey,
-  InquiryWorkflowMap,
-} from "@/lib/inquiries/stages";
-import type {
-  InquiryCreateInput,
-  InquiryUpdateInput,
-} from "@/lib/inquiries/types";
+import type { InquiryWorkflowMap } from "@/lib/inquiries/stages";
+import type { InquiryStageInput, InquiryView } from "@/lib/inquiries/types";
+
+/** Run one change to an inquiry as the signed-in person. */
+function inquiryAction(work: (userId: string) => Promise<InquiryView>) {
+  return runAction(async () => {
+    const session = await requireSession();
+    const updated = await work(session.userId);
+    revalidateCompanyPages();
+    return updated;
+  });
+}
 
 export async function saveInquiryWorkflowMapAction(
   orgCode: string,
@@ -40,43 +45,32 @@ export async function saveInquiryWorkflowMapAction(
 
 export async function createInquiryAction(
   orgCode: string,
-  input: InquiryCreateInput,
+  input: InquiryStageInput,
 ) {
-  return runAction(async () => {
-    const session = await requireSession();
-    const created = await createInquiryForUser(session.userId, orgCode, input);
-    revalidateCompanyPages();
-    return created;
-  });
+  return inquiryAction((userId) =>
+    createInquiryForUser(userId, orgCode, input),
+  );
 }
 
-export async function updateInquiryAction(
+/** Save the current step; with `complete`, also move on to the next one. */
+export async function saveInquiryStageAction(
   orgCode: string,
   inquiryId: string,
-  input: InquiryUpdateInput,
+  input: InquiryStageInput,
+  complete: boolean,
 ) {
-  return runAction(async () => {
-    const session = await requireSession();
-    const updated = await updateInquiryForUser(
-      session.userId,
-      orgCode,
-      inquiryId,
-      input,
-    );
-    revalidateCompanyPages();
-    return updated;
-  });
+  return inquiryAction((userId) =>
+    saveInquiryStageForUser(userId, orgCode, inquiryId, input, { complete }),
+  );
 }
 
-export async function listAssignableStaffAction(
+export async function sendInquiryBackAction(
   orgCode: string,
-  departmentKey: InquiryWorkflowDepartmentKey,
+  inquiryId: string,
+  reason: string,
 ) {
-  const session = await requireSession();
-  return listAssignableStaffForDepartment(
-    session.userId,
-    orgCode,
-    departmentKey,
+  return inquiryAction((userId) =>
+    sendInquiryBackForUser(userId, orgCode, inquiryId, reason),
   );
 }
 
@@ -85,51 +79,18 @@ export async function assignInquiryAction(
   inquiryId: string,
   staffId: string,
 ) {
-  return runAction(async () => {
-    const session = await requireSession();
-    const updated = await assignInquiryForUser(
-      session.userId,
-      orgCode,
-      inquiryId,
-      staffId,
-    );
-    revalidateCompanyPages();
-    return updated;
-  });
-}
-
-export async function moveInquiryStageAction(
-  orgCode: string,
-  inquiryId: string,
-  direction: "previous" | "next",
-) {
-  return runAction(async () => {
-    const session = await requireSession();
-    const updated = await moveInquiryStageForUser(
-      session.userId,
-      orgCode,
-      inquiryId,
-      direction,
-    );
-    revalidateCompanyPages();
-    return updated;
-  });
+  return inquiryAction((userId) =>
+    assignInquiryForUser(userId, orgCode, inquiryId, staffId),
+  );
 }
 
 export async function approveInquiryStageAction(
   orgCode: string,
   inquiryId: string,
 ) {
-  return runAction(async () => {
-    const session = await requireSession();
-    const updated = await approveInquiryStageForUser(
-      session.userId,
-      orgCode,
-      inquiryId,
-    );
-    revalidateCompanyPages();
-    return updated;
-  });
+  return inquiryAction((userId) =>
+    approveInquiryStageForUser(userId, orgCode, inquiryId),
+  );
 }
 
 export async function addInquiryCommentAction(
@@ -137,15 +98,23 @@ export async function addInquiryCommentAction(
   inquiryId: string,
   body: string,
 ) {
-  return runAction(async () => {
-    const session = await requireSession();
-    const updated = await addInquiryCommentForUser(
-      session.userId,
-      orgCode,
-      inquiryId,
-      body,
-    );
-    revalidateCompanyPages();
-    return updated;
-  });
+  return inquiryAction((userId) =>
+    addInquiryCommentForUser(userId, orgCode, inquiryId, body),
+  );
+}
+
+export async function closeInquiryAction(
+  orgCode: string,
+  inquiryId: string,
+  reason: string,
+) {
+  return inquiryAction((userId) =>
+    closeInquiryForUser(userId, orgCode, inquiryId, reason),
+  );
+}
+
+export async function reopenInquiryAction(orgCode: string, inquiryId: string) {
+  return inquiryAction((userId) =>
+    reopenInquiryForUser(userId, orgCode, inquiryId),
+  );
 }

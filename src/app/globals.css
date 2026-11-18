@@ -1,19 +1,26 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f7f7f5;
-  --foreground: #18181b;
+  --background: #f3f6fb;
+  --foreground: #0f172a;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-header: #5c4638;
-  --color-header-border: #4a382d;
-  --color-header-fg: #f4ebe3;
-  --color-header-muted: #d4c4b5;
-  --color-header-control: #6b5344;
-  --color-header-control-hover: #7a6151;
+  /* The blue used for the main action on a screen, links and focus. */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-soft: #eff6ff;
+  /* Orange draws the eye to what needs attention. */
+  --color-accent: #ea580c;
+  --color-accent-soft: #fff7ed;
+  --color-header: #1e3a8a;
+  --color-header-border: #172f73;
+  --color-header-fg: #ffffff;
+  --color-header-muted: #c7d7fb;
+  --color-header-control: #2a4aa6;
+  --color-header-control-hover: #3559bd;
   --font-sans: var(--font-dm-sans);
   --font-display: var(--font-poppins);
   --font-mono: var(--font-dm-sans);
@@ -23,6 +30,151 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  button:not(:disabled),
+  select:not(:disabled),
+  summary,
+  label[for],
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled) {
+    cursor: pointer;
+  }
+  a:focus-visible,
+  button:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
+
+/*
+ * The building blocks every screen is made of. Utility classes written on an
+ * element still win over these, so a screen can adjust one where it must.
+ */
+@layer components {
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border: 1px solid transparent;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.875rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+      background-color 150ms,
+      border-color 150ms,
+      color 150ms,
+      box-shadow 150ms;
+  }
+  .btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  .btn:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+  .btn-sm {
+    padding: 0.3125rem 0.625rem;
+    font-size: 0.8125rem;
+  }
+  .btn-primary {
+    background: var(--color-primary);
+    color: #fff;
+    box-shadow: 0 1px 2px rgb(37 99 235 / 0.25);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--color-primary-hover);
+  }
+  /* Finishing something and passing it on. */
+  .btn-go {
+    background: #059669;
+    color: #fff;
+    box-shadow: 0 1px 2px rgb(5 150 105 / 0.25);
+  }
+  .btn-go:hover:not(:disabled) {
+    background: #047857;
+  }
+  .btn-secondary {
+    background: #fff;
+    border-color: #cbd5e1;
+    color: #334155;
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+  }
+  .btn-danger {
+    background: #fff;
+    border-color: #fca5a5;
+    color: #b91c1c;
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: #fef2f2;
+  }
+
+  .card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+  }
+
+  .field {
+    border: 1px solid #cbd5e1;
+    border-radius: 0.5rem;
+    background: #fff;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    color: #0f172a;
+    outline: none;
+    transition:
+      border-color 150ms,
+      box-shadow 150ms;
+  }
+  .field:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgb(37 99 235 / 0.15);
+  }
+  .field:disabled {
+    cursor: not-allowed;
+    background: #f1f5f9;
+    color: #64748b;
+  }
+  .field-label {
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 500;
+    color: #475569;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3125rem;
+    border-radius: 9999px;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
 
 /*

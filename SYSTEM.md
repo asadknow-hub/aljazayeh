@@ -29,7 +29,7 @@ It is not a public marketing site. It is an authenticated internal tool with ten
 | Owner | Creates companies |
 | Company administrator | Company Settings, Inquiry Settings, staff logins, everything in the company |
 | Reception | Daily attendance and the monthly attendance sheet, visitors log, vacation requests |
-| Sales / Engineering / Accounts | Department inquiry queues + invoice-stage queues |
+| Sales / Engineering / Accounts | The inquiries whose current step they handle |
 | Management | Approves vacation on company home; can approve inquiry stages when required |
 | Staff / HR | Staff directory, profiles, salary, contracts |
 | Any member | Profile `/settings`, company switcher, All Logs |
@@ -105,7 +105,7 @@ All rules are in [`src/lib/access/access.ts`](src/lib/access/access.ts).
 | Signing a leave request | The holder of each signing position, in order |
 | A department workspace (Admin, Sales, Accounts, Engineering) | That department, Administrator, Management |
 | Seeing every inquiry | Administrator, Management, Admin department |
-| Working an inquiry (edit, comment, move) | The department that owns its current stage, Administrator |
+| Working an inquiry (fill in, move on, send back) | The department that handles its current step, Administrator |
 | Assigning an inquiry | Owning department, Administrator, Management |
 | Approving a stage | Whoever Inquiry Settings names (Management or Engineering) |
 
@@ -138,11 +138,11 @@ After selecting a company, the home screen is **Select Department** with tiles:
 | Tile | Path | Status |
 | --- | --- | --- |
 | Staff | `/{code}/staff` | Built |
-| Accounts | `/{code}/accounts` | Built (Inquiries + Invoice) |
+| Accounts | `/{code}/accounts` | Built (Inquiries, Petty cash) |
 | Reception | `/{code}/reception` | Built (Attendance, Vacation, Visitors) |
-| Sales | `/{code}/sales` | Built (Inquiries + Invoice) |
-| Engineering Department | `/{code}/engineering` | Built (Inquiries + Invoice) |
-| Admin | `/{code}/admin` | Built (full Inquiries CRM + Invoice) |
+| Sales | `/{code}/sales` | Built (Inquiries) |
+| Engineering Department | `/{code}/engineering` | Built (Inquiries, Material requests) |
+| Admin | `/{code}/admin` | Built (all Inquiries, Verbal work approvals) |
 | All Logs | `/{code}/all-logs` | Built |
 | Company Settings | `/{code}/company-settings` | Built |
 
@@ -182,7 +182,7 @@ Saving the workflow map also **recomputes** `owningDepartmentKey` on open inquir
 
 Org-scoped HR directory:
 
-- Create / edit staff (name, contact, job title, status active/inactive, notes)
+- Create / edit staff (name, contact, profession, status active/inactive, notes)
 - Assign department roles (management, accounts, reception, sales, engineering, admin, workers)
 - Salary & contract fields on the staff record
 - Detail sections for vacation history, login and actions
@@ -268,61 +268,71 @@ access are shared. Adding a form of this kind for another company means adding t
 
 Linear activity stream (`staff_activity_logs`) across the company — vacation reviews, staff create events, and related operational breadcrumbs. Category/action/summary oriented for a simple ops timeline.
 
-### 6.7 Inquiry CRM (core pipeline)
+### 6.7 Inquiries (the core process)
 
-This is the main commercial workflow.
+An inquiry is one job, followed from the customer's first request to the
+money being received. The company runs on it: work starts here, and every
+commercial document is a step of it.
 
-#### Locked stage order
+#### The steps
 
-1. Inquiry  
-2. Quotation  
-3. LPO In or Out  
-4. Proforma Invoice  
-5. Job Card  
-6. Progress Invoice  
-7. Delivery Note  
-8. Tax Invoice  
-9. Receipt Voucher  
+| # | Step | What it records | Its number |
+| --- | --- | --- | --- |
+| 1 | Inquiry | Who is asking and what they need | `AJE/INQ/2026/0001` |
+| 2 | Quotation | Prices, discount, VAT, terms | `AJE/QTN/…` |
+| 3 | LPO In or Out | The customer's LPO (in); our LPO to a supplier (out) | the customer's own |
+| 4 | Proforma Invoice | The advance asked for | `AJE/PI/…` |
+| 5 | Job Card | Supervisor, technicians, instructions | `AJE/JC/…` |
+| 6 | Progress Invoice | How far the work has got | `AJE/PRG/…` |
+| 7 | Delivery Note | Delivered quantity per item, who received | `AJE/DN/…` |
+| 8 | Tax Invoice | The bill | `AJE/INV/…` |
+| 9 | Receipt Voucher | The payment; closes the inquiry | `AJE/RV/…` |
 
-Stages only move **previous / next** (adjacent). No skipping.
+The order is fixed. What each step asks is described in one place,
+`src/lib/inquiries/stage-forms.ts`: its questions, which are required, what
+it does with the job's items, and its document number. Changing a step is a
+change to that file only.
 
-#### Ownership & queues
+- A step's document gets its number the first time the step is saved.
+- The items are listed on the Inquiry, priced on the Quotation, ticked off
+  on the Delivery Note and read-only everywhere else, so later steps cannot
+  change what was quoted.
+- The job's value is the priced items less the discount plus VAT, as set on
+  the quotation.
 
-- Each stage is mapped to a **handling department** in Inquiry Settings.
-- The inquiry’s `owningDepartmentKey` follows the current stage’s mapping.
-- **Admin → Inquiries** lists **all** company inquiries (full CRM + create).
-- **Sales / Accounts / Engineering → Inquiries** list only inquiries owned by that department.
-- **Invoice** tabs (Admin + those three depts) list inquiries that are both:
-  - owned by that department, and
-  - currently on an invoice stage: Proforma / Progress / Tax Invoice / Receipt Voucher.
+#### Working a step
 
-#### Assignment gate
+- Each step is handled by the department chosen in Inquiry Settings.
+- Nothing can be done on a step until someone from that department is
+  assigned to it.
+- **Save** keeps the step as it is. **Save & Go to Next Step** also finishes
+  it, which needs every required answer, and hands the inquiry to the next
+  step's department **unassigned**. **Discard** drops unsaved changes.
+- **Send back to the previous step** needs a reason. The earlier step goes
+  back to the person who handled it, and must be approved again.
+- An inquiry that is not going ahead is **closed as lost** with a reason and
+  can be reopened. Completing the last step marks it completed.
 
-Until someone is assigned:
+#### Who sees what
 
-- Editing, commenting, approving, and stage moves are blocked
-- UI shows a clear assign lock
-
-Assignee must be an **active** staff member tagged with the inquiry’s current owning department.
-
-When a stage move changes owning department, **assignee is cleared** (must re-assign in the new department).
+- **Admin → Inquiries** lists every inquiry and creates new ones.
+- **Sales / Accounts / Engineering → Inquiries** list the ones whose current
+  step they handle.
+- Finished steps can be opened to read; steps not reached yet are locked.
+- The list shows how many open inquiries sit at each step, filters (mine,
+  not assigned, open / completed / lost), search, and assigning straight from
+  the list.
+- Inquiries assigned to a person, and steps waiting for their approval, are
+  on their home screen under My Tasks.
 
 #### Approvals
 
-If Inquiry Settings marks the **current** stage as Approval Required:
+If Inquiry Settings marks a step as needing approval:
 
-- Next-stage is blocked until an approval row exists for that inquiry + stage
-- Approver must be linked staff whose departments include **Management** or **Engineering Department** (matching “Approval Required by”)
-- Approve records `inquiry_stage_approvals` and an activity event; it does **not** auto-advance the stage
-- After approval, Next stage becomes available (still subject to assignment rules)
-
-#### Inquiry detail UX
-
-- Vertical workflow list on the left (current stage highlighted) + Previous / Next
-- Main form: customer, contact, delivery date, quoted line items
-- Notes as a **comment thread** under quoted items
-- Right rail: assign person + activity log
-- Approval banner when the current stage needs / has approval
+- It cannot move on until Management or Engineering (whichever is named)
+  approves it. Whoever must approve can open the inquiry.
+- Changing the step after approval voids the approval; saving it unchanged
+  does not.
 
 #### Sources
 
@@ -350,19 +360,19 @@ Appears in that department’s Inquiries queue
 ### 7.2 Work an inquiry
 
 ```text
-Open inquiry → Assign staff in owning department
+Open inquiry → assign someone from the step's department
         │
         ▼
-Edit details / line items / post Notes comments
+Fill in the step (Save as often as needed)
         │
         ▼
-If Approval Required on current stage → Approve (Management/Engineering)
+If the step needs approval → Management / Engineering approves
         │
         ▼
-Next stage → owning department may change → assignee cleared if so
+Save & Go to Next Step → next department, nobody assigned yet
         │
         ▼
-When stage is an invoice stage → also appears on that dept’s Invoice tab
+… until the Receipt Voucher, which completes the inquiry
 ```
 
 ### 7.3 Multi-company day
@@ -405,7 +415,7 @@ sessions when a password changes (sessions currently last 12 hours).
 | Sign-offs | `signatory_positions`, `document_signoffs` (append-only) |
 | Signed forms | `approval_forms`, `document_counters` (running numbers) |
 | Activity | `staff_activity_logs` |
-| Inquiry CRM | `inquiry_workflow_settings`, `inquiries`, `inquiry_line_items`, `inquiry_stage_events`, `inquiry_comments`, `inquiry_stage_approvals` |
+| Inquiry CRM | `inquiry_workflow_settings`, `inquiries`, `inquiry_stage_records`, `inquiry_line_items`, `inquiry_stage_events`, `inquiry_comments`, `inquiry_stage_approvals` |
 
 Schema and RLS policies: [`src/db/schema.ts`](src/db/schema.ts)  
 SQL access functions: [`drizzle/0000_access_functions.sql`](drizzle/0000_access_functions.sql)
@@ -418,7 +428,9 @@ SQL access functions: [`drizzle/0000_access_functions.sql`](drizzle/0000_access_
 | --- | --- |
 | Org create / list / default | `src/lib/org/` |
 | Company + Inquiry Settings | `src/lib/company-settings/` |
-| Inquiry stages & CRM | `src/lib/inquiries/` |
+| Inquiries: the steps and their rules | `src/lib/inquiries/` |
+| What each inquiry step asks | `src/lib/inquiries/stage-forms.ts` |
+| Look of the screens (buttons, fields, cards, colours) | `src/app/globals.css`, `src/lib/departments/colors.ts` |
 | Visitors | `src/lib/visitors/` |
 | Staff / vacation / activity | `src/lib/staff/`, `src/lib/vacation/`, `src/lib/activity/` |
 | Profile | `src/lib/profile/` |
@@ -451,13 +463,15 @@ Env essentials:
 
 ## 12. What is intentionally not done yet
 
-- Documents behind the pipeline stages (quotation, LPO, job card, delivery note, invoices, receipt)
-  with numbering, VAT and printing. Stages are status only today.
-- Per-company workflows: the nine stages are the same for every company.
+- Printed documents for the inquiry steps (quotation, job card, delivery note, invoices, receipt).
+  Each step records its details and has its number; the printed layouts are not built yet.
+- Customers as records (TRN, address, credit limit) shared between inquiries.
+- Export jobs are marked, but the commercial invoice and packing list are not built.
+- Per-company workflows: the nine steps are the same for every company.
 - Labour card (daily in/out, overtime and the monthly pay summary).
 - Personal Salary / Contract under Account duplicate the HR record and will be replaced by a
   read-only view of it.
-- Login throttling and session revocation (see section 8).
+- Ending other sessions when a password changes.
 - Email / WhatsApp sending, file attachments.
 
 ---

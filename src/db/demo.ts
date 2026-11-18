@@ -32,11 +32,13 @@ import {
   createStaffLoginForUser,
 } from "@/lib/staff/queries";
 import { createVacationRequestForUser } from "@/lib/vacation/queries";
+import { loadDemoInquiries } from "@/db/demo-inquiries";
 
 /**
  * Loads a demo company to look around in and to show people: staff with
  * logins, signatories with signatures, this month's attendance, a leave
- * request and one of each signed form at different stages of approval.
+ * request, one of each signed form at different stages of approval, and
+ * inquiries at different steps of the process.
  *
  * Everything goes through the same code the screens use. It does nothing if
  * the demo company is already there, and refuses to run in production.
@@ -85,13 +87,20 @@ async function main() {
   const [existing] = await admin`
     select 1 from organizations where code = ${ORG}
   `;
-  await admin.end();
   if (!owner) throw new Error("Run `npm run db:setup` first.");
+
   if (existing) {
     console.log("Demo company is already loaded.");
-    return;
+  } else {
+    await loadCompany(owner.id);
   }
+  // Added after the first version of the demo, so loaded on its own.
+  await loadDemoInquiries(admin, owner.id, ORG);
+  await admin.end();
+}
 
+async function loadCompany(ownerId: string) {
+  const owner = { id: ownerId };
   console.log("Loading the demo company...");
   await createOrganizationForUser(owner.id, {
     name: "Al Jazeyah Engineering LLC",
