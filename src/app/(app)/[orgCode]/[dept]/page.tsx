@@ -1,3 +1,4 @@
+import { can } from "@/lib/access/access";
 import { notFound } from "next/navigation";
 import { DepartmentWorkspace } from "@/components/departments/department-workspace";
 import {
@@ -25,14 +26,16 @@ export default async function DepartmentPage({
   const { orgCode, dept } = await params;
   if (!isInquiryWorkflowDepartmentKey(dept)) notFound();
 
-  const { session, org } = await loadOrgPage(orgCode);
+  const { session, org } = await loadOrgPage(orgCode, (access) =>
+    can.openDepartment(access, dept),
+  );
 
   const section = firstParam((await searchParams).section);
   const initialSection: DepartmentSection = isDepartmentSection(section)
     ? section
     : "inquiries";
 
-  // Admin runs the full pipeline; other departments see what they own.
+  // The Admin workspace shows the full pipeline; others what they own.
   const [inquiries, invoiceQueue] = await Promise.all([
     dept === "admin"
       ? listInquiriesForUser(session.userId, org.code)

@@ -10,11 +10,8 @@ import { companyPath } from "@/lib/org/code";
 export function HomeClient() {
   usePageTitle("Select Company");
   const router = useRouter();
-  const {
-    organizations,
-    setDefaultOrganizationId,
-    ready,
-  } = useOrganizations();
+  const { organizations, canCreateOrganizations, setDefaultOrganizationId } =
+    useOrganizations();
   const [addOpen, setAddOpen] = useState(false);
 
   function openCompany(code: string) {
@@ -41,8 +38,7 @@ export function HomeClient() {
   return (
     <main className="flex flex-1 flex-col p-4 sm:p-6">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {ready
-          ? organizations.map((org) => {
+        {organizations.map((org) => {
               const isDefault = Boolean(org.isDefault);
               return (
                 <div
@@ -94,9 +90,9 @@ export function HomeClient() {
                   </button>
                 </div>
               );
-            })
-          : null}
+            })}
 
+        {canCreateOrganizations ? (
         <button
           type="button"
           onClick={() => setAddOpen(true)}
@@ -107,7 +103,15 @@ export function HomeClient() {
           </span>
           <span className="text-sm font-medium">Add company</span>
         </button>
+        ) : null}
       </div>
+
+      {organizations.length === 0 && !canCreateOrganizations ? (
+        <p className="mt-6 text-sm text-zinc-600">
+          Your login is not linked to an active staff record in any company.
+          Ask your administrator.
+        </p>
+      ) : null}
 
       <AddCompanyDialog open={addOpen} onClose={() => setAddOpen(false)} />
     </main>

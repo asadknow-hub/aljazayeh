@@ -15,6 +15,7 @@ import {
 } from "@/lib/inquiries/stages";
 import type { InquiryCreateInput, InquiryView } from "@/lib/inquiries/types";
 import { useServerState } from "@/lib/react/use-server-state";
+import { unwrap } from "@/lib/actions/result";
 
 type InquiriesListPanelProps = {
   orgCode: string;
@@ -65,7 +66,7 @@ export function InquiriesListPanel({
     setError(null);
     setPending(true);
     try {
-      const next = await createInquiryAction(orgCode, form);
+      const next = await unwrap(createInquiryAction(orgCode, form));
       setItems((current) => [next, ...current.filter((item) => item.id !== next.id)]);
       setCreated(next);
       setCreateSuccess(true);

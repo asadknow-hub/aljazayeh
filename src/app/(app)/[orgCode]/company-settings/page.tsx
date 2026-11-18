@@ -1,3 +1,4 @@
+import { can } from "@/lib/access/access";
 import { notFound } from "next/navigation";
 import { CompanySettingsClient } from "@/app/(app)/[orgCode]/company-settings/company-settings-client";
 import { getCompanySettingsForUser } from "@/lib/company-settings/queries";
@@ -13,7 +14,10 @@ export default async function CompanySettingsPage({
   params: Promise<{ orgCode: string }>;
   searchParams: Promise<{ section?: string | string[] }>;
 }) {
-  const { session, org } = await loadOrgPage((await params).orgCode);
+  const { session, org } = await loadOrgPage(
+    (await params).orgCode,
+    can.manageCompany,
+  );
 
   const [settings, workflow] = await Promise.all([
     getCompanySettingsForUser(session.userId, org.code),

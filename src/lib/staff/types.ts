@@ -13,8 +13,18 @@ export type StaffProfileInput = {
   departmentKeys: StaffRoleKey[];
 };
 
-/** Create/update payload used by the Add Staff modal. */
-export type StaffInput = StaffProfileInput;
+export type StaffLoginInput = {
+  username: string;
+  password: string;
+};
+
+/** The few fields other screens need to pick a person from a list. */
+export type StaffOption = {
+  id: string;
+  fullName: string;
+  jobTitle: string;
+  status: StaffStatus;
+};
 
 export type StaffSalaryInput = {
   salaryAmount: string;
@@ -37,6 +47,10 @@ export type StaffView = StaffProfileInput &
   StaffContractInput & {
     id: string;
     organizationId: string;
+    /** Company administrator. */
+    isAdmin: boolean;
+    /** Username this person signs in with, or null if they have no login. */
+    loginUsername: string | null;
     createdAt: string;
     updatedAt: string;
   };
@@ -51,7 +65,7 @@ export const STAFF_DETAIL_SECTIONS = [
   "salary",
   "contract",
   "vacation",
-  "login-activity",
+  "login",
   "actions",
 ] as const;
 

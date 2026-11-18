@@ -1,5 +1,6 @@
 import { parseAppDateTime } from "@/lib/datetime/format";
 import type { VisitorLogInput, VisitorPurpose } from "@/lib/visitors/types";
+import { UserError } from "@/lib/errors";
 
 const PURPOSE_SET = new Set<VisitorPurpose>([
   "inquiry",
@@ -25,17 +26,17 @@ function parseVisitedAt(dateValue: string, timeValue: string): Date {
   const visitTime = clean(timeValue);
 
   if (!isIsoDate(visitDate) || !isLocalTime(visitTime)) {
-    throw new Error("Select a valid date and time.");
+    throw new UserError("Select a valid date and time.");
   }
 
   const year = Number(visitDate.slice(0, 4));
   if (year < 1900 || year > 2100) {
-    throw new Error("Year must be a 4-digit year.");
+    throw new UserError("Year must be a 4-digit year.");
   }
 
   const date = parseAppDateTime(visitDate, visitTime);
   if (Number.isNaN(date.getTime())) {
-    throw new Error("Select a valid date and time.");
+    throw new UserError("Select a valid date and time.");
   }
   return date;
 }
@@ -52,12 +53,12 @@ export function normalizeVisitorLogInput(
 ): NormalizedVisitorLog {
   const fullName = clean(input.fullName);
   if (!fullName) {
-    throw new Error("Enter the visitor name.");
+    throw new UserError("Enter the visitor name.");
   }
 
   const purpose = input.purpose;
   if (!PURPOSE_SET.has(purpose)) {
-    throw new Error("Select a purpose.");
+    throw new UserError("Select a purpose.");
   }
 
   return {

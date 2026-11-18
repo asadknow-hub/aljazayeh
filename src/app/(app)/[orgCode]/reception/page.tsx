@@ -1,10 +1,11 @@
+import { can } from "@/lib/access/access";
 import { ReceptionClient } from "@/app/(app)/[orgCode]/reception/reception-client";
 import { firstParam, loadOrgPage } from "@/lib/org/page";
 import {
   isReceptionSection,
   type ReceptionSection,
 } from "@/lib/reception/sections";
-import { listStaffForUser } from "@/lib/staff/queries";
+import { listStaffOptionsForUser } from "@/lib/staff/queries";
 import { listOrgVacationRequestsForUser } from "@/lib/vacation/queries";
 import { listVisitorLogsForUser } from "@/lib/visitors/queries";
 
@@ -17,10 +18,13 @@ export default async function ReceptionPage({
   params: Promise<{ orgCode: string }>;
   searchParams: Promise<{ section?: string | string[] }>;
 }) {
-  const { session, org } = await loadOrgPage((await params).orgCode);
+  const { session, org } = await loadOrgPage(
+    (await params).orgCode,
+    can.useReception,
+  );
 
   const [staff, vacations, visitors] = await Promise.all([
-    listStaffForUser(session.userId, org.code),
+    listStaffOptionsForUser(session.userId, org.code),
     listOrgVacationRequestsForUser(session.userId, org.code),
     listVisitorLogsForUser(session.userId, org.code),
   ]);
@@ -33,12 +37,7 @@ export default async function ReceptionPage({
   return (
     <ReceptionClient
       org={org}
-      staffOptions={staff.map((item) => ({
-        id: item.id,
-        fullName: item.fullName,
-        jobTitle: item.jobTitle,
-        status: item.status,
-      }))}
+      staffOptions={staff}
       initialVacations={vacations}
       initialVisitors={visitors}
       initialSection={initialSection}

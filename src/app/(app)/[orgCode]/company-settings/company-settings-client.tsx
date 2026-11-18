@@ -19,6 +19,7 @@ import {
   type InquiryWorkflowStageConfig,
 } from "@/lib/inquiries/stages";
 import { companyPath } from "@/lib/org/code";
+import { unwrap } from "@/lib/actions/result";
 
 type FieldKey = Exclude<
   keyof CompanySettingsView,
@@ -209,7 +210,7 @@ export function CompanySettingsClient({
     setPending(true);
     try {
       if (section === "company") {
-        const next = await saveCompanySettingsAction(form.organizationCode, {
+        const next = await unwrap(saveCompanySettingsAction(form.organizationCode, {
           companyName: form.companyName,
           telephoneNumber: form.telephoneNumber,
           phoneNumber: form.phoneNumber,
@@ -220,7 +221,7 @@ export function CompanySettingsClient({
           facebookUrl: form.facebookUrl,
           adminName: form.adminName,
           adminEmail: form.adminEmail,
-        });
+        }));
         setForm(next);
         setSaved(next);
         refreshOrganizations(
@@ -232,10 +233,10 @@ export function CompanySettingsClient({
         );
         showToast("Company settings saved");
       } else {
-        const next = await saveInquiryWorkflowMapAction(
+        const next = await unwrap(saveInquiryWorkflowMapAction(
           form.organizationCode,
           workflow,
-        );
+        ));
         setWorkflow(next);
         setSavedWorkflow(next);
         showToast("Inquiry settings saved");
@@ -358,8 +359,7 @@ export function CompanySettingsClient({
                     Who is the Admin of this company
                   </h3>
                   <p className="mt-1 text-sm text-zinc-600">
-                    Linked to your account settings — changing either side
-                    updates the other.
+                    The main contact person for this company.
                   </p>
                 </div>
 

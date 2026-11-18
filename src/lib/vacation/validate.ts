@@ -1,4 +1,5 @@
 import type { LeaveType, VacationRequestInput } from "@/lib/vacation/types";
+import { UserError } from "@/lib/errors";
 
 const LEAVE_TYPE_SET = new Set<LeaveType>([
   "annual",
@@ -26,7 +27,7 @@ export function normalizeVacationRequestInput(
 ): NormalizedVacationRequest {
   const staffId = clean(input.staffId);
   if (!staffId) {
-    throw new Error("Select an employee.");
+    throw new UserError("Select an employee.");
   }
 
   const selectedDates = Array.from(
@@ -38,17 +39,17 @@ export function normalizeVacationRequestInput(
   ).sort();
 
   if (selectedDates.length === 0) {
-    throw new Error("Select at least one vacation day.");
+    throw new UserError("Select at least one vacation day.");
   }
 
   const leaveType = input.leaveType;
   if (!LEAVE_TYPE_SET.has(leaveType)) {
-    throw new Error("Select a leave type.");
+    throw new UserError("Select a leave type.");
   }
 
   const reason = clean(input.reason);
   if (leaveType === "other" && !reason) {
-    throw new Error("Enter a reason for Other leave.");
+    throw new UserError("Enter a reason for Other leave.");
   }
 
   return {

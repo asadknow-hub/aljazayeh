@@ -1,11 +1,8 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { runAction } from "@/lib/actions/result";
+import { revalidateCompanyPages } from "@/lib/actions/revalidate";
 import { requireSession } from "@/lib/auth/session";
-import type {
-  InquiryCreateInput,
-  InquiryUpdateInput,
-} from "@/lib/inquiries/types";
 import {
   addInquiryCommentForUser,
   approveInquiryStageForUser,
@@ -20,49 +17,37 @@ import type {
   InquiryWorkflowDepartmentKey,
   InquiryWorkflowMap,
 } from "@/lib/inquiries/stages";
-import { normalizeOrgCode } from "@/lib/org/code";
-
-function revalidateInquiryPaths(orgCode: string, inquiryId?: string) {
-  const code = normalizeOrgCode(orgCode);
-  revalidatePath(`/${code}`);
-  revalidatePath(`/${code}/admin`);
-  revalidatePath(`/${code}/sales`);
-  revalidatePath(`/${code}/accounts`);
-  revalidatePath(`/${code}/engineering`);
-  revalidatePath(`/${code}/reception`);
-  revalidatePath(`/${code}/company-settings`);
-  if (inquiryId) {
-    revalidatePath(`/${code}/admin/inquiries/${inquiryId}`);
-    revalidatePath(`/${code}/sales/inquiries/${inquiryId}`);
-    revalidatePath(`/${code}/accounts/inquiries/${inquiryId}`);
-    revalidatePath(`/${code}/engineering/inquiries/${inquiryId}`);
-  }
-}
+import type {
+  InquiryCreateInput,
+  InquiryUpdateInput,
+} from "@/lib/inquiries/types";
 
 export async function saveInquiryWorkflowMapAction(
   orgCode: string,
   input: InquiryWorkflowMap,
 ) {
-  const session = await requireSession();
-  const saved = await saveInquiryWorkflowMapForUser(
-    session.userId,
-    orgCode,
-    input,
-  );
-  revalidateInquiryPaths(orgCode);
-  return saved;
+  return runAction(async () => {
+    const session = await requireSession();
+    const saved = await saveInquiryWorkflowMapForUser(
+      session.userId,
+      orgCode,
+      input,
+    );
+    revalidateCompanyPages();
+    return saved;
+  });
 }
 
 export async function createInquiryAction(
   orgCode: string,
   input: InquiryCreateInput,
 ) {
-  const session = await requireSession();
-  const created = await createInquiryForUser(session.userId, orgCode, input, {
-    source: "admin",
+  return runAction(async () => {
+    const session = await requireSession();
+    const created = await createInquiryForUser(session.userId, orgCode, input);
+    revalidateCompanyPages();
+    return created;
   });
-  revalidateInquiryPaths(orgCode, created.id);
-  return created;
 }
 
 export async function updateInquiryAction(
@@ -70,15 +55,17 @@ export async function updateInquiryAction(
   inquiryId: string,
   input: InquiryUpdateInput,
 ) {
-  const session = await requireSession();
-  const updated = await updateInquiryForUser(
-    session.userId,
-    orgCode,
-    inquiryId,
-    input,
-  );
-  revalidateInquiryPaths(orgCode, inquiryId);
-  return updated;
+  return runAction(async () => {
+    const session = await requireSession();
+    const updated = await updateInquiryForUser(
+      session.userId,
+      orgCode,
+      inquiryId,
+      input,
+    );
+    revalidateCompanyPages();
+    return updated;
+  });
 }
 
 export async function listAssignableStaffAction(
@@ -98,15 +85,17 @@ export async function assignInquiryAction(
   inquiryId: string,
   staffId: string,
 ) {
-  const session = await requireSession();
-  const updated = await assignInquiryForUser(
-    session.userId,
-    orgCode,
-    inquiryId,
-    staffId,
-  );
-  revalidateInquiryPaths(orgCode, inquiryId);
-  return updated;
+  return runAction(async () => {
+    const session = await requireSession();
+    const updated = await assignInquiryForUser(
+      session.userId,
+      orgCode,
+      inquiryId,
+      staffId,
+    );
+    revalidateCompanyPages();
+    return updated;
+  });
 }
 
 export async function moveInquiryStageAction(
@@ -114,29 +103,33 @@ export async function moveInquiryStageAction(
   inquiryId: string,
   direction: "previous" | "next",
 ) {
-  const session = await requireSession();
-  const updated = await moveInquiryStageForUser(
-    session.userId,
-    orgCode,
-    inquiryId,
-    direction,
-  );
-  revalidateInquiryPaths(orgCode, inquiryId);
-  return updated;
+  return runAction(async () => {
+    const session = await requireSession();
+    const updated = await moveInquiryStageForUser(
+      session.userId,
+      orgCode,
+      inquiryId,
+      direction,
+    );
+    revalidateCompanyPages();
+    return updated;
+  });
 }
 
 export async function approveInquiryStageAction(
   orgCode: string,
   inquiryId: string,
 ) {
-  const session = await requireSession();
-  const updated = await approveInquiryStageForUser(
-    session.userId,
-    orgCode,
-    inquiryId,
-  );
-  revalidateInquiryPaths(orgCode, inquiryId);
-  return updated;
+  return runAction(async () => {
+    const session = await requireSession();
+    const updated = await approveInquiryStageForUser(
+      session.userId,
+      orgCode,
+      inquiryId,
+    );
+    revalidateCompanyPages();
+    return updated;
+  });
 }
 
 export async function addInquiryCommentAction(
@@ -144,13 +137,15 @@ export async function addInquiryCommentAction(
   inquiryId: string,
   body: string,
 ) {
-  const session = await requireSession();
-  const updated = await addInquiryCommentForUser(
-    session.userId,
-    orgCode,
-    inquiryId,
-    body,
-  );
-  revalidateInquiryPaths(orgCode, inquiryId);
-  return updated;
+  return runAction(async () => {
+    const session = await requireSession();
+    const updated = await addInquiryCommentForUser(
+      session.userId,
+      orgCode,
+      inquiryId,
+      body,
+    );
+    revalidateCompanyPages();
+    return updated;
+  });
 }

@@ -37,28 +37,32 @@ npm run db:setup
 npm run dev
 ```
 
-Login: `admin` / `admin`
+Development login: `admin` / `admin` (the owner). In production, set `OWNER_USERNAME` and
+`OWNER_PASSWORD` before seeding; `admin` / `admin` is refused there.
 
 ## Canonical model
 
 ```text
-Organization (tenant)
-  └── Membership (user ↔ org)
-        └── Roles → Permissions (RBAC)
+Company (tenant)
+  └── Staff member ── optional login (user)
+        ├── departments  → what they can open and do
+        └── administrator flag → company settings and logins
 ```
 
-- URL: `/{ORG_CODE}`
-- RLS session GUC: `app.user_id`
-- Helper: `withTenantContext(userId, ...)`
+- A person can use a company when they have an **active staff record with a login** there.
+- Every rule about who may do what is in `src/lib/access/access.ts`.
+- The database (Row Level Security) keeps companies apart and blocks privilege escalation.
+- URL: `/{ORG_CODE}`; queries run inside `withTenantContext(userId, ...)`.
 
 Modules must follow [src/db/DEPARTMENT_CONTRACT.md](src/db/DEPARTMENT_CONTRACT.md).
 
 ## Scripts
 
 - `npm run check` — lint + typecheck
+- `npm test` — permission and workflow tests against the database in `.env.local`
 - `npm run db:generate` — write a migration from changes in `src/db/schema.ts`
 - `npm run db:migrate` — apply migrations, provision the app role, verify every table has RLS
-- `npm run db:seed` — seed admin + permission catalog
+- `npm run db:seed` — create the owner login
 - `npm run db:setup` — migrate + seed
 
 Changing the database: see [src/db/DEPARTMENT_CONTRACT.md](src/db/DEPARTMENT_CONTRACT.md) §4.

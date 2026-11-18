@@ -16,6 +16,7 @@ import {
   type VisitorLogView,
   type VisitorPurpose,
 } from "@/lib/visitors/types";
+import { unwrap } from "@/lib/actions/result";
 
 type VisitorsPanelProps = {
   orgCode: string;
@@ -69,7 +70,7 @@ export function VisitorsPanel({
     setError(null);
     setPending(true);
     try {
-      const created = await createVisitorLogAction(orgCode, form);
+      const created = await unwrap(createVisitorLogAction(orgCode, form));
       setVisitors((current) => [
         created,
         ...current.filter((item) => item.id !== created.id),

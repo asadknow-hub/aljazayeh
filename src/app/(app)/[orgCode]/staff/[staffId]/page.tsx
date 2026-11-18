@@ -1,3 +1,4 @@
+import { can } from "@/lib/access/access";
 import { notFound } from "next/navigation";
 import { StaffDetailClient } from "@/app/(app)/[orgCode]/staff/[staffId]/staff-detail-client";
 import { firstParam, loadOrgPage } from "@/lib/org/page";
@@ -18,7 +19,7 @@ export default async function StaffDetailPage({
   searchParams: Promise<{ section?: string | string[] }>;
 }) {
   const { orgCode, staffId } = await params;
-  const { session, org } = await loadOrgPage(orgCode);
+  const { session, org } = await loadOrgPage(orgCode, can.manageStaff);
 
   const staff = await getStaffForUser(session.userId, org.code, staffId);
   if (!staff) notFound();
@@ -40,6 +41,10 @@ export default async function StaffDetailPage({
       initialStaff={staff}
       initialVacations={vacations}
       initialSection={initialSection}
+      viewer={{
+        staffId: org.access.staffId,
+        canManageCompany: can.manageCompany(org.access),
+      }}
     />
   );
 }

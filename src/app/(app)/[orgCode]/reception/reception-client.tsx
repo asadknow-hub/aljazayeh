@@ -27,6 +27,7 @@ import {
   type VacationRequestView,
 } from "@/lib/vacation/types";
 import type { VisitorLogView } from "@/lib/visitors/types";
+import { unwrap } from "@/lib/actions/result";
 
 type StaffOption = {
   id: string;
@@ -132,7 +133,7 @@ export function ReceptionClient({
     setError(null);
     setPending(true);
     try {
-      const created = await createVacationRequestAction(org.code, form);
+      const created = await unwrap(createVacationRequestAction(org.code, form));
       setVacations((current) => [
         created,
         ...current.filter((item) => item.id !== created.id),

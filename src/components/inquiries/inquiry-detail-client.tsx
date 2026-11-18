@@ -25,6 +25,7 @@ import {
   workflowDepartmentLabel,
 } from "@/lib/inquiries/stages";
 import type { InquiryCreateInput, InquiryView } from "@/lib/inquiries/types";
+import { unwrap } from "@/lib/actions/result";
 
 type StaffOption = { id: string; fullName: string; jobTitle: string };
 
@@ -51,6 +52,7 @@ type InquiryDetailClientProps = {
 export function InquiryDetailClient({
   orgCode,
   initialInquiry,
+  backHref,
 }: InquiryDetailClientProps) {
   usePageTitle(initialInquiry.customerName);
   const router = useRouter();
@@ -65,7 +67,9 @@ export function InquiryDetailClient({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const locked = !inquiry.assignedStaffId;
+  const unassigned = !inquiry.assignedStaffId;
+  // Work starts once someone is assigned, and only for the owning department.
+  const locked = unassigned || !inquiry.canWork;
 
   // A fresh copy from the server replaces local edits.
   const [seenInitial, setSeenInitial] = useState(initialInquiry);
@@ -101,7 +105,7 @@ export function InquiryDetailClient({
     setError(null);
     setPending(true);
     try {
-      const updated = await updateInquiryAction(orgCode, inquiry.id, form);
+      const updated = await unwrap(updateInquiryAction(orgCode, inquiry.id, form));
       setInquiry(updated);
       showToast("Inquiry saved");
       router.refresh();
@@ -117,11 +121,11 @@ export function InquiryDetailClient({
     setError(null);
     setPending(true);
     try {
-      const updated = await assignInquiryAction(
+      const updated = await unwrap(assignInquiryAction(
         orgCode,
         inquiry.id,
         assignStaffId,
-      );
+      ));
       setInquiry(updated);
       showToast("Assigned");
       router.refresh();
@@ -137,16 +141,27 @@ export function InquiryDetailClient({
     setError(null);
     setPending(true);
     try {
-      const updated = await moveInquiryStageAction(
+      const updated = await unwrap(moveInquiryStageAction(
         orgCode,
         inquiry.id,
         direction,
+      ));
+      const handedOver =
+        updated.owningDepartmentKey !== inquiry.owningDepartmentKey;
+      showToast(
+        handedOver
+          ? `Sent to ${workflowDepartmentLabel(updated.owningDepartmentKey)}`
+          : direction === "next"
+            ? "Moved to next stage"
+            : "Moved to previous stage",
       );
+      // Once another department owns it, it leaves this person's queue.
+      if (handedOver && !updated.canWork) {
+        router.push(backHref);
+        return;
+      }
       setInquiry(updated);
       setAssignStaffId(updated.assignedStaffId ?? "");
-      showToast(
-        direction === "next" ? "Moved to next stage" : "Moved to previous stage",
-      );
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not move stage.");
@@ -156,11 +171,11 @@ export function InquiryDetailClient({
   }
 
   async function onApprove() {
-    if (pending || locked) return;
+    if (pending || unassigned) return;
     setError(null);
     setPending(true);
     try {
-      const updated = await approveInquiryStageAction(orgCode, inquiry.id);
+      const updated = await unwrap(approveInquiryStageAction(orgCode, inquiry.id));
       setInquiry(updated);
       showToast("Stage approved");
       router.refresh();
@@ -186,11 +201,11 @@ export function InquiryDetailClient({
     setError(null);
     setPending(true);
     try {
-      const updated = await addInquiryCommentAction(
+      const updated = await unwrap(addInquiryCommentAction(
         orgCode,
         inquiry.id,
         commentDraft,
-      );
+      ));
       setInquiry(updated);
       setCommentDraft("");
       showToast("Comment posted");
@@ -246,7 +261,7 @@ export function InquiryDetailClient({
                 !inquiry.currentStageApproved ? (
                   <button
                     type="button"
-                    disabled={pending || locked}
+                    disabled={pending || unassigned}
                     onClick={onApprove}
                     className="mt-2 w-full border border-amber-400 bg-white px-2 py-1.5 text-sm font-medium text-amber-950 hover:bg-amber-100 disabled:opacity-45"
                   >
@@ -372,16 +387,22 @@ export function InquiryDetailClient({
         </form>
 
         <aside className="flex w-full shrink-0 flex-col gap-4 lg:w-72">
+          {!inquiry.canWork ? (
+            <p className="border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
+              View only. This inquiry is handled by{" "}
+              {workflowDepartmentLabel(inquiry.owningDepartmentKey)}.
+            </p>
+          ) : null}
           <div
             className={[
               "border p-4 sm:p-5",
-              locked
+              unassigned
                 ? "border-red-400 bg-red-50"
                 : "border-zinc-300 bg-white",
             ].join(" ")}
           >
             <div className="flex items-start gap-2">
-              {locked ? (
+              {unassigned ? (
                 <span
                   aria-hidden
                   className="mt-0.5 text-base font-bold text-red-600"
@@ -393,12 +414,12 @@ export function InquiryDetailClient({
                 <h3
                   className={[
                     "font-display text-sm font-semibold",
-                    locked ? "text-red-800" : "text-zinc-900",
+                    unassigned ? "text-red-800" : "text-zinc-900",
                   ].join(" ")}
                 >
                   Assign person
                 </h3>
-                {locked ? (
+                {unassigned ? (
                   <p className="mt-1 text-sm text-red-700">
                     Please assign yourself or someone to start on this.
                   </p>
@@ -417,7 +438,7 @@ export function InquiryDetailClient({
                 onChange={(event) => setAssignStaffId(event.target.value)}
                 className={[
                   "w-full border bg-white px-3 py-2 text-sm outline-none focus:border-header",
-                  locked ? "border-red-300" : "border-zinc-300",
+                  unassigned ? "border-red-300" : "border-zinc-300",
                 ].join(" ")}
               >
                 <option value="">Select staff</option>
@@ -430,7 +451,7 @@ export function InquiryDetailClient({
               </select>
               <button
                 type="button"
-                disabled={pending || !assignStaffId}
+                disabled={pending || !assignStaffId || !inquiry.canAssign}
                 onClick={onAssign}
                 className="bg-header px-3 py-1.5 text-sm font-medium text-header-fg hover:bg-header-control disabled:opacity-45"
               >
@@ -441,7 +462,7 @@ export function InquiryDetailClient({
               <p
                 className={[
                   "mt-2 text-xs",
-                  locked ? "text-red-600" : "text-zinc-500",
+                  unassigned ? "text-red-600" : "text-zinc-500",
                 ].join(" ")}
               >
                 No staff assigned to this department role yet.

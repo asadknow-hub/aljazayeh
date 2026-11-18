@@ -1,37 +1,35 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { runAction } from "@/lib/actions/result";
+import { revalidateCompanyPages } from "@/lib/actions/revalidate";
 import { requireSession } from "@/lib/auth/session";
-import { normalizeOrgCode } from "@/lib/org/code";
 import {
   createStaffForUser,
+  createStaffLoginForUser,
   deleteStaffForUser,
+  resetStaffPasswordForUser,
+  setStaffAdminForUser,
   updateStaffContractForUser,
   updateStaffProfileForUser,
   updateStaffSalaryForUser,
 } from "@/lib/staff/queries";
 import type {
   StaffContractInput,
-  StaffInput,
+  StaffLoginInput,
   StaffProfileInput,
   StaffSalaryInput,
 } from "@/lib/staff/types";
 
-function revalidateStaff(orgCode: string, staffId?: string) {
-  const code = normalizeOrgCode(orgCode);
-  revalidatePath(`/${code}`);
-  revalidatePath(`/${code}/staff`);
-  revalidatePath(`/${code}/all-logs`);
-  if (staffId) {
-    revalidatePath(`/${code}/staff/${staffId}`);
-  }
-}
-
-export async function createStaffAction(orgCode: string, input: StaffInput) {
-  const session = await requireSession();
-  const created = await createStaffForUser(session.userId, orgCode, input);
-  revalidateStaff(orgCode, created.id);
-  return created;
+export async function createStaffAction(
+  orgCode: string,
+  input: StaffProfileInput,
+) {
+  return runAction(async () => {
+    const session = await requireSession();
+    const created = await createStaffForUser(session.userId, orgCode, input);
+    revalidateCompanyPages();
+    return created;
+  });
 }
 
 export async function updateStaffProfileAction(
@@ -39,15 +37,17 @@ export async function updateStaffProfileAction(
   staffId: string,
   input: StaffProfileInput,
 ) {
-  const session = await requireSession();
-  const updated = await updateStaffProfileForUser(
-    session.userId,
-    orgCode,
-    staffId,
-    input,
-  );
-  revalidateStaff(orgCode, staffId);
-  return updated;
+  return runAction(async () => {
+    const session = await requireSession();
+    const updated = await updateStaffProfileForUser(
+      session.userId,
+      orgCode,
+      staffId,
+      input,
+    );
+    revalidateCompanyPages();
+    return updated;
+  });
 }
 
 export async function updateStaffSalaryAction(
@@ -55,15 +55,17 @@ export async function updateStaffSalaryAction(
   staffId: string,
   input: StaffSalaryInput,
 ) {
-  const session = await requireSession();
-  const updated = await updateStaffSalaryForUser(
-    session.userId,
-    orgCode,
-    staffId,
-    input,
-  );
-  revalidateStaff(orgCode, staffId);
-  return updated;
+  return runAction(async () => {
+    const session = await requireSession();
+    const updated = await updateStaffSalaryForUser(
+      session.userId,
+      orgCode,
+      staffId,
+      input,
+    );
+    revalidateCompanyPages();
+    return updated;
+  });
 }
 
 export async function updateStaffContractAction(
@@ -71,20 +73,71 @@ export async function updateStaffContractAction(
   staffId: string,
   input: StaffContractInput,
 ) {
-  const session = await requireSession();
-  const updated = await updateStaffContractForUser(
-    session.userId,
-    orgCode,
-    staffId,
-    input,
-  );
-  revalidateStaff(orgCode, staffId);
-  return updated;
+  return runAction(async () => {
+    const session = await requireSession();
+    const updated = await updateStaffContractForUser(
+      session.userId,
+      orgCode,
+      staffId,
+      input,
+    );
+    revalidateCompanyPages();
+    return updated;
+  });
+}
+
+export async function createStaffLoginAction(
+  orgCode: string,
+  staffId: string,
+  input: StaffLoginInput,
+) {
+  return runAction(async () => {
+    const session = await requireSession();
+    const updated = await createStaffLoginForUser(
+      session.userId,
+      orgCode,
+      staffId,
+      input,
+    );
+    revalidateCompanyPages();
+    return updated;
+  });
+}
+
+export async function resetStaffPasswordAction(
+  orgCode: string,
+  staffId: string,
+  password: string,
+) {
+  return runAction(async () => {
+    const session = await requireSession();
+    await resetStaffPasswordForUser(session.userId, orgCode, staffId, password);
+    revalidateCompanyPages();
+  });
+}
+
+export async function setStaffAdminAction(
+  orgCode: string,
+  staffId: string,
+  isAdmin: boolean,
+) {
+  return runAction(async () => {
+    const session = await requireSession();
+    const updated = await setStaffAdminForUser(
+      session.userId,
+      orgCode,
+      staffId,
+      isAdmin,
+    );
+    revalidateCompanyPages();
+    return updated;
+  });
 }
 
 export async function deleteStaffAction(orgCode: string, staffId: string) {
-  const session = await requireSession();
-  await deleteStaffForUser(session.userId, orgCode, staffId);
-  revalidateStaff(orgCode);
-  return { ok: true as const };
+  return runAction(async () => {
+    const session = await requireSession();
+    await deleteStaffForUser(session.userId, orgCode, staffId);
+    revalidateCompanyPages();
+  });
 }

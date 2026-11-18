@@ -6,6 +6,7 @@ import {
   staffActivityLogs,
   staffMembers,
 } from "@/db/schema";
+import { can } from "@/lib/access/access";
 import type { StaffActivityLogView } from "@/lib/activity/types";
 import { resolveOrg } from "@/lib/org/resolve";
 
@@ -15,7 +16,7 @@ export async function listStaffActivityLogsForUser(
 ): Promise<StaffActivityLogView[]> {
   return withTenantContext(userId, async (tx) => {
     const org = await resolveOrg(tx, userId, orgCode);
-    if (!org) return [];
+    if (!org || !can.viewActivityLog(org.access)) return [];
 
     const rows = await tx
       .select({

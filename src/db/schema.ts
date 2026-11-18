@@ -39,10 +39,20 @@ const isSelf = (column: string) =>
 const isOrgMember = (column = "organization_id") =>
   sql.raw(`app_user_is_org_member(${column})`);
 
+const isOrgAdmin = (column = "organization_id") =>
+  sql.raw(`app_user_is_org_admin(${column})`);
+
+const canManageStaff = (column = "organization_id") =>
+  sql.raw(`app_user_can_manage_staff(${column})`);
+
 /** For child tables that reach their company through a parent row. */
-const viaParent = (parentTable: string, foreignKey: string) =>
+const viaParent = (
+  parentTable: string,
+  foreignKey: string,
+  check = "app_user_is_org_member",
+) =>
   sql.raw(
-    `exists (select 1 from ${parentTable} p where p.id = ${foreignKey} and app_user_is_org_member(p.organization_id))`,
+    `exists (select 1 from ${parentTable} p where p.id = ${foreignKey} and ${check}(p.organization_id))`,
   );
 
 const allowSelect = (name: string, check: PolicyCheck) =>
@@ -56,9 +66,14 @@ const allowDelete = (name: string, check: PolicyCheck) =>
 const allowAll = (name: string, check: PolicyCheck) =>
   pgPolicy(name, { for: "all", using: check, withCheck: check });
 
-/** Full read/write for members of the row's company. */
-const orgMemberAccess = (table: string) => [
-  allowAll(`${table}_member_all`, isOrgMember()),
+/**
+ * Members of the row's company may read, add and change rows; nobody deletes
+ * them. Who may do what inside a company is decided in src/lib/access.
+ */
+const orgMemberRecords = (table: string) => [
+  allowSelect(`${table}_member_select`, isOrgMember()),
+  allowInsert(`${table}_member_insert`, isOrgMember()),
+  allowUpdate(`${table}_member_update`, isOrgMember()),
 ];
 
 export const users = pgTable("users", {
@@ -68,6 +83,8 @@ export const users = pgTable("users", {
   email: text("email").notNull().default(""),
   passwordHash: text("password_hash").notNull(),
   isActive: boolean("is_active").notNull().default(true),
+  /** May create companies. Everyone else only works inside companies they belong to. */
+  isPlatformAdmin: boolean("is_platform_admin").notNull().default(false),
   ...timestamps,
 }, (table) => [
   uniqueIndex("users_username_uidx").on(table.username),
@@ -94,8 +111,8 @@ export const userLoginEvents = pgTable(
       table.userId,
       table.occurredAt,
     ),
+    // Rows are written by app_record_login() only.
     allowSelect("user_login_events_self_select", isSelf("user_id")),
-    allowInsert("user_login_events_self_insert", isSelf("user_id")),
   ],
 );
 
@@ -140,10 +157,10 @@ export const organizations = pgTable("organizations", {
 }, (table) => [
   uniqueIndex("organizations_code_uidx").on(table.code),
   allowSelect("organizations_member_select", isOrgMember("id")),
-  allowUpdate("organizations_member_update", isOrgMember("id")),
+  allowUpdate("organizations_admin_update", isOrgAdmin("id")),
   allowInsert(
-    "organizations_authenticated_insert",
-    sql.raw("app_current_user_id() is not null"),
+    "organizations_platform_admin_insert",
+    sql.raw("app_is_platform_admin()"),
   ),
 ]);
 
@@ -162,104 +179,11 @@ export const organizationSettings = pgTable("organization_settings", {
   adminName: text("admin_name").notNull().default(""),
   adminEmail: text("admin_email").notNull().default(""),
   ...timestamps,
-}, () => [...orgMemberAccess("organization_settings")]);
-
-export const memberships = pgTable("memberships", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  organizationId: uuid("organization_id")
-    .notNull()
-    .references(() => organizations.id, { onDelete: "cascade" }),
-  ...timestamps,
-}, (table) => [
-  uniqueIndex("memberships_user_org_uidx").on(
-    table.userId,
-    table.organizationId,
-  ),
-  index("memberships_org_idx").on(table.organizationId),
-  index("memberships_user_idx").on(table.userId),
-  allowSelect(
-    "memberships_member_select",
-    sql.raw(
-      "app_user_is_org_member(organization_id) or user_id = app_current_user_id()",
-    ),
-  ),
-  // First membership of a new company goes through app_insert_org_membership().
-  allowInsert("memberships_member_insert", isOrgMember()),
-  allowUpdate("memberships_member_update", isOrgMember()),
-  allowDelete("memberships_member_delete", isOrgMember()),
+}, () => [
+  allowSelect("organization_settings_member_select", isOrgMember()),
+  allowInsert("organization_settings_admin_insert", isOrgAdmin()),
+  allowUpdate("organization_settings_admin_update", isOrgAdmin()),
 ]);
-
-export const permissions = pgTable("permissions", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  key: text("key").notNull(),
-  description: text("description").notNull().default(""),
-  ...timestamps,
-}, (table) => [
-  uniqueIndex("permissions_key_uidx").on(table.key),
-  allowSelect(
-    "permissions_read_authenticated",
-    sql.raw("app_current_user_id() is not null"),
-  ),
-]);
-
-export const roles = pgTable("roles", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  organizationId: uuid("organization_id")
-    .notNull()
-    .references(() => organizations.id, { onDelete: "cascade" }),
-  key: text("key").notNull(),
-  name: text("name").notNull(),
-  isSystem: boolean("is_system").notNull().default(false),
-  ...timestamps,
-}, (table) => [
-  uniqueIndex("roles_org_key_uidx").on(table.organizationId, table.key),
-  index("roles_org_idx").on(table.organizationId),
-  ...orgMemberAccess("roles"),
-]);
-
-export const rolePermissions = pgTable(
-  "role_permissions",
-  {
-    roleId: uuid("role_id")
-      .notNull()
-      .references(() => roles.id, { onDelete: "cascade" }),
-    permissionId: uuid("permission_id")
-      .notNull()
-      .references(() => permissions.id, { onDelete: "cascade" }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.roleId, table.permissionId] }),
-    allowAll("role_permissions_member_all", viaParent("roles", "role_id")),
-  ],
-);
-
-export const membershipRoles = pgTable(
-  "membership_roles",
-  {
-    membershipId: uuid("membership_id")
-      .notNull()
-      .references(() => memberships.id, { onDelete: "cascade" }),
-    roleId: uuid("role_id")
-      .notNull()
-      .references(() => roles.id, { onDelete: "cascade" }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.membershipId, table.roleId] }),
-    allowAll(
-      "membership_roles_member_all",
-      viaParent("memberships", "membership_id"),
-    ),
-  ],
-);
 
 export const userPreferences = pgTable("user_preferences", {
   userId: uuid("user_id")
@@ -276,7 +200,11 @@ export const userPreferences = pgTable("user_preferences", {
   allowAll("user_preferences_self", isSelf("user_id")),
 ]);
 
-/** Org-scoped staff directory (HR module). */
+/**
+ * Everyone who works for a company. A staff record with a linked login
+ * (`userId`) and status "active" is what gives that person access to the
+ * company; their departments decide what they can do in it.
+ */
 export const staffMembers = pgTable(
   "staff_members",
   {
@@ -293,6 +221,8 @@ export const staffMembers = pgTable(
     jobTitle: text("job_title").notNull().default(""),
     employeeCode: text("employee_code").notNull().default(""),
     status: text("status").notNull().default("active"),
+    /** Company administrator: settings, staff logins, everything. */
+    isAdmin: boolean("is_admin").notNull().default(false),
     notes: text("notes").notNull().default(""),
     salaryAmount: numeric("salary_amount", { precision: 14, scale: 2 })
       .notNull()
@@ -315,7 +245,11 @@ export const staffMembers = pgTable(
       table.organizationId,
       table.userId,
     ),
-    ...orgMemberAccess("staff_members"),
+    index("staff_members_user_idx").on(table.userId),
+    allowSelect("staff_members_member_select", isOrgMember()),
+    allowInsert("staff_members_manager_insert", canManageStaff()),
+    allowUpdate("staff_members_manager_update", canManageStaff()),
+    allowDelete("staff_members_manager_delete", canManageStaff()),
   ],
 );
 
@@ -334,9 +268,17 @@ export const staffDepartmentAssignments = pgTable(
   (table) => [
     primaryKey({ columns: [table.staffId, table.departmentKey] }),
     index("staff_department_assignments_dept_idx").on(table.departmentKey),
-    allowAll(
-      "staff_department_assignments_member_all",
+    allowSelect(
+      "staff_department_assignments_member_select",
       viaParent("staff_members", "staff_id"),
+    ),
+    allowInsert(
+      "staff_department_assignments_manager_insert",
+      viaParent("staff_members", "staff_id", "app_user_can_manage_staff"),
+    ),
+    allowDelete(
+      "staff_department_assignments_manager_delete",
+      viaParent("staff_members", "staff_id", "app_user_can_manage_staff"),
     ),
   ],
 );
@@ -377,7 +319,7 @@ export const vacationRequests = pgTable(
       table.organizationId,
       table.status,
     ),
-    ...orgMemberAccess("vacation_requests"),
+    ...orgMemberRecords("vacation_requests"),
   ],
 );
 
@@ -407,7 +349,7 @@ export const visitorLogs = pgTable(
       table.organizationId,
       table.visitedAt,
     ),
-    ...orgMemberAccess("visitor_logs"),
+    ...orgMemberRecords("visitor_logs"),
   ],
 );
 
@@ -431,7 +373,9 @@ export const inquiryWorkflowSettings = pgTable(
       table.stageKey,
     ),
     index("inquiry_workflow_settings_org_idx").on(table.organizationId),
-    ...orgMemberAccess("inquiry_workflow_settings"),
+    allowSelect("inquiry_workflow_settings_member_select", isOrgMember()),
+    allowInsert("inquiry_workflow_settings_admin_insert", isOrgAdmin()),
+    allowUpdate("inquiry_workflow_settings_admin_update", isOrgAdmin()),
   ],
 );
 
@@ -469,7 +413,7 @@ export const inquiries = pgTable(
       table.organizationId,
       table.owningDepartmentKey,
     ),
-    ...orgMemberAccess("inquiries"),
+    ...orgMemberRecords("inquiries"),
   ],
 );
 
@@ -618,7 +562,9 @@ export const staffActivityLogs = pgTable(
       table.occurredAt,
     ),
     index("staff_activity_logs_staff_idx").on(table.staffId),
-    ...orgMemberAccess("staff_activity_logs"),
+    // Audit trail: append-only.
+    allowSelect("staff_activity_logs_member_select", isOrgMember()),
+    allowInsert("staff_activity_logs_member_insert", isOrgMember()),
   ],
 );
 

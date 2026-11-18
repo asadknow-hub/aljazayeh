@@ -16,9 +16,10 @@ export default async function DepartmentInquiryPage({
 
   const { session, org } = await loadOrgPage(orgCode);
 
+  // Returns nothing for inquiries this person is not allowed to see.
   const inquiry = await getInquiryForUser(session.userId, org.code, inquiryId);
   if (!inquiry) notFound();
-  // Admin can open any inquiry; other departments only the ones they own.
+  // The Admin workspace lists every inquiry; others only the ones they own.
   if (dept !== "admin" && inquiry.owningDepartmentKey !== dept) notFound();
 
   return (

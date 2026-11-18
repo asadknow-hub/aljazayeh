@@ -25,6 +25,7 @@ import {
   type ProfileSettingsBundle,
   type SalaryView,
 } from "@/lib/profile/types";
+import { unwrap } from "@/lib/actions/result";
 
 type ProfileSettingsClientProps = {
   initialSection: ProfileSection;
@@ -210,11 +211,11 @@ export function ProfileSettingsClient({
     setPasswordError(null);
     setPasswordPending(true);
     try {
-      await changeProfilePasswordAction({
+      await unwrap(changeProfilePasswordAction({
         currentPassword,
         newPassword,
         confirmPassword,
-      });
+      }));
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -240,23 +241,23 @@ export function ProfileSettingsClient({
         const emailChanged = email !== identity.email;
 
         if (nameChanged) {
-          const saved = await saveProfileNameAction(fullName);
+          const saved = await unwrap(saveProfileNameAction(fullName));
           setIdentity((current) => ({ ...current, fullName: saved.fullName }));
           setFullName(saved.fullName);
         }
         if (emailChanged) {
-          const saved = await saveProfileEmailAction(email);
+          const saved = await unwrap(saveProfileEmailAction(email));
           setIdentity((current) => ({ ...current, email: saved.email }));
           setEmail(saved.email);
         }
         showToast("Account settings saved");
       } else if (section === "salary") {
-        const saved = await saveProfileSalaryAction(salaryForm);
+        const saved = await unwrap(saveProfileSalaryAction(salaryForm));
         setSalary(saved);
         setSalaryForm(saved);
         showToast("Salary saved");
       } else if (section === "contract") {
-        const saved = await saveProfileContractAction(contractForm);
+        const saved = await unwrap(saveProfileContractAction(contractForm));
         setContract(saved);
         setContractForm(saved);
         showToast("Contract saved");

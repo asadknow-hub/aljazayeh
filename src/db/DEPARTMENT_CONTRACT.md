@@ -38,9 +38,14 @@ Never edit a migration that has been applied to a database with real data; add a
 
 ## 5. Server code
 
-- Queries live in `src/lib/<module>/queries.ts`; server actions in `actions.ts` take the user from
-  `requireSession()` and never from the client.
-- Check permission before a mutation. Row Level Security only guarantees company isolation.
+- Queries live in `src/lib/<module>/queries.ts`. Start with `resolveOrg` / `requireOrg`, then check
+  a rule from `can` in `src/lib/access/access.ts` (`assertCan(can.manageStaff(org.access))`).
+  New rules go in that file, not inline. Row Level Security only guarantees company isolation.
+- Problems the user can fix are thrown as `UserError`; anything else is a bug.
+- Server actions live in `actions.ts`, take the user from `requireSession()`, and wrap their body
+  in `runAction` so `UserError` messages reach the screen (production hides thrown messages).
+  Clients call them through `unwrap(...)`.
+- Add a test in `tests/` for every permission rule and workflow rule.
 
 ## 6. Routing
 

@@ -10,19 +10,14 @@ import {
   formatFriendlyDateTime,
   formatVacationDuration,
 } from "@/lib/datetime/format";
-import {
-  DEPARTMENTS,
-  departmentPath,
-} from "@/lib/departments/catalog";
+import { departmentPath, type Department } from "@/lib/departments/catalog";
 import { useServerState } from "@/lib/react/use-server-state";
-import {
-  approveVacationRequestAction,
-  rejectVacationRequestAction,
-} from "@/lib/vacation/actions";
+import { reviewVacationRequestAction } from "@/lib/vacation/actions";
 import {
   leaveTypeLabel,
   type VacationRequestView,
 } from "@/lib/vacation/types";
+import { unwrap } from "@/lib/actions/result";
 
 type CompanyHomeClientProps = {
   org: {
@@ -30,11 +25,16 @@ type CompanyHomeClientProps = {
     name: string;
     code: string;
   };
+  /** Departments this person is allowed to open. */
+  tiles: Department[];
+  canReviewLeave: boolean;
   pendingVacations: VacationRequestView[];
 };
 
 export function CompanyHomeClient({
   org,
+  tiles,
+  canReviewLeave,
   pendingVacations,
 }: CompanyHomeClientProps) {
   usePageTitle("Select Department");
@@ -44,31 +44,16 @@ export function CompanyHomeClient({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function onApprove(id: string) {
+  async function onReview(id: string, decision: "approved" | "rejected") {
     setError(null);
     setBusyId(id);
     try {
-      await approveVacationRequestAction(org.code, id);
+      await unwrap(reviewVacationRequestAction(org.code, id, decision));
       setItems((current) => current.filter((item) => item.id !== id));
-      showToast("Vacation approved");
+      showToast(`Vacation ${decision}`);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not approve.");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function onReject(id: string) {
-    setError(null);
-    setBusyId(id);
-    try {
-      await rejectVacationRequestAction(org.code, id);
-      setItems((current) => current.filter((item) => item.id !== id));
-      showToast("Vacation rejected");
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not reject.");
+      setError(err instanceof Error ? err.message : "Could not save.");
     } finally {
       setBusyId(null);
     }
@@ -77,7 +62,7 @@ export function CompanyHomeClient({
   return (
     <main className="flex flex-1 flex-col px-4 py-8 sm:px-8 sm:py-10">
       <div className="mx-auto grid w-full max-w-5xl grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
-        {DEPARTMENTS.map((dept) => (
+        {tiles.map((dept) => (
           <Link
             key={dept.key}
             href={departmentPath(org.code, dept.slug)}
@@ -97,6 +82,7 @@ export function CompanyHomeClient({
         ))}
       </div>
 
+      {canReviewLeave ? (
       <section className="mx-auto mt-12 w-full max-w-5xl">
         <div className="border border-zinc-300 bg-white">
           <div className="border-b border-zinc-200 px-4 py-3 sm:px-5">
@@ -160,7 +146,7 @@ export function CompanyHomeClient({
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => onReject(item.id)}
+                        onClick={() => onReview(item.id, "rejected")}
                         className="border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-45"
                       >
                         {busy ? "…" : "Reject"}
@@ -168,7 +154,7 @@ export function CompanyHomeClient({
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => onApprove(item.id)}
+                        onClick={() => onReview(item.id, "approved")}
                         className="bg-header px-3 py-1.5 text-sm font-medium text-header-fg transition hover:bg-header-control disabled:opacity-45"
                       >
                         {busy ? "…" : "Approve"}
@@ -181,6 +167,7 @@ export function CompanyHomeClient({
           )}
         </div>
       </section>
+      ) : null}
     </main>
   );
 }

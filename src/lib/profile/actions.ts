@@ -1,8 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { runAction } from "@/lib/actions/result";
 import { requireSession } from "@/lib/auth/session";
-import { listUserOrganizations } from "@/lib/org/queries";
 import {
   updateUserEmail,
   updateUserFullName,
@@ -12,27 +12,27 @@ import {
 } from "@/lib/profile/queries";
 import type { ContractView, SalaryView } from "@/lib/profile/types";
 
-async function revalidateProfile(userId: string) {
-  revalidatePath("/settings");
-  revalidatePath("/");
-  const orgs = await listUserOrganizations(userId);
-  for (const org of orgs) {
-    revalidatePath(`/${org.code}/company-settings`);
-  }
+/** The user's name shows in the header on every page. */
+function revalidateEverything() {
+  revalidatePath("/", "layout");
 }
 
 export async function saveProfileNameAction(fullName: string) {
-  const session = await requireSession();
-  const saved = await updateUserFullName(session.userId, fullName);
-  await revalidateProfile(session.userId);
-  return { fullName: saved };
+  return runAction(async () => {
+    const session = await requireSession();
+    const saved = await updateUserFullName(session.userId, fullName);
+    revalidateEverything();
+    return { fullName: saved };
+  });
 }
 
 export async function saveProfileEmailAction(email: string) {
-  const session = await requireSession();
-  const saved = await updateUserEmail(session.userId, email);
-  await revalidateProfile(session.userId);
-  return { email: saved };
+  return runAction(async () => {
+    const session = await requireSession();
+    const saved = await updateUserEmail(session.userId, email);
+    revalidateEverything();
+    return { email: saved };
+  });
 }
 
 export async function changeProfilePasswordAction(input: {
@@ -40,22 +40,22 @@ export async function changeProfilePasswordAction(input: {
   newPassword: string;
   confirmPassword: string;
 }) {
-  const session = await requireSession();
-  await updateUserPassword(session.userId, input);
-  await revalidateProfile(session.userId);
-  return { ok: true as const };
+  return runAction(async () => {
+    const session = await requireSession();
+    await updateUserPassword(session.userId, input);
+  });
 }
 
 export async function saveProfileSalaryAction(input: SalaryView) {
-  const session = await requireSession();
-  const saved = await upsertUserSalary(session.userId, input);
-  await revalidateProfile(session.userId);
-  return saved;
+  return runAction(async () => {
+    const session = await requireSession();
+    return upsertUserSalary(session.userId, input);
+  });
 }
 
 export async function saveProfileContractAction(input: ContractView) {
-  const session = await requireSession();
-  const saved = await upsertUserContract(session.userId, input);
-  await revalidateProfile(session.userId);
-  return saved;
+  return runAction(async () => {
+    const session = await requireSession();
+    return upsertUserContract(session.userId, input);
+  });
 }

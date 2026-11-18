@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { usePageTitle } from "@/components/providers/page-title-provider";
 import { useToast } from "@/components/providers/toast-provider";
+import { StaffLoginSection } from "@/app/(app)/[orgCode]/staff/[staffId]/staff-login-section";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import {
   formatFriendlyDateTime,
@@ -36,13 +37,14 @@ import {
   type VacationListFilter,
   type VacationRequestView,
 } from "@/lib/vacation/types";
+import { unwrap } from "@/lib/actions/result";
 
 const SECTION_LABELS: Record<StaffDetailSection, string> = {
   profile: "Profile",
   salary: "Salary",
   contract: "Contract",
   vacation: "Vacation",
-  "login-activity": "Login activity",
+  login: "Login",
   actions: "Actions",
 };
 
@@ -51,6 +53,7 @@ type StaffDetailClientProps = {
   initialStaff: StaffView;
   initialVacations: VacationRequestView[];
   initialSection: StaffDetailSection;
+  viewer: { staffId: string; canManageCompany: boolean };
 };
 
 export function StaffDetailClient({
@@ -58,6 +61,7 @@ export function StaffDetailClient({
   initialStaff,
   initialVacations: vacations,
   initialSection,
+  viewer,
 }: StaffDetailClientProps) {
   usePageTitle(initialStaff.fullName);
   const router = useRouter();
@@ -123,7 +127,7 @@ export function StaffDetailClient({
   const canSave =
     isDirty &&
     !pending &&
-    section !== "login-activity" &&
+    section !== "login" &&
     section !== "actions" &&
     section !== "vacation";
 
@@ -163,11 +167,11 @@ export function StaffDetailClient({
     setPending(true);
     try {
       if (section === "profile") {
-        const updated = await updateStaffProfileAction(
+        const updated = await unwrap(updateStaffProfileAction(
           org.code,
           staff.id,
           profile,
-        );
+        ));
         setStaff(updated);
         const nextProfile: StaffProfileInput = {
           fullName: updated.fullName,
@@ -183,11 +187,11 @@ export function StaffDetailClient({
         setSavedProfile(nextProfile);
         showToast("Profile saved");
       } else if (section === "salary") {
-        const updated = await updateStaffSalaryAction(
+        const updated = await unwrap(updateStaffSalaryAction(
           org.code,
           staff.id,
           salary,
-        );
+        ));
         setStaff(updated);
         const nextSalary: StaffSalaryInput = {
           salaryAmount: updated.salaryAmount,
@@ -200,11 +204,11 @@ export function StaffDetailClient({
         setSavedSalary(nextSalary);
         showToast("Salary saved");
       } else if (section === "contract") {
-        const updated = await updateStaffContractAction(
+        const updated = await unwrap(updateStaffContractAction(
           org.code,
           staff.id,
           contract,
-        );
+        ));
         setStaff(updated);
         const nextContract: StaffContractInput = {
           contractTitle: updated.contractTitle,
@@ -228,7 +232,7 @@ export function StaffDetailClient({
   async function confirmDelete() {
     setDeletePending(true);
     try {
-      await deleteStaffAction(org.code, staff.id);
+      await unwrap(deleteStaffAction(org.code, staff.id));
       setDeleteOpen(false);
       router.push(`/${org.code}/staff`);
     } catch (err) {
@@ -719,15 +723,17 @@ export function StaffDetailClient({
               </SectionShell>
             ) : null}
 
-            {section === "login-activity" ? (
+            {section === "login" ? (
               <SectionShell
-                title="Login activity"
-                description="Login history appears here once this staff member has a linked user account."
+                title="Login"
+                description="Whether this person can sign in to the system."
               >
-                <p className="text-sm text-zinc-600">
-                  No linked login account yet. Activity will show when staff
-                  portal access is enabled for this person.
-                </p>
+                <StaffLoginSection
+                  orgCode={org.code}
+                  staff={staff}
+                  viewer={viewer}
+                  onChange={setStaff}
+                />
               </SectionShell>
             ) : null}
 
@@ -741,7 +747,9 @@ export function StaffDetailClient({
                     Delete staff
                   </p>
                   <p className="mt-1 text-sm text-zinc-600">
-                    Permanently remove this person from {org.name}.
+                    Only for records created by mistake. Someone who has a
+                    login or any history is set to Inactive on the Profile tab
+                    instead.
                   </p>
                   <button
                     type="button"

@@ -6,8 +6,9 @@ import {
   staffMembers,
   vacationRequests,
 } from "@/db/schema";
+import { assertCan, can } from "@/lib/access/access";
 import { insertStaffActivityLog } from "@/lib/activity/record";
-import { resolveOrg } from "@/lib/org/resolve";
+import { requireOrg, resolveOrg } from "@/lib/org/resolve";
 import {
   leaveTypeLabel,
   parseSelectedDatesJson,
@@ -17,6 +18,7 @@ import {
   type VacationStatus,
 } from "@/lib/vacation/types";
 import { normalizeVacationRequestInput } from "@/lib/vacation/validate";
+import { UserError } from "@/lib/errors";
 
 function toView(
   row: typeof vacationRequests.$inferSelect,
@@ -52,7 +54,7 @@ export async function listPendingVacationRequestsForUser(
 ): Promise<VacationRequestView[]> {
   return withTenantContext(userId, async (tx) => {
     const org = await resolveOrg(tx, userId, orgCode);
-    if (!org) return [];
+    if (!org || !can.reviewLeave(org.access)) return [];
 
     const rows = await tx
       .select({
@@ -82,7 +84,7 @@ export async function listOrgVacationRequestsForUser(
 ): Promise<VacationRequestView[]> {
   return withTenantContext(userId, async (tx) => {
     const org = await resolveOrg(tx, userId, orgCode);
-    if (!org) return [];
+    if (!org || !can.useReception(org.access)) return [];
 
     const rows = await tx
       .select({
@@ -111,7 +113,7 @@ export async function listStaffVacationRequestsForUser(
 ): Promise<VacationRequestView[]> {
   return withTenantContext(userId, async (tx) => {
     const org = await resolveOrg(tx, userId, orgCode);
-    if (!org) return [];
+    if (!org || !can.manageStaff(org.access)) return [];
 
     const [staff] = await tx
       .select({
@@ -153,10 +155,8 @@ export async function createVacationRequestForUser(
   const normalized = normalizeVacationRequestInput(input);
 
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrg(tx, userId, orgCode);
-    if (!org) {
-      throw new Error("Company not found.");
-    }
+    const org = await requireOrg(tx, userId, orgCode);
+    assertCan(can.useReception(org.access));
 
     const [staff] = await tx
       .select()
@@ -170,7 +170,7 @@ export async function createVacationRequestForUser(
       .limit(1);
 
     if (!staff) {
-      throw new Error("Employee not found.");
+      throw new UserError("Employee not found.");
     }
 
     const id = crypto.randomUUID();
@@ -216,7 +216,7 @@ export async function createVacationRequestForUser(
       .limit(1);
 
     if (!row) {
-      throw new Error("Could not create vacation request.");
+      throw new UserError("Could not create vacation request.");
     }
 
     return toView(row, staff.fullName, staff.jobTitle);
@@ -231,10 +231,8 @@ export async function reviewVacationRequestForUser(
   reviewNote = "",
 ): Promise<VacationRequestView> {
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrg(tx, userId, orgCode);
-    if (!org) {
-      throw new Error("Company not found.");
-    }
+    const org = await requireOrg(tx, userId, orgCode);
+    assertCan(can.reviewLeave(org.access));
 
     const [existing] = await tx
       .select({
@@ -253,11 +251,11 @@ export async function reviewVacationRequestForUser(
       .limit(1);
 
     if (!existing) {
-      throw new Error("Vacation request not found.");
+      throw new UserError("Vacation request not found.");
     }
 
     if (existing.request.status !== "pending") {
-      throw new Error("This request has already been processed.");
+      throw new UserError("This request has already been processed.");
     }
 
     const now = new Date();
@@ -297,7 +295,7 @@ export async function reviewVacationRequestForUser(
       .limit(1);
 
     if (!row) {
-      throw new Error("Could not update vacation request.");
+      throw new UserError("Could not update vacation request.");
     }
 
     return toView(row, existing.staffName, existing.staffJobTitle);

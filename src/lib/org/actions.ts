@@ -1,13 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { runAction } from "@/lib/actions/result";
 import { requireSession } from "@/lib/auth/session";
+import { normalizeOrgCode, slugCode } from "@/lib/org/code";
 import {
   createOrganizationForUser,
   isOrganizationCodeAvailable,
   setDefaultOrganizationForUser,
 } from "@/lib/org/queries";
-import { normalizeOrgCode, slugCode } from "@/lib/org/code";
 
 export async function checkOrgCodeAvailableAction(code: string) {
   await requireSession();
@@ -18,26 +19,26 @@ export async function createOrganizationAction(input: {
   name: string;
   code?: string;
 }) {
-  const session = await requireSession();
-  const code =
-    normalizeOrgCode(input.code || "") || slugCode(input.name) || "co";
-  const org = await createOrganizationForUser(session.userId, {
-    name: input.name,
-    code,
+  return runAction(async () => {
+    const session = await requireSession();
+    const code =
+      normalizeOrgCode(input.code || "") || slugCode(input.name) || "co";
+    const org = await createOrganizationForUser(session.userId, {
+      name: input.name,
+      code,
+    });
+    revalidatePath("/");
+    revalidatePath(`/${org.code}`);
+    return org;
   });
-  revalidatePath("/");
-  revalidatePath(`/${org.code}`);
-  return {
-    id: org.id,
-    name: org.name,
-    code: org.code,
-  };
 }
 
 export async function setDefaultOrganizationAction(
   organizationId: string | null,
 ) {
-  const session = await requireSession();
-  await setDefaultOrganizationForUser(session.userId, organizationId);
-  revalidatePath("/");
+  return runAction(async () => {
+    const session = await requireSession();
+    await setDefaultOrganizationForUser(session.userId, organizationId);
+    revalidatePath("/");
+  });
 }

@@ -1,21 +1,16 @@
 import "server-only";
 
 import { and, eq, sql } from "drizzle-orm";
-import { db, withTenantContext } from "@/db/client";
+import { db, withTenantContext, type DbTransaction } from "@/db/client";
 import {
   inquiryWorkflowSettings,
-  membershipRoles,
-  memberships,
   organizationSettings,
   organizations,
-  permissions,
-  rolePermissions,
-  roles,
-  staffDepartmentAssignments,
   staffMembers,
   userPreferences,
   users,
 } from "@/db/schema";
+import { UserError } from "@/lib/errors";
 import { INQUIRY_STAGES } from "@/lib/inquiries/stages";
 import { assertValidOrgCode } from "@/lib/org/code";
 import { resolveOrg } from "@/lib/org/resolve";
@@ -28,6 +23,7 @@ export type OrgListItem = {
   isDefault: boolean;
 };
 
+/** Companies where the user has an active staff record. */
 export async function listUserOrganizations(
   userId: string,
 ): Promise<OrgListItem[]> {
@@ -40,13 +36,15 @@ export async function listUserOrganizations(
         createdAt: organizations.createdAt,
         defaultOrganizationId: userPreferences.defaultOrganizationId,
       })
-      .from(memberships)
+      .from(staffMembers)
       .innerJoin(
         organizations,
-        eq(organizations.id, memberships.organizationId),
+        eq(organizations.id, staffMembers.organizationId),
       )
-      .leftJoin(userPreferences, eq(userPreferences.userId, memberships.userId))
-      .where(eq(memberships.userId, userId))
+      .leftJoin(userPreferences, eq(userPreferences.userId, staffMembers.userId))
+      .where(
+        and(eq(staffMembers.userId, userId), eq(staffMembers.status, "active")),
+      )
       .orderBy(organizations.name);
 
     return rows.map((row) => ({
@@ -59,37 +57,6 @@ export async function listUserOrganizations(
   });
 }
 
-export async function getDefaultOrganization(userId: string) {
-  return withTenantContext(userId, async (tx) => {
-    const [prefs] = await tx
-      .select()
-      .from(userPreferences)
-      .where(eq(userPreferences.userId, userId))
-      .limit(1);
-
-    if (!prefs?.defaultOrganizationId) return null;
-
-    const [org] = await tx
-      .select({
-        id: organizations.id,
-        name: organizations.name,
-        code: organizations.code,
-      })
-      .from(organizations)
-      .innerJoin(
-        memberships,
-        and(
-          eq(memberships.organizationId, organizations.id),
-          eq(memberships.userId, userId),
-        ),
-      )
-      .where(eq(organizations.id, prefs.defaultOrganizationId))
-      .limit(1);
-
-    return org ?? null;
-  });
-}
-
 export async function resolveOrganizationForUser(
   userId: string,
   orgCode: string,
@@ -97,163 +64,106 @@ export async function resolveOrganizationForUser(
   return withTenantContext(userId, (tx) => resolveOrg(tx, userId, orgCode));
 }
 
+/** Only platform admins (the owner's login) may create companies. */
+export async function userCanCreateOrganizations(
+  userId: string,
+): Promise<boolean> {
+  return withTenantContext(userId, (tx) => isPlatformAdmin(tx));
+}
+
+async function isPlatformAdmin(tx: DbTransaction): Promise<boolean> {
+  const rows = await tx.execute<{ allowed: boolean }>(
+    sql`select app_is_platform_admin() as allowed`,
+  );
+  return Boolean(rows[0]?.allowed);
+}
+
 export async function isOrganizationCodeAvailable(
   code: string,
 ): Promise<boolean> {
+  let normalized: string;
   try {
-    const normalized = assertValidOrgCode(code);
-    const result = await db.execute<{ available: boolean }>(sql`
-      select app_is_org_code_available(${normalized}) as available
-    `);
-    return Boolean(result[0]?.available);
+    normalized = assertValidOrgCode(code);
   } catch {
     return false;
   }
+  const result = await db.execute<{ available: boolean }>(sql`
+    select app_is_org_code_available(${normalized}) as available
+  `);
+  return Boolean(result[0]?.available);
 }
 
+/**
+ * Create a company with everything it needs to be usable straight away:
+ * settings, the default workflow, and the creator as its first staff member
+ * and administrator.
+ */
 export async function createOrganizationForUser(
   userId: string,
   input: { name: string; code: string },
 ) {
   const name = input.name.trim();
   if (!name) {
-    throw new Error("Company name is required.");
+    throw new UserError("Company name is required.");
   }
   const code = assertValidOrgCode(input.code);
 
   return withTenantContext(userId, async (tx) => {
+    if (!(await isPlatformAdmin(tx))) {
+      throw new UserError("You don't have permission to create companies.");
+    }
+
     const available = await tx.execute<{ available: boolean }>(sql`
       select app_is_org_code_available(${code}) as available
     `);
     if (!available[0]?.available) {
-      throw new Error("Company code already exists.");
+      throw new UserError("Company code already exists.");
     }
 
-    // Generate IDs in-app so we can insert membership before any SELECT/RETURNING
-    // (RETURNING would require SELECT policy, which needs membership first).
+    // The company row is not readable until the creator is on its staff, so
+    // ids are generated here instead of being read back from the insert.
     const organizationId = crypto.randomUUID();
-    const membershipId = crypto.randomUUID();
 
-    await tx.insert(organizations).values({
-      id: organizationId,
-      name,
-      code,
-    });
-
+    await tx.insert(organizations).values({ id: organizationId, name, code });
     await tx.execute(sql`
-      select app_insert_org_membership(
-        ${membershipId}::uuid,
+      select app_claim_new_organization(
         ${organizationId}::uuid,
-        ${userId}::uuid
+        ${crypto.randomUUID()}::uuid
       )
     `);
 
     const [creator] = await tx
-      .select({
-        fullName: users.fullName,
-        email: users.email,
-      })
+      .select({ fullName: users.fullName, email: users.email })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
 
-    const adminName = creator?.fullName?.trim() ?? "";
-    const adminEmail = creator?.email?.trim() ?? "";
-
     await tx.insert(organizationSettings).values({
       organizationId,
-      adminName,
-      adminEmail,
+      adminName: creator?.fullName.trim() ?? "",
+      adminEmail: creator?.email.trim() ?? "",
     });
 
-    const now = new Date();
     await tx.insert(inquiryWorkflowSettings).values(
       INQUIRY_STAGES.map((stage) => ({
-        id: crypto.randomUUID(),
         organizationId,
         stageKey: stage.key,
         departmentKey: "admin",
-        approvalRequired: false,
-        approvalRequiredBy: "",
-        createdAt: now,
-        updatedAt: now,
       })),
     );
 
-    const staffId = crypto.randomUUID();
-    await tx.insert(staffMembers).values({
-      id: staffId,
-      organizationId,
-      userId,
-      fullName: adminName || "Admin",
-      email: adminEmail,
-      jobTitle: "Admin",
-      status: "active",
-      createdAt: now,
-      updatedAt: now,
-    });
-    await tx.insert(staffDepartmentAssignments).values([
-      { staffId, departmentKey: "admin" },
-      { staffId, departmentKey: "management" },
-    ]);
-
-    const [org] = await tx
-      .select()
-      .from(organizations)
-      .where(eq(organizations.id, organizationId))
-      .limit(1);
-
-    if (!org) {
-      throw new Error("Failed to create organization.");
-    }
-
-    const [adminRole] = await tx
-      .insert(roles)
-      .values({
-        organizationId: org.id,
-        key: "admin",
-        name: "Admin",
-        isSystem: true,
-      })
-      .returning();
-
-    const allPermissions = await tx.select().from(permissions);
-    if (allPermissions.length > 0) {
-      await tx.insert(rolePermissions).values(
-        allPermissions.map((permission) => ({
-          roleId: adminRole.id,
-          permissionId: permission.id,
-        })),
-      );
-    }
-
-    await tx.insert(membershipRoles).values({
-      membershipId,
-      roleId: adminRole.id,
-    });
-
-    const [prefs] = await tx
-      .select()
-      .from(userPreferences)
-      .where(eq(userPreferences.userId, userId))
-      .limit(1);
-
-    if (!prefs) {
-      await tx.insert(userPreferences).values({
-        userId,
-        defaultOrganizationId: org.id,
-      });
-    } else if (!prefs.defaultOrganizationId) {
-      await tx
-        .update(userPreferences)
-        .set({
-          defaultOrganizationId: org.id,
+    await tx
+      .insert(userPreferences)
+      .values({ userId, defaultOrganizationId: organizationId })
+      .onConflictDoUpdate({
+        target: userPreferences.userId,
+        set: {
+          defaultOrganizationId: sql`coalesce(${userPreferences.defaultOrganizationId}, ${organizationId}::uuid)`,
           updatedAt: new Date(),
-        })
-        .where(eq(userPreferences.userId, userId));
-    }
+        },
+      });
 
-    return org;
+    return { id: organizationId, name, code };
   });
 }
 
@@ -261,43 +171,20 @@ export async function setDefaultOrganizationForUser(
   userId: string,
   organizationId: string | null,
 ) {
+  if (organizationId) {
+    const mine = await listUserOrganizations(userId);
+    if (!mine.some((org) => org.id === organizationId)) {
+      throw new UserError("You are not a member of that company.");
+    }
+  }
+
   return withTenantContext(userId, async (tx) => {
-    if (organizationId) {
-      const [membership] = await tx
-        .select({ id: memberships.id })
-        .from(memberships)
-        .where(
-          and(
-            eq(memberships.userId, userId),
-            eq(memberships.organizationId, organizationId),
-          ),
-        )
-        .limit(1);
-
-      if (!membership) {
-        throw new Error("You are not a member of that company.");
-      }
-    }
-
-    const [prefs] = await tx
-      .select()
-      .from(userPreferences)
-      .where(eq(userPreferences.userId, userId))
-      .limit(1);
-
-    if (!prefs) {
-      await tx.insert(userPreferences).values({
-        userId,
-        defaultOrganizationId: organizationId,
+    await tx
+      .insert(userPreferences)
+      .values({ userId, defaultOrganizationId: organizationId })
+      .onConflictDoUpdate({
+        target: userPreferences.userId,
+        set: { defaultOrganizationId: organizationId, updatedAt: new Date() },
       });
-    } else {
-      await tx
-        .update(userPreferences)
-        .set({
-          defaultOrganizationId: organizationId,
-          updatedAt: new Date(),
-        })
-        .where(eq(userPreferences.userId, userId));
-    }
   });
 }

@@ -26,7 +26,8 @@ It is not a public marketing site. It is an authenticated internal tool with ten
 
 | Persona | What they use |
 | --- | --- |
-| Company creator / admin | Creates companies, Company Settings, Inquiry Settings, Admin CRM |
+| Owner | Creates companies |
+| Company administrator | Company Settings, Inquiry Settings, staff logins, everything in the company |
 | Reception | Visitors log, vacation requests, timesheet shells |
 | Sales / Engineering / Accounts | Department inquiry queues + invoice-stage queues |
 | Management | Approves vacation on company home; can approve inquiry stages when required |
@@ -50,7 +51,7 @@ withTenantContext(userId)   ── sets Postgres GUC app.user_id
 Drizzle queries against PostgreSQL
         │
         ▼
-Row Level Security (RLS)    ── membership-scoped org data
+Row Level Security (RLS)    ── company isolation + escalation guards
 ```
 
 | Layer | Choice |
@@ -66,14 +67,18 @@ Canonical contract for new modules: [`src/db/DEPARTMENT_CONTRACT.md`](src/db/DEP
 
 ---
 
-## 4. Multi-company model
+## 4. Companies, staff and access
 
 ### 4.1 Concepts
 
-- **Organization (company)** — tenant. UUID primary key; human-facing **code** in the URL.
-- **Membership** — links a user to a company.
-- **Roles / permissions** — per-company roles (creator gets system `admin` with all seeded permissions).
-- **User preferences** — optional default company.
+- **Company (organization)** — the tenant. UUID primary key; a human-facing **code** in the URL.
+- **Staff member** — everyone who works for a company. HR data lives here.
+- **Login (user)** — optional, linked to a staff member. A person can use a company when they have
+  an **active staff record with a login** there. Setting them to Inactive cuts access at once.
+- **Departments** — tags on the staff record (Management, Accounts, Reception, Sales, Engineering,
+  Admin, Workers). They decide what the person can open and do.
+- **Company administrator** — a flag on the staff record: company settings, workflow settings, logins.
+- **Owner** — the platform-admin login. The only one that can create companies.
 
 URL shape:
 
@@ -81,32 +86,48 @@ URL shape:
 /{orgCode}/admin
 /{orgCode}/reception
 /{orgCode}/company-settings
-/settings          ← personal profile (not under a company)
+/settings          ← personal account (not under a company)
 /login
 ```
 
-Org codes are normalized lowercase (`a-z`, `0-9`, single hyphens). Reserved codes (e.g. `login`, `settings`, `admin`, `api`) cannot be company codes.
+Org codes are normalized lowercase (`a-z`, `0-9`, single hyphens). Reserved codes (e.g. `login`,
+`settings`, `admin`, `api`) cannot be company codes.
 
-### 4.2 Creating a company
+### 4.2 Who can do what
 
-When a user creates a company, the system bootstraps a full working shell for that tenant:
+All rules are in [`src/lib/access/access.ts`](src/lib/access/access.ts).
 
-1. Organization row
-2. First membership via secure bootstrap (`app_insert_org_membership`)
-3. `organization_settings` seeded with creator **Admin name / email**
-4. Default **inquiry workflow** rows (every stage → Admin, approval off)
-5. Creator **staff** row linked to their login (`user_id`), with departments `admin` + `management`
-6. System **admin** role + all global permissions bound to that membership
-7. Default organization preference if the user had none
+| Area | Who |
+| --- | --- |
+| Company settings, inquiry settings, creating logins, making administrators | Company administrator |
+| Staff directory incl. salary and contracts, All Logs | Administrator, Management |
+| Reception (visitors, raising leave requests) | Administrator, Management, Reception |
+| Approving / rejecting leave | Administrator, Management |
+| A department workspace (Admin, Sales, Accounts, Engineering) | That department, Administrator, Management |
+| Seeing every inquiry | Administrator, Management, Admin department |
+| Working an inquiry (edit, comment, move) | The department that owns its current stage, Administrator |
+| Assigning an inquiry | Owning department, Administrator, Management |
+| Approving a stage | Whoever Inquiry Settings names (Management or Engineering) |
 
-Creating a **second** company repeats this structure independently. Data does not leak across companies; Inquiry Settings and queues are per-org.
+The company home only shows the tiles a person can open; other pages return 404 for them.
 
-### 4.3 Isolation rules
+### 4.3 Creating a company
 
-- Business tables carry `organization_id`
-- Server always resolves `orgCode` → org UUID **for the current membership**, then queries by UUID
-- Queries run inside `withTenantContext` so RLS sees `app.user_id`
-- Membership insert is tightened: first join uses a security-definer function; arbitrary “join any org UUID” is blocked
+The owner creates a company, which bootstraps:
+
+1. The organization row
+2. The creator as its first staff member: administrator, in Admin and Management
+3. `organization_settings` with the creator as contact
+4. Default inquiry workflow rows (every stage → Admin, approval off)
+5. Default-company preference if the user had none
+
+A second company repeats this independently; nothing is shared between companies.
+
+### 4.4 Giving someone access
+
+Staff → open the person → **Login** → choose a username and first password. An administrator can
+reset the password or make the person an administrator from the same place. People change their own
+password under Account.
 
 ---
 
@@ -125,7 +146,8 @@ After selecting a company, the home screen is **Select Department** with tiles:
 | All Logs | `/{code}/all-logs` | Built |
 | Company Settings | `/{code}/company-settings` | Built |
 
-Below the tiles, **My Tasks** shows pending vacation approvals for management.
+Each person sees only the tiles they may open. Below them, **My Tasks** shows pending vacation
+approvals to Management and administrators.
 
 Staff can also be tagged with assignable roles that are **not** home tiles: `management`, `workers` (plus the operational departments).
 
@@ -137,7 +159,7 @@ Staff can also be tagged with assignable roles that are **not** home tiles: `man
 
 Personal to the logged-in user (not company-scoped):
 
-- Name & email (synced with Company Settings **Admin name / email** for companies where the user is admin)
+- Name & email
 - Password change
 - Login activity
 - Personal salary & contract records
@@ -146,7 +168,7 @@ Personal to the logged-in user (not company-scoped):
 
 Two sections:
 
-1. **Company profile** — company name, phones, WhatsApp, company email, website, Instagram, Facebook, and **Who is the Admin** (name/email linked to the admin user’s account).
+1. **Company profile** — company name, phones, WhatsApp, company email, website, Instagram, Facebook, and **Who is the Admin** (the main contact person).
 2. **Inquiry Settings** — Excel-style grid of locked stages with:
    - **Stages** (fixed order; cannot reorder)
    - **Handled by Department** (Sales / Admin / Engineering / Accounts)
@@ -163,8 +185,8 @@ Org-scoped HR directory:
 - Create / edit staff (name, contact, job title, status active/inactive, notes)
 - Assign department roles (management, accounts, reception, sales, engineering, admin, workers)
 - Salary & contract fields on the staff record
-- Detail sections for vacation history, login activity placeholders, actions
-- Optional link from staff → user login (`staff_members.user_id`) used for inquiry approvals
+- Detail sections for vacation history, login and actions
+- **Login** tab: give the person a username and password, reset it, or make them an administrator
 
 New company creators automatically get a linked Admin staff row so they can assign/approve immediately.
 
@@ -304,14 +326,22 @@ Profile name/email ↔ Admin contact stay linked for companies you admin
 
 ---
 
-## 8. Security & tenancy model (summary)
+## 8. Security model (summary)
 
-- Session cookie after login; server actions call `requireSession()`
-- Passwords hashed with bcrypt
-- Successful logins recorded for profile “Login activity”
-- RLS policies require org membership for tenant tables
-- Peer display names for inquiry comments/actors use `app_member_display_name` (shared-org only; does not expose password hashes)
-- Permission keys are seeded (`org.*`, `members.*`, `roles.*`, `staff.*`); membership + RLS currently gate most module access. Fine-grained permission checks on every action are a future RBAC hardening pass
+- Session cookie after login; passwords hashed with bcrypt, minimum 8 characters.
+- Every server query resolves the company from the URL **for the signed-in user** and checks a rule
+  from `src/lib/access/access.ts` before reading or changing anything.
+- Row Level Security is the backstop underneath: it keeps companies apart, makes the audit trail
+  append-only, and restricts staff records, company settings and workflow settings to the people
+  allowed to change them, even for direct database access with the app's role.
+- `users` rows are readable and writable only by their owner; logins for others are created and
+  reset through database functions that check the caller is that company's administrator.
+- A company administrator cannot reset the owner's password.
+- People with history are deactivated, never deleted, so records that refer to them stay intact.
+- `tests/access.test.ts` exercises these rules against a real database on every CI run.
+
+Known gaps, planned for the deployment-hardening pass: login attempt throttling, and ending other
+sessions when a password changes (sessions currently last 12 hours).
 
 ---
 
@@ -320,8 +350,8 @@ Profile name/email ↔ Admin contact stay linked for companies you admin
 | Area | Tables |
 | --- | --- |
 | Identity | `users`, `user_login_events`, `user_salary`, `user_contracts`, `user_preferences` |
-| Tenancy / RBAC | `organizations`, `organization_settings`, `memberships`, `roles`, `permissions`, `role_permissions`, `membership_roles` |
-| Staff | `staff_members` (+ optional `user_id`), `staff_department_assignments` |
+| Company | `organizations`, `organization_settings` |
+| Staff and access | `staff_members` (login link, administrator flag), `staff_department_assignments` |
 | Reception / leave | `visitor_logs`, `vacation_requests` |
 | Activity | `staff_activity_logs` |
 | Inquiry CRM | `inquiry_workflow_settings`, `inquiries`, `inquiry_line_items`, `inquiry_stage_events`, `inquiry_comments`, `inquiry_stage_approvals` |
@@ -370,13 +400,14 @@ Env essentials:
 
 ## 12. What is intentionally not done yet
 
-These are known shells or deferred scopes — not broken “missing wiring” of shipped features:
-
-- Reception **Monthly / Daily timesheets** UI copy only
-- Broad **permission-key enforcement** on every mutation (keys exist; membership/RLS do the heavy lifting today)
-- Full staff↔login linking UI for every employee (creator is auto-linked; `user_id` exists for approvals)
-- Public customer portal / external quote site
-- Billing/payment gateways, email/WhatsApp senders, document PDF generation
+- Documents behind the pipeline stages (quotation, LPO, job card, delivery note, invoices, receipt)
+  with numbering, VAT and printing. Stages are status only today.
+- Per-company workflows: the nine stages are the same for every company.
+- Reception **Monthly / Daily timesheets** are placeholders.
+- Personal Salary / Contract under Account duplicate the HR record and will be replaced by a
+  read-only view of it.
+- Login throttling and session revocation (see section 8).
+- Email / WhatsApp sending, file attachments.
 
 ---
 
@@ -387,7 +418,7 @@ These are known shells or deferred scopes — not broken “missing wiring” of
 3. **Inquiry stages are locked** — configuration changes ownership/approvals, not the pipeline order.
 4. **Assignment before work** — assign unlocks edit / comments / approve / move.
 5. **Settings should mean something** — Inquiry Settings drive queues, ownership, and approval gates.
-6. **New companies replicate structure** — settings, workflow defaults, admin role, and creator staff bootstrap together.
+6. **New companies replicate structure** — settings, workflow defaults and the creator as administrator bootstrap together.
 
 ---
 

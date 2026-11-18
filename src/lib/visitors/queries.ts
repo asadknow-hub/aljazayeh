@@ -3,14 +3,16 @@ import "server-only";
 import { desc, eq } from "drizzle-orm";
 import { withTenantContext } from "@/db/client";
 import { visitorLogs } from "@/db/schema";
+import { assertCan, can } from "@/lib/access/access";
 import { createStarterInquiryInTx } from "@/lib/inquiries/queries";
-import { resolveOrg } from "@/lib/org/resolve";
+import { requireOrg, resolveOrg } from "@/lib/org/resolve";
 import type {
   VisitorLogInput,
   VisitorLogView,
   VisitorPurpose,
 } from "@/lib/visitors/types";
 import { normalizeVisitorLogInput } from "@/lib/visitors/validate";
+import { UserError } from "@/lib/errors";
 
 function toView(row: typeof visitorLogs.$inferSelect): VisitorLogView {
   return {
@@ -33,7 +35,7 @@ export async function listVisitorLogsForUser(
 ): Promise<VisitorLogView[]> {
   return withTenantContext(userId, async (tx) => {
     const org = await resolveOrg(tx, userId, orgCode);
-    if (!org) return [];
+    if (!org || !can.useReception(org.access)) return [];
 
     const rows = await tx
       .select()
@@ -53,10 +55,8 @@ export async function createVisitorLogForUser(
   const normalized = normalizeVisitorLogInput(input);
 
   return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrg(tx, userId, orgCode);
-    if (!org) {
-      throw new Error("Company not found.");
-    }
+    const org = await requireOrg(tx, userId, orgCode);
+    assertCan(can.useReception(org.access));
 
     const id = crypto.randomUUID();
     const now = new Date();
@@ -74,12 +74,10 @@ export async function createVisitorLogForUser(
     });
 
     if (normalized.purpose === "inquiry") {
-      await createStarterInquiryInTx(tx, {
-        userId,
-        organizationId: org.id,
-        customerName: normalized.fullName,
+      await createStarterInquiryInTx(tx, org, userId, {
+        id,
+        fullName: normalized.fullName,
         notes: normalized.notes,
-        sourceVisitorId: id,
       });
     }
 
@@ -90,7 +88,7 @@ export async function createVisitorLogForUser(
       .limit(1);
 
     if (!row) {
-      throw new Error("Could not log visitor.");
+      throw new UserError("Could not log visitor.");
     }
 
     return toView(row);

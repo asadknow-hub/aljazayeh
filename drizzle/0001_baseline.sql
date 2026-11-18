@@ -78,23 +78,6 @@ CREATE TABLE "inquiry_workflow_settings" (
 );
 --> statement-breakpoint
 ALTER TABLE "inquiry_workflow_settings" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE TABLE "membership_roles" (
-	"membership_id" uuid NOT NULL,
-	"role_id" uuid NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "membership_roles_membership_id_role_id_pk" PRIMARY KEY("membership_id","role_id")
-);
---> statement-breakpoint
-ALTER TABLE "membership_roles" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE TABLE "memberships" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"user_id" uuid NOT NULL,
-	"organization_id" uuid NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
-ALTER TABLE "memberships" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "organization_settings" (
 	"organization_id" uuid PRIMARY KEY NOT NULL,
 	"telephone_number" text DEFAULT '' NOT NULL,
@@ -120,34 +103,6 @@ CREATE TABLE "organizations" (
 );
 --> statement-breakpoint
 ALTER TABLE "organizations" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE TABLE "permissions" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"key" text NOT NULL,
-	"description" text DEFAULT '' NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
-ALTER TABLE "permissions" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE TABLE "role_permissions" (
-	"role_id" uuid NOT NULL,
-	"permission_id" uuid NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "role_permissions_role_id_permission_id_pk" PRIMARY KEY("role_id","permission_id")
-);
---> statement-breakpoint
-ALTER TABLE "role_permissions" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE TABLE "roles" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"organization_id" uuid NOT NULL,
-	"key" text NOT NULL,
-	"name" text NOT NULL,
-	"is_system" boolean DEFAULT false NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
-ALTER TABLE "roles" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "staff_activity_logs" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"organization_id" uuid NOT NULL,
@@ -185,6 +140,7 @@ CREATE TABLE "staff_members" (
 	"job_title" text DEFAULT '' NOT NULL,
 	"employee_code" text DEFAULT '' NOT NULL,
 	"status" text DEFAULT 'active' NOT NULL,
+	"is_admin" boolean DEFAULT false NOT NULL,
 	"notes" text DEFAULT '' NOT NULL,
 	"salary_amount" numeric(14, 2) DEFAULT '0' NOT NULL,
 	"salary_currency" text DEFAULT 'AED' NOT NULL,
@@ -250,6 +206,7 @@ CREATE TABLE "users" (
 	"email" text DEFAULT '' NOT NULL,
 	"password_hash" text NOT NULL,
 	"is_active" boolean DEFAULT true NOT NULL,
+	"is_platform_admin" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -304,14 +261,7 @@ ALTER TABLE "inquiry_stage_events" ADD CONSTRAINT "inquiry_stage_events_organiza
 ALTER TABLE "inquiry_stage_events" ADD CONSTRAINT "inquiry_stage_events_inquiry_id_inquiries_id_fk" FOREIGN KEY ("inquiry_id") REFERENCES "public"."inquiries"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "inquiry_stage_events" ADD CONSTRAINT "inquiry_stage_events_actor_user_id_users_id_fk" FOREIGN KEY ("actor_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "inquiry_workflow_settings" ADD CONSTRAINT "inquiry_workflow_settings_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "membership_roles" ADD CONSTRAINT "membership_roles_membership_id_memberships_id_fk" FOREIGN KEY ("membership_id") REFERENCES "public"."memberships"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "membership_roles" ADD CONSTRAINT "membership_roles_role_id_roles_id_fk" FOREIGN KEY ("role_id") REFERENCES "public"."roles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "memberships" ADD CONSTRAINT "memberships_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "memberships" ADD CONSTRAINT "memberships_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "organization_settings" ADD CONSTRAINT "organization_settings_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "role_permissions" ADD CONSTRAINT "role_permissions_role_id_roles_id_fk" FOREIGN KEY ("role_id") REFERENCES "public"."roles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "role_permissions" ADD CONSTRAINT "role_permissions_permission_id_permissions_id_fk" FOREIGN KEY ("permission_id") REFERENCES "public"."permissions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "roles" ADD CONSTRAINT "roles_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "staff_activity_logs" ADD CONSTRAINT "staff_activity_logs_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "staff_activity_logs" ADD CONSTRAINT "staff_activity_logs_staff_id_staff_members_id_fk" FOREIGN KEY ("staff_id") REFERENCES "public"."staff_members"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "staff_activity_logs" ADD CONSTRAINT "staff_activity_logs_actor_user_id_users_id_fk" FOREIGN KEY ("actor_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -343,13 +293,7 @@ CREATE INDEX "inquiry_stage_events_inquiry_idx" ON "inquiry_stage_events" USING 
 CREATE INDEX "inquiry_stage_events_org_idx" ON "inquiry_stage_events" USING btree ("organization_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "inquiry_workflow_settings_org_stage_uidx" ON "inquiry_workflow_settings" USING btree ("organization_id","stage_key");--> statement-breakpoint
 CREATE INDEX "inquiry_workflow_settings_org_idx" ON "inquiry_workflow_settings" USING btree ("organization_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "memberships_user_org_uidx" ON "memberships" USING btree ("user_id","organization_id");--> statement-breakpoint
-CREATE INDEX "memberships_org_idx" ON "memberships" USING btree ("organization_id");--> statement-breakpoint
-CREATE INDEX "memberships_user_idx" ON "memberships" USING btree ("user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "organizations_code_uidx" ON "organizations" USING btree ("code");--> statement-breakpoint
-CREATE UNIQUE INDEX "permissions_key_uidx" ON "permissions" USING btree ("key");--> statement-breakpoint
-CREATE UNIQUE INDEX "roles_org_key_uidx" ON "roles" USING btree ("organization_id","key");--> statement-breakpoint
-CREATE INDEX "roles_org_idx" ON "roles" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "staff_activity_logs_org_idx" ON "staff_activity_logs" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "staff_activity_logs_org_occurred_idx" ON "staff_activity_logs" USING btree ("organization_id","occurred_at");--> statement-breakpoint
 CREATE INDEX "staff_activity_logs_staff_idx" ON "staff_activity_logs" USING btree ("staff_id");--> statement-breakpoint
@@ -357,6 +301,7 @@ CREATE INDEX "staff_department_assignments_dept_idx" ON "staff_department_assign
 CREATE INDEX "staff_members_org_idx" ON "staff_members" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "staff_members_org_name_idx" ON "staff_members" USING btree ("organization_id","full_name");--> statement-breakpoint
 CREATE UNIQUE INDEX "staff_members_org_user_uidx" ON "staff_members" USING btree ("organization_id","user_id");--> statement-breakpoint
+CREATE INDEX "staff_members_user_idx" ON "staff_members" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "user_contracts_user_idx" ON "user_contracts" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "user_login_events_user_occurred_idx" ON "user_login_events" USING btree ("user_id","occurred_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "users_username_uidx" ON "users" USING btree ("username");--> statement-breakpoint
@@ -365,7 +310,9 @@ CREATE INDEX "vacation_requests_staff_idx" ON "vacation_requests" USING btree ("
 CREATE INDEX "vacation_requests_org_status_idx" ON "vacation_requests" USING btree ("organization_id","status");--> statement-breakpoint
 CREATE INDEX "visitor_logs_org_idx" ON "visitor_logs" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "visitor_logs_org_visited_idx" ON "visitor_logs" USING btree ("organization_id","visited_at");--> statement-breakpoint
-CREATE POLICY "inquiries_member_all" ON "inquiries" AS PERMISSIVE FOR ALL TO public USING (app_user_is_org_member(organization_id)) WITH CHECK (app_user_is_org_member(organization_id));--> statement-breakpoint
+CREATE POLICY "inquiries_member_select" ON "inquiries" AS PERMISSIVE FOR SELECT TO public USING (app_user_is_org_member(organization_id));--> statement-breakpoint
+CREATE POLICY "inquiries_member_insert" ON "inquiries" AS PERMISSIVE FOR INSERT TO public WITH CHECK (app_user_is_org_member(organization_id));--> statement-breakpoint
+CREATE POLICY "inquiries_member_update" ON "inquiries" AS PERMISSIVE FOR UPDATE TO public USING (app_user_is_org_member(organization_id)) WITH CHECK (app_user_is_org_member(organization_id));--> statement-breakpoint
 CREATE POLICY "inquiry_comments_member_select" ON "inquiry_comments" AS PERMISSIVE FOR SELECT TO public USING (app_user_is_org_member(organization_id));--> statement-breakpoint
 CREATE POLICY "inquiry_comments_member_insert" ON "inquiry_comments" AS PERMISSIVE FOR INSERT TO public WITH CHECK (app_user_is_org_member(organization_id));--> statement-breakpoint
 CREATE POLICY "inquiry_line_items_member_all" ON "inquiry_line_items" AS PERMISSIVE FOR ALL TO public USING (exists (select 1 from inquiries p where p.id = inquiry_id and app_user_is_org_member(p.organization_id))) WITH CHECK (exists (select 1 from inquiries p where p.id = inquiry_id and app_user_is_org_member(p.organization_id)));--> statement-breakpoint
@@ -374,28 +321,33 @@ CREATE POLICY "inquiry_stage_approvals_member_insert" ON "inquiry_stage_approval
 CREATE POLICY "inquiry_stage_approvals_member_delete" ON "inquiry_stage_approvals" AS PERMISSIVE FOR DELETE TO public USING (app_user_is_org_member(organization_id));--> statement-breakpoint
 CREATE POLICY "inquiry_stage_events_member_select" ON "inquiry_stage_events" AS PERMISSIVE FOR SELECT TO public USING (app_user_is_org_member(organization_id));--> statement-breakpoint
 CREATE POLICY "inquiry_stage_events_member_insert" ON "inquiry_stage_events" AS PERMISSIVE FOR INSERT TO public WITH CHECK (app_user_is_org_member(organization_id));--> statement-breakpoint
-CREATE POLICY "inquiry_workflow_settings_member_all" ON "inquiry_workflow_settings" AS PERMISSIVE FOR ALL TO public USING (app_user_is_org_member(organization_id)) WITH CHECK (app_user_is_org_member(organization_id));--> statement-breakpoint
-CREATE POLICY "membership_roles_member_all" ON "membership_roles" AS PERMISSIVE FOR ALL TO public USING (exists (select 1 from memberships p where p.id = membership_id and app_user_is_org_member(p.organization_id))) WITH CHECK (exists (select 1 from memberships p where p.id = membership_id and app_user_is_org_member(p.organization_id)));--> statement-breakpoint
-CREATE POLICY "memberships_member_select" ON "memberships" AS PERMISSIVE FOR SELECT TO public USING (app_user_is_org_member(organization_id) or user_id = app_current_user_id());--> statement-breakpoint
-CREATE POLICY "memberships_member_insert" ON "memberships" AS PERMISSIVE FOR INSERT TO public WITH CHECK (app_user_is_org_member(organization_id));--> statement-breakpoint
-CREATE POLICY "memberships_member_update" ON "memberships" AS PERMISSIVE FOR UPDATE TO public USING (app_user_is_org_member(organization_id)) WITH CHECK (app_user_is_org_member(organization_id));--> statement-breakpoint
-CREATE POLICY "memberships_member_delete" ON "memberships" AS PERMISSIVE FOR DELETE TO public USING (app_user_is_org_member(organization_id));--> statement-breakpoint
-CREATE POLICY "organization_settings_member_all" ON "organization_settings" AS PERMISSIVE FOR ALL TO public USING (app_user_is_org_member(organization_id)) WITH CHECK (app_user_is_org_member(organization_id));--> statement-breakpoint
+CREATE POLICY "inquiry_workflow_settings_member_select" ON "inquiry_workflow_settings" AS PERMISSIVE FOR SELECT TO public USING (app_user_is_org_member(organization_id));--> statement-breakpoint
+CREATE POLICY "inquiry_workflow_settings_admin_insert" ON "inquiry_workflow_settings" AS PERMISSIVE FOR INSERT TO public WITH CHECK (app_user_is_org_admin(organization_id));--> statement-breakpoint
+CREATE POLICY "inquiry_workflow_settings_admin_update" ON "inquiry_workflow_settings" AS PERMISSIVE FOR UPDATE TO public USING (app_user_is_org_admin(organization_id)) WITH CHECK (app_user_is_org_admin(organization_id));--> statement-breakpoint
+CREATE POLICY "organization_settings_member_select" ON "organization_settings" AS PERMISSIVE FOR SELECT TO public USING (app_user_is_org_member(organization_id));--> statement-breakpoint
+CREATE POLICY "organization_settings_admin_insert" ON "organization_settings" AS PERMISSIVE FOR INSERT TO public WITH CHECK (app_user_is_org_admin(organization_id));--> statement-breakpoint
+CREATE POLICY "organization_settings_admin_update" ON "organization_settings" AS PERMISSIVE FOR UPDATE TO public USING (app_user_is_org_admin(organization_id)) WITH CHECK (app_user_is_org_admin(organization_id));--> statement-breakpoint
 CREATE POLICY "organizations_member_select" ON "organizations" AS PERMISSIVE FOR SELECT TO public USING (app_user_is_org_member(id));--> statement-breakpoint
-CREATE POLICY "organizations_member_update" ON "organizations" AS PERMISSIVE FOR UPDATE TO public USING (app_user_is_org_member(id)) WITH CHECK (app_user_is_org_member(id));--> statement-breakpoint
-CREATE POLICY "organizations_authenticated_insert" ON "organizations" AS PERMISSIVE FOR INSERT TO public WITH CHECK (app_current_user_id() is not null);--> statement-breakpoint
-CREATE POLICY "permissions_read_authenticated" ON "permissions" AS PERMISSIVE FOR SELECT TO public USING (app_current_user_id() is not null);--> statement-breakpoint
-CREATE POLICY "role_permissions_member_all" ON "role_permissions" AS PERMISSIVE FOR ALL TO public USING (exists (select 1 from roles p where p.id = role_id and app_user_is_org_member(p.organization_id))) WITH CHECK (exists (select 1 from roles p where p.id = role_id and app_user_is_org_member(p.organization_id)));--> statement-breakpoint
-CREATE POLICY "roles_member_all" ON "roles" AS PERMISSIVE FOR ALL TO public USING (app_user_is_org_member(organization_id)) WITH CHECK (app_user_is_org_member(organization_id));--> statement-breakpoint
-CREATE POLICY "staff_activity_logs_member_all" ON "staff_activity_logs" AS PERMISSIVE FOR ALL TO public USING (app_user_is_org_member(organization_id)) WITH CHECK (app_user_is_org_member(organization_id));--> statement-breakpoint
-CREATE POLICY "staff_department_assignments_member_all" ON "staff_department_assignments" AS PERMISSIVE FOR ALL TO public USING (exists (select 1 from staff_members p where p.id = staff_id and app_user_is_org_member(p.organization_id))) WITH CHECK (exists (select 1 from staff_members p where p.id = staff_id and app_user_is_org_member(p.organization_id)));--> statement-breakpoint
-CREATE POLICY "staff_members_member_all" ON "staff_members" AS PERMISSIVE FOR ALL TO public USING (app_user_is_org_member(organization_id)) WITH CHECK (app_user_is_org_member(organization_id));--> statement-breakpoint
+CREATE POLICY "organizations_admin_update" ON "organizations" AS PERMISSIVE FOR UPDATE TO public USING (app_user_is_org_admin(id)) WITH CHECK (app_user_is_org_admin(id));--> statement-breakpoint
+CREATE POLICY "organizations_platform_admin_insert" ON "organizations" AS PERMISSIVE FOR INSERT TO public WITH CHECK (app_is_platform_admin());--> statement-breakpoint
+CREATE POLICY "staff_activity_logs_member_select" ON "staff_activity_logs" AS PERMISSIVE FOR SELECT TO public USING (app_user_is_org_member(organization_id));--> statement-breakpoint
+CREATE POLICY "staff_activity_logs_member_insert" ON "staff_activity_logs" AS PERMISSIVE FOR INSERT TO public WITH CHECK (app_user_is_org_member(organization_id));--> statement-breakpoint
+CREATE POLICY "staff_department_assignments_member_select" ON "staff_department_assignments" AS PERMISSIVE FOR SELECT TO public USING (exists (select 1 from staff_members p where p.id = staff_id and app_user_is_org_member(p.organization_id)));--> statement-breakpoint
+CREATE POLICY "staff_department_assignments_manager_insert" ON "staff_department_assignments" AS PERMISSIVE FOR INSERT TO public WITH CHECK (exists (select 1 from staff_members p where p.id = staff_id and app_user_can_manage_staff(p.organization_id)));--> statement-breakpoint
+CREATE POLICY "staff_department_assignments_manager_delete" ON "staff_department_assignments" AS PERMISSIVE FOR DELETE TO public USING (exists (select 1 from staff_members p where p.id = staff_id and app_user_can_manage_staff(p.organization_id)));--> statement-breakpoint
+CREATE POLICY "staff_members_member_select" ON "staff_members" AS PERMISSIVE FOR SELECT TO public USING (app_user_is_org_member(organization_id));--> statement-breakpoint
+CREATE POLICY "staff_members_manager_insert" ON "staff_members" AS PERMISSIVE FOR INSERT TO public WITH CHECK (app_user_can_manage_staff(organization_id));--> statement-breakpoint
+CREATE POLICY "staff_members_manager_update" ON "staff_members" AS PERMISSIVE FOR UPDATE TO public USING (app_user_can_manage_staff(organization_id)) WITH CHECK (app_user_can_manage_staff(organization_id));--> statement-breakpoint
+CREATE POLICY "staff_members_manager_delete" ON "staff_members" AS PERMISSIVE FOR DELETE TO public USING (app_user_can_manage_staff(organization_id));--> statement-breakpoint
 CREATE POLICY "user_contracts_self" ON "user_contracts" AS PERMISSIVE FOR ALL TO public USING (user_id = app_current_user_id()) WITH CHECK (user_id = app_current_user_id());--> statement-breakpoint
 CREATE POLICY "user_login_events_self_select" ON "user_login_events" AS PERMISSIVE FOR SELECT TO public USING (user_id = app_current_user_id());--> statement-breakpoint
-CREATE POLICY "user_login_events_self_insert" ON "user_login_events" AS PERMISSIVE FOR INSERT TO public WITH CHECK (user_id = app_current_user_id());--> statement-breakpoint
 CREATE POLICY "user_preferences_self" ON "user_preferences" AS PERMISSIVE FOR ALL TO public USING (user_id = app_current_user_id()) WITH CHECK (user_id = app_current_user_id());--> statement-breakpoint
 CREATE POLICY "user_salary_self" ON "user_salary" AS PERMISSIVE FOR ALL TO public USING (user_id = app_current_user_id()) WITH CHECK (user_id = app_current_user_id());--> statement-breakpoint
 CREATE POLICY "users_self_select" ON "users" AS PERMISSIVE FOR SELECT TO public USING (id = app_current_user_id());--> statement-breakpoint
 CREATE POLICY "users_self_update" ON "users" AS PERMISSIVE FOR UPDATE TO public USING (id = app_current_user_id()) WITH CHECK (id = app_current_user_id());--> statement-breakpoint
-CREATE POLICY "vacation_requests_member_all" ON "vacation_requests" AS PERMISSIVE FOR ALL TO public USING (app_user_is_org_member(organization_id)) WITH CHECK (app_user_is_org_member(organization_id));--> statement-breakpoint
-CREATE POLICY "visitor_logs_member_all" ON "visitor_logs" AS PERMISSIVE FOR ALL TO public USING (app_user_is_org_member(organization_id)) WITH CHECK (app_user_is_org_member(organization_id));
+CREATE POLICY "vacation_requests_member_select" ON "vacation_requests" AS PERMISSIVE FOR SELECT TO public USING (app_user_is_org_member(organization_id));--> statement-breakpoint
+CREATE POLICY "vacation_requests_member_insert" ON "vacation_requests" AS PERMISSIVE FOR INSERT TO public WITH CHECK (app_user_is_org_member(organization_id));--> statement-breakpoint
+CREATE POLICY "vacation_requests_member_update" ON "vacation_requests" AS PERMISSIVE FOR UPDATE TO public USING (app_user_is_org_member(organization_id)) WITH CHECK (app_user_is_org_member(organization_id));--> statement-breakpoint
+CREATE POLICY "visitor_logs_member_select" ON "visitor_logs" AS PERMISSIVE FOR SELECT TO public USING (app_user_is_org_member(organization_id));--> statement-breakpoint
+CREATE POLICY "visitor_logs_member_insert" ON "visitor_logs" AS PERMISSIVE FOR INSERT TO public WITH CHECK (app_user_is_org_member(organization_id));--> statement-breakpoint
+CREATE POLICY "visitor_logs_member_update" ON "visitor_logs" AS PERMISSIVE FOR UPDATE TO public USING (app_user_is_org_member(organization_id)) WITH CHECK (app_user_is_org_member(organization_id));
