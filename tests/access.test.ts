@@ -532,3 +532,16 @@ describe("inquiry pipeline", () => {
     assert.equal(row.n, 0);
   });
 });
+
+describe("malformed links", () => {
+  test("an id that is not an id is simply not found", async () => {
+    const { getStaffForUser } = await import("@/lib/staff/queries");
+    const { getLeaveDocumentForUser } = await import("@/lib/vacation/queries");
+    const { getApprovalFormDocumentForUser } =
+      await import("@/lib/forms/queries");
+    assert.equal(await getStaffForUser(owner, ORG, "abc"), null);
+    assert.equal(await getInquiryForUser(owner, ORG, "abc"), null);
+    assert.equal(await getLeaveDocumentForUser(owner, ORG, "abc"), null);
+    assert.equal(await getApprovalFormDocumentForUser(owner, ORG, "abc"), null);
+  });
+});

@@ -47,7 +47,11 @@ function cellCounts(cell: AttendanceCell): Counts | null {
   return ATTENDANCE_STATUSES.find((status) => status.key === cell)!.counts;
 }
 
-export type AttendanceTotals = { present: number; absent: number; half: number };
+export type AttendanceTotals = {
+  present: number;
+  absent: number;
+  half: number;
+};
 
 export function attendanceTotals(cells: AttendanceCell[]): AttendanceTotals {
   const totals = { present: 0, absent: 0, half: 0 };

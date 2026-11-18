@@ -6,12 +6,30 @@ const cell = "border border-black px-1.5 py-1 align-top";
 /**
  * The row of signature boxes at the foot of a form. A signed box shows the
  * signer's saved signature, their name and the date; the rest stay empty.
+ *
+ * `employeeBox` adds a first box that is signed by hand on the printed copy,
+ * and `managingRemarks` a last one for the approvers' remarks.
  */
-export function SignoffBoxes({ steps }: { steps: SignoffStepView[] }) {
+export function SignoffBoxes({
+  steps,
+  employeeBox,
+  managingRemarks = false,
+}: {
+  steps: SignoffStepView[];
+  employeeBox?: string | null;
+  managingRemarks?: boolean;
+}) {
+  const remarks = steps
+    .filter((step) => step.signed?.remarks)
+    .map((step) => `${step.signed!.name}: ${step.signed!.remarks}`);
+
   return (
-    <table className="w-full table-fixed border-collapse text-[11px]">
+    <table className="w-full table-fixed break-inside-avoid border-collapse text-[11px]">
       <tbody>
         <tr>
+          {employeeBox ? (
+            <td className={`${cell} h-12 font-semibold`}>{employeeBox}</td>
+          ) : null}
           {steps.map((step) => (
             <td key={step.label} className={`${cell} h-12 font-semibold`}>
               <span className="block uppercase">
@@ -20,8 +38,14 @@ export function SignoffBoxes({ steps }: { steps: SignoffStepView[] }) {
               {step.label}
             </td>
           ))}
+          {managingRemarks ? (
+            <td className={`${cell} font-semibold`}>
+              REMARKS BY MANAGING PARTNERS ONLY
+            </td>
+          ) : null}
         </tr>
         <tr>
+          {employeeBox ? <td className={`${cell} h-20`}>Signature</td> : null}
           {steps.map((step) => (
             <td key={step.label} className={`${cell} h-20`}>
               <span className="block">Signature</span>
@@ -41,8 +65,18 @@ export function SignoffBoxes({ steps }: { steps: SignoffStepView[] }) {
               ) : null}
             </td>
           ))}
+          {managingRemarks ? (
+            <td className={cell} rowSpan={2}>
+              {remarks.map((remark) => (
+                <span key={remark} className="block">
+                  {remark}
+                </span>
+              ))}
+            </td>
+          ) : null}
         </tr>
         <tr>
+          {employeeBox ? <td className={cell}>Date</td> : null}
           {steps.map((step) => (
             <td key={step.label} className={cell}>
               Date{" "}

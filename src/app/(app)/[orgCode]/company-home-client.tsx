@@ -3,22 +3,20 @@
 import Link from "next/link";
 import { DepartmentIcon } from "@/components/departments/department-icons";
 import { usePageTitle } from "@/components/providers/page-title-provider";
-import { formatLeavePeriod } from "@/lib/datetime/format";
 import { departmentPath, type Department } from "@/lib/departments/catalog";
-import { leaveTypeLabel, type VacationRequestView } from "@/lib/vacation/types";
 
 type CompanyHomeClientProps = {
   org: { name: string; code: string };
   /** Departments this person is allowed to open. */
   tiles: Department[];
   /** Documents whose next signature is this person's. */
-  awaitingSignature: VacationRequestView[];
+  tasks: { href: string; title: string; detail: string }[];
 };
 
 export function CompanyHomeClient({
   org,
   tiles,
-  awaitingSignature,
+  tasks,
 }: CompanyHomeClientProps) {
   usePageTitle("Select Department");
 
@@ -56,29 +54,24 @@ export function CompanyHomeClient({
             </p>
           </div>
 
-          {awaitingSignature.length === 0 ? (
+          {tasks.length === 0 ? (
             <p className="px-4 py-5 text-sm text-zinc-600 sm:px-5">
               Nothing is waiting for you right now.
             </p>
           ) : (
             <ul className="divide-y divide-zinc-200">
-              {awaitingSignature.map((item) => (
-                <li key={item.id}>
+              {tasks.map((task) => (
+                <li key={task.href}>
                   <Link
-                    href={`/${org.code}/leave/${item.id}`}
+                    href={task.href}
                     className="flex flex-col gap-1 px-4 py-4 transition hover:bg-zinc-50 sm:flex-row sm:items-center sm:justify-between sm:px-5"
                   >
                     <span className="min-w-0">
                       <span className="block text-sm font-medium text-zinc-900">
-                        Leave request · {item.staffName}
+                        {task.title}
                       </span>
                       <span className="mt-0.5 block text-sm text-zinc-600">
-                        {leaveTypeLabel(item.leaveType)} ·{" "}
-                        {formatLeavePeriod(
-                          item.startDate,
-                          item.endDate,
-                          item.dayCount,
-                        )}
+                        {task.detail}
                       </span>
                     </span>
                     <span className="shrink-0 text-sm font-medium text-header">

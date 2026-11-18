@@ -5,8 +5,14 @@ import { useState } from "react";
 import { AttendancePanel } from "@/app/(app)/[orgCode]/reception/attendance-panel";
 import { LeavePanel } from "@/app/(app)/[orgCode]/reception/leave-panel";
 import { VisitorsPanel } from "@/app/(app)/[orgCode]/reception/visitors-panel";
+import { FormsPanel } from "@/components/forms/forms-panel";
 import { usePageTitle } from "@/components/providers/page-title-provider";
 import type { AttendanceDay } from "@/lib/attendance/types";
+import {
+  isFormType,
+  type ApprovalFormView,
+  type FormType,
+} from "@/lib/forms/definitions";
 import {
   RECEPTION_SECTIONS,
   type ReceptionSection,
@@ -20,6 +26,8 @@ type ReceptionClientProps = {
   staffOptions: StaffOption[];
   initialVacations: VacationRequestView[];
   initialVisitors: VisitorLogView[];
+  /** The forms Reception raises, by kind. */
+  forms: Partial<Record<FormType, ApprovalFormView[]>>;
   initialAttendance: AttendanceDay;
   /** Today's date in Dubai. */
   today: string;
@@ -31,6 +39,7 @@ export function ReceptionClient({
   staffOptions,
   initialVacations,
   initialVisitors,
+  forms,
   initialAttendance,
   today,
   initialSection,
@@ -93,6 +102,15 @@ export function ReceptionClient({
             <VisitorsPanel
               orgCode={org.code}
               initialVisitors={initialVisitors}
+            />
+          ) : null}
+          {isFormType(section) ? (
+            <FormsPanel
+              key={section}
+              orgCode={org.code}
+              formType={section}
+              forms={forms[section] ?? []}
+              staffOptions={staffOptions}
             />
           ) : null}
         </div>

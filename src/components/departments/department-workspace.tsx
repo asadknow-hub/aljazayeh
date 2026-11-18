@@ -5,10 +5,16 @@ import { useState } from "react";
 import { InquiriesListPanel } from "@/components/inquiries/inquiries-list-panel";
 import { InvoiceQueuePanel } from "@/components/inquiries/invoice-queue-panel";
 import { usePageTitle } from "@/components/providers/page-title-provider";
+import { FormsPanel } from "@/components/forms/forms-panel";
 import {
-  DEPARTMENT_SECTIONS,
+  departmentSections,
   type DepartmentSection,
 } from "@/lib/departments/sections";
+import {
+  isFormType,
+  type ApprovalFormView,
+  type FormType,
+} from "@/lib/forms/definitions";
 import {
   workflowDepartmentLabel,
   type InquiryWorkflowDepartmentKey,
@@ -21,6 +27,8 @@ type DepartmentWorkspaceProps = {
   initialSection: DepartmentSection;
   inquiries: InquiryView[];
   invoiceQueue: InquiryView[];
+  /** The forms this department raises, by kind. */
+  forms: Partial<Record<FormType, ApprovalFormView[]>>;
 };
 
 export function DepartmentWorkspace({
@@ -29,6 +37,7 @@ export function DepartmentWorkspace({
   initialSection,
   inquiries,
   invoiceQueue,
+  forms,
 }: DepartmentWorkspaceProps) {
   const label = workflowDepartmentLabel(departmentKey);
   const basePath = `/${org.code}/${departmentKey}`;
@@ -53,7 +62,7 @@ export function DepartmentWorkspace({
             <p className="mt-0.5 truncate text-xs text-zinc-500">{org.name}</p>
           </div>
           <nav className="flex flex-col gap-0.5 p-2 sm:p-3">
-            {DEPARTMENT_SECTIONS.map((item) => {
+            {departmentSections(departmentKey).map((item) => {
               const active = item.key === section;
               return (
                 <button
@@ -87,6 +96,14 @@ export function DepartmentWorkspace({
               departmentLabel={label}
               detailBasePath={`${basePath}/inquiries`}
               initialInquiries={invoiceQueue}
+            />
+          ) : null}
+          {isFormType(section) ? (
+            <FormsPanel
+              key={section}
+              orgCode={org.code}
+              formType={section}
+              forms={forms[section] ?? []}
             />
           ) : null}
         </div>

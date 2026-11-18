@@ -75,7 +75,9 @@ export const STAFF_DETAIL_SECTIONS = [
 
 export type StaffDetailSection = (typeof STAFF_DETAIL_SECTIONS)[number];
 
-export function isStaffDetailSection(value: string): value is StaffDetailSection {
+export function isStaffDetailSection(
+  value: string,
+): value is StaffDetailSection {
   return (STAFF_DETAIL_SECTIONS as readonly string[]).includes(value);
 }
 

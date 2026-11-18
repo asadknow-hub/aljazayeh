@@ -22,6 +22,7 @@ import {
   type SignoffDecision,
   type SignoffState,
 } from "@/lib/signoffs/chains";
+import { isUuid } from "@/lib/ids";
 
 /* ------------------------------- signatories ------------------------------ */
 
@@ -110,6 +111,9 @@ export async function setSignatoryForUser(
     const org = await requireOrg(tx, userId, orgCode);
     assertCan(can.manageCompany(org.access));
 
+    if (staffId && !isUuid(staffId)) {
+      throw new UserError("Staff member not found.");
+    }
     if (!staffId) {
       await tx
         .delete(signatoryPositions)

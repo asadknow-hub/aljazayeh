@@ -1,6 +1,7 @@
 import { daysInclusive, isIsoDate } from "@/lib/datetime/calendar";
 import { UserError } from "@/lib/errors";
 import { LEAVE_TYPES, type VacationRequestInput } from "@/lib/vacation/types";
+import { isUuid } from "@/lib/ids";
 
 export type NormalizedVacationRequest = Omit<
   VacationRequestInput,
@@ -14,7 +15,7 @@ export function normalizeVacationRequestInput(
   input: VacationRequestInput,
 ): NormalizedVacationRequest {
   const staffId = input.staffId.trim();
-  if (!staffId) {
+  if (!isUuid(staffId)) {
     throw new UserError("Select an employee.");
   }
 

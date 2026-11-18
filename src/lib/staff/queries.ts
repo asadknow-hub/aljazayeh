@@ -3,6 +3,7 @@ import "server-only";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { withTenantContext, type DbTransaction } from "@/db/client";
 import {
+  approvalForms,
   attendanceRecords,
   inquiries,
   staffDepartmentAssignments,
@@ -34,6 +35,7 @@ import {
   normalizeStaffProfileInput,
   normalizeStaffSalaryInput,
 } from "@/lib/staff/validate";
+import { isUuid } from "@/lib/ids";
 
 type StaffRow = typeof staffMembers.$inferSelect;
 
@@ -79,6 +81,7 @@ async function loadStaffViews(
   organizationId: string,
   staffId?: string,
 ): Promise<StaffView[]> {
+  if (staffId !== undefined && !isUuid(staffId)) return [];
   const rows = await tx
     .select({
       staff: staffMembers,
@@ -188,7 +191,9 @@ async function replaceDepartments(
     .where(eq(staffDepartmentAssignments.staffId, staffId));
   await tx
     .insert(staffDepartmentAssignments)
-    .values(departmentKeys.map((departmentKey) => ({ staffId, departmentKey })));
+    .values(
+      departmentKeys.map((departmentKey) => ({ staffId, departmentKey })),
+    );
 }
 
 export async function createStaffForUser(
@@ -500,12 +505,19 @@ export async function deleteStaffForUser(
       .where(eq(attendanceRecords.staffId, staffId))
       .limit(1);
 
+    const [form] = await tx
+      .select({ id: approvalForms.id })
+      .from(approvalForms)
+      .where(eq(approvalForms.staffId, staffId))
+      .limit(1);
+
     if (
       staff.loginUsername ||
       staff.isAdmin ||
       leave ||
       assigned ||
-      attendance
+      attendance ||
+      form
     ) {
       throw new UserError(
         "This person has a login or history in the system and cannot be deleted. Set their status to Inactive instead.",

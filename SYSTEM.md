@@ -242,6 +242,28 @@ Foreman, Purchaser, Accountant, CEO & Managing Partner, Managing Director). The 
 document type is defined in [`src/lib/signoffs/chains.ts`](src/lib/signoffs/chains.ts); adding a
 form to the system means adding its chain there.
 
+### 6.5a Signed internal forms
+
+Five more of the company's paper forms use the same sign-off mechanism as leave requests:
+
+| Form | Raised in | Signed by, in order |
+| --- | --- | --- |
+| Fine Notice | Reception | Admin, Accounts, Managing Partner, Managing Director |
+| Medical Amount (company pays 70%, employee 30%) | Reception | Accounts, Managing Partner, Managing Director |
+| Petty Cash Form | Accounts workspace | Prepared By, Accounts, Managing Partner, Managing Director |
+| Material Request Approval Form | Engineering workspace | Foreman, Purchaser, Accounts, Managing Partner, Managing Director |
+| Verbal Work Approval Form (adds 5% VAT) | Admin workspace | Foreman, Purchaser, Accounts, Managing Partner, Managing Director |
+
+Each gets a running reference number per year (`AJE/FN/2026/0001`), appears under My Tasks for
+whoever signs next, and prints like its paper version at `/{code}/forms/{id}`. Forms about an
+employee leave a box for that employee to sign on the printed copy.
+
+A form is **defined, not programmed**: what it asks is in
+[`src/lib/forms/definitions.ts`](src/lib/forms/definitions.ts), what it prints in
+[`src/lib/forms/print.ts`](src/lib/forms/print.ts) and who signs in
+[`src/lib/signoffs/chains.ts`](src/lib/signoffs/chains.ts). Entering, numbering, signing and
+access are shared. Adding a form of this kind for another company means adding those three entries.
+
 ### 6.6 All Logs
 
 Linear activity stream (`staff_activity_logs`) across the company — vacation reviews, staff create events, and related operational breadcrumbs. Category/action/summary oriented for a simple ops timeline.
@@ -381,6 +403,7 @@ sessions when a password changes (sessions currently last 12 hours).
 | Staff and access | `staff_members` (login link, administrator flag), `staff_department_assignments` |
 | Reception / leave | `attendance_records`, `visitor_logs`, `vacation_requests` |
 | Sign-offs | `signatory_positions`, `document_signoffs` (append-only) |
+| Signed forms | `approval_forms`, `document_counters` (running numbers) |
 | Activity | `staff_activity_logs` |
 | Inquiry CRM | `inquiry_workflow_settings`, `inquiries`, `inquiry_line_items`, `inquiry_stage_events`, `inquiry_comments`, `inquiry_stage_approvals` |
 
@@ -431,8 +454,6 @@ Env essentials:
 - Documents behind the pipeline stages (quotation, LPO, job card, delivery note, invoices, receipt)
   with numbering, VAT and printing. Stages are status only today.
 - Per-company workflows: the nine stages are the same for every company.
-- The other signed forms: employee notices / fines, medical amounts, petty cash, material
-  requests and verbal work approvals. They reuse the leave request's sign-off mechanism.
 - Labour card (daily in/out, overtime and the monthly pay summary).
 - Personal Salary / Contract under Account duplicate the HR record and will be replaced by a
   read-only view of it.

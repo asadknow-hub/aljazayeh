@@ -42,6 +42,7 @@ import {
   normalizeInquiryWorkflowMap,
 } from "@/lib/inquiries/validate";
 import { requireOrg, resolveOrg, type ResolvedOrg } from "@/lib/org/resolve";
+import { isUuid } from "@/lib/ids";
 
 type InquiryRow = typeof inquiries.$inferSelect;
 
@@ -81,7 +82,8 @@ async function loadWorkflowMap(
         departmentKey: row.departmentKey,
         approvalRequired: row.approvalRequired,
         approvalRequiredBy:
-          row.approvalRequired && isInquiryApprovalRoleKey(row.approvalRequiredBy)
+          row.approvalRequired &&
+          isInquiryApprovalRoleKey(row.approvalRequiredBy)
             ? row.approvalRequiredBy
             : "",
       };
@@ -331,6 +333,7 @@ async function findInquiry(
   org: ResolvedOrg,
   inquiryId: string,
 ): Promise<InquiryRow | null> {
+  if (!isUuid(inquiryId)) return null;
   const [row] = await tx
     .select()
     .from(inquiries)
@@ -789,7 +792,9 @@ export async function assignInquiryForUser(
       (staff) => staff.id === staffId,
     );
     if (!assignee) {
-      throw new UserError("Select an active staff member from this department.");
+      throw new UserError(
+        "Select an active staff member from this department.",
+      );
     }
 
     await tx
@@ -896,7 +901,10 @@ export async function moveInquiryStageForUser(
         updatedAt: new Date(),
       })
       .where(eq(inquiries.id, inquiryId));
-    await recordEvent(tx, org, userId, inquiryId, { from: current, to: toStage });
+    await recordEvent(tx, org, userId, inquiryId, {
+      from: current,
+      to: toStage,
+    });
 
     return reloadInquiryView(tx, org, inquiryId);
   });

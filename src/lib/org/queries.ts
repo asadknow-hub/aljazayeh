@@ -41,7 +41,10 @@ export async function listUserOrganizations(
         organizations,
         eq(organizations.id, staffMembers.organizationId),
       )
-      .leftJoin(userPreferences, eq(userPreferences.userId, staffMembers.userId))
+      .leftJoin(
+        userPreferences,
+        eq(userPreferences.userId, staffMembers.userId),
+      )
       .where(
         and(eq(staffMembers.userId, userId), eq(staffMembers.status, "active")),
       )

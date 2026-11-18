@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
-import { LeaveActions } from "@/app/(app)/[orgCode]/leave/[requestId]/leave-actions";
+import { DocumentActions } from "@/components/documents/document-actions";
 import { LeaveForm } from "@/components/leave/leave-form";
 import { loadOrgPage } from "@/lib/org/page";
+import { signVacationRequestAction } from "@/lib/vacation/actions";
 import { getLeaveDocumentForUser } from "@/lib/vacation/queries";
 
 export const instant = false;
@@ -25,10 +26,11 @@ export default async function LeaveRequestPage({
 
   return (
     <main className="flex-1 p-4 sm:p-6 print:p-0">
-      <LeaveActions
-        orgCode={org.code}
-        requestId={leave.id}
+      <DocumentActions
+        title="Leave Request"
+        backHref={`/${org.code}`}
         signoffs={leave.signoffs}
+        onSign={signVacationRequestAction.bind(null, org.code, leave.id)}
       />
       <LeaveForm leave={leave} />
     </main>

@@ -47,6 +47,37 @@ export const DOCUMENT_CHAINS = {
     },
     { signer: "managing_director", label: "Signature of Managing Director" },
   ],
+  fine_notice: [
+    { signer: "admin", label: "Verified by Admin" },
+    { signer: "accountant", label: "Verified by Accounts" },
+    { signer: "managing_partner", label: "Approved by Managing Partner" },
+    { signer: "managing_director", label: "Approved by Managing Director" },
+  ],
+  medical_claim: [
+    { signer: "accountant", label: "Verified by Accounts" },
+    { signer: "managing_partner", label: "Approved by Managing Partner" },
+    { signer: "managing_director", label: "Approved by Managing Director" },
+  ],
+  petty_cash: [
+    { signer: "preparer", label: "Prepared By" },
+    { signer: "accountant", label: "Verified by Accounts" },
+    { signer: "managing_partner", label: "Approved by Managing Partner" },
+    { signer: "managing_director", label: "Approved by Managing Director" },
+  ],
+  material_request: [
+    { signer: "foreman", label: "Verified by Forman" },
+    { signer: "purchaser", label: "Verified by Purchaser" },
+    { signer: "accountant", label: "Verified by Accounts" },
+    { signer: "managing_partner", label: "Approved by Managing Partner" },
+    { signer: "managing_director", label: "Approved by Managing Director" },
+  ],
+  verbal_work_approval: [
+    { signer: "foreman", label: "Verified by Forman" },
+    { signer: "purchaser", label: "Verified by Purchaser" },
+    { signer: "accountant", label: "Verified by Account" },
+    { signer: "managing_partner", label: "Approved by Managing Partner & CEO" },
+    { signer: "managing_director", label: "Approved by Managing Director" },
+  ],
 } as const satisfies Record<string, readonly ChainStep[]>;
 
 export type DocumentType = keyof typeof DOCUMENT_CHAINS;

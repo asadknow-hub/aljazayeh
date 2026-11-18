@@ -6,7 +6,10 @@ import {
   type InquiryWorkflowMap,
   type InquiryWorkflowStageConfig,
 } from "@/lib/inquiries/stages";
-import type { InquiryCreateInput, InquiryLineItemInput } from "@/lib/inquiries/types";
+import type {
+  InquiryCreateInput,
+  InquiryLineItemInput,
+} from "@/lib/inquiries/types";
 import { UserError } from "@/lib/errors";
 
 function clean(value: string): string {

@@ -2,10 +2,7 @@ import "server-only";
 
 import { desc, eq } from "drizzle-orm";
 import { withTenantContext } from "@/db/client";
-import {
-  staffActivityLogs,
-  staffMembers,
-} from "@/db/schema";
+import { staffActivityLogs, staffMembers } from "@/db/schema";
 import { can } from "@/lib/access/access";
 import type { StaffActivityLogView } from "@/lib/activity/types";
 import { resolveOrg } from "@/lib/org/resolve";

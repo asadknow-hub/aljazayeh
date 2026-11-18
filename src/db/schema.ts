@@ -5,6 +5,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   numeric,
   pgPolicy,
   pgTable,
@@ -358,6 +359,70 @@ export const documentSignoffs = pgTable(
     index("document_signoffs_org_idx").on(table.organizationId),
     allowSelect("document_signoffs_member_select", isOrgMember()),
     allowInsert("document_signoffs_member_insert", isOrgMember()),
+  ],
+);
+
+/**
+ * Running numbers for documents (FN/2026/0001, …), one counter per company,
+ * kind of document and year.
+ */
+export const documentCounters = pgTable(
+  "document_counters",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    counterKey: text("counter_key").notNull(),
+    year: integer("year").notNull(),
+    lastNumber: integer("last_number").notNull().default(0),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.organizationId, table.counterKey, table.year],
+    }),
+    ...orgMemberRecords("document_counters"),
+  ],
+);
+
+/**
+ * The company's internal forms that are filled in and then signed off: fine
+ * notices, medical amounts, petty cash, material requests, verbal work
+ * approvals. What each kind contains is defined in src/lib/forms; the
+ * answers are stored here as entered.
+ */
+export const approvalForms = pgTable(
+  "approval_forms",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    formType: text("form_type").notNull(),
+    referenceNo: text("reference_no").notNull(),
+    /** The employee the form is about, for forms that concern one. */
+    staffId: uuid("staff_id").references(() => staffMembers.id, {
+      onDelete: "restrict",
+    }),
+    fields: jsonb("fields").$type<Record<string, string>>().notNull(),
+    lines: jsonb("lines").$type<Record<string, string>[]>().notNull(),
+    /** The form's headline amount in AED, where it has one. */
+    amount: numeric("amount", { precision: 14, scale: 2 }),
+    status: text("status").notNull().default("pending"),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("approval_forms_org_reference_uidx").on(
+      table.organizationId,
+      table.referenceNo,
+    ),
+    index("approval_forms_org_type_idx").on(
+      table.organizationId,
+      table.formType,
+    ),
+    ...orgMemberRecords("approval_forms"),
   ],
 );
 

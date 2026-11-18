@@ -2,12 +2,7 @@ import "server-only";
 
 import { desc, eq, sql } from "drizzle-orm";
 import { db, withTenantContext } from "@/db/client";
-import {
-  userContracts,
-  userLoginEvents,
-  userSalary,
-  users,
-} from "@/db/schema";
+import { userContracts, userLoginEvents, userSalary, users } from "@/db/schema";
 import type {
   ContractView,
   LoginActivityItem,

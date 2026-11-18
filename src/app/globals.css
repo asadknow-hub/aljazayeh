@@ -29,6 +29,11 @@ body {
  * Printed forms. A page marked .print-landscape prints on A4 landscape, and
  * .print-exact keeps the shaded cells that browsers otherwise drop.
  */
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
 @page landscape {
   size: A4 landscape;
   margin: 8mm;

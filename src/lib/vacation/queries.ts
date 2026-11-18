@@ -13,6 +13,7 @@ import { insertStaffActivityLog } from "@/lib/activity/record";
 import { addDays, durationInYearsAndMonths } from "@/lib/datetime/calendar";
 import { departmentLabel } from "@/lib/departments/catalog";
 import { UserError } from "@/lib/errors";
+import { isUuid } from "@/lib/ids";
 import { requireOrg, resolveOrg, type ResolvedOrg } from "@/lib/org/resolve";
 import type { SignoffDecision } from "@/lib/signoffs/chains";
 import { verifyApprovalPin } from "@/lib/signoffs/credentials";
@@ -104,7 +105,7 @@ export async function listStaffVacationRequestsForUser(
 ): Promise<VacationRequestView[]> {
   return withTenantContext(userId, async (tx) => {
     const org = await resolveOrg(tx, userId, orgCode);
-    if (!org || !can.manageStaff(org.access)) return [];
+    if (!org || !can.manageStaff(org.access) || !isUuid(staffId)) return [];
     return loadRequests(tx, org.id, { staffId });
   });
 }
@@ -222,6 +223,7 @@ async function findRequest(
   org: ResolvedOrg,
   requestId: string,
 ) {
+  if (!isUuid(requestId)) return null;
   const [row] = await tx
     .select({ request: vacationRequests, staff: staffMembers })
     .from(vacationRequests)
