@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { emptyLineItem } from "@/components/inquiries/paper";
-import { InquiryItems, StageFields } from "@/components/inquiries/stage-form";
+import {
+  emptyLineItem,
+  InquiryItems,
+  StageFields,
+} from "@/components/inquiries/stage-form";
 import { AlertIcon, CloseIcon } from "@/components/ui/icons";
 import { unwrap } from "@/lib/actions/result";
 import { createInquiryAction } from "@/lib/inquiries/actions";

@@ -8,21 +8,22 @@ import {
   StatusChip,
 } from "@/components/inquiries/inquiry-chips";
 import {
-  InquirySidePanel,
+  HandlingBar,
+  InquiryExtras,
   type InquirySideActions,
 } from "@/components/inquiries/inquiry-side-panel";
 import { InquiryStepper } from "@/components/inquiries/inquiry-stepper";
-import {
-  fillId,
-  itemFillKey,
-  PaperProvider,
-} from "@/components/inquiries/paper";
+import { PaperProvider } from "@/components/inquiries/paper";
 import { StagePaper } from "@/components/inquiries/papers";
 import {
-  hasFormFields,
+  fillId,
+  hasFields,
   InquiryItems,
+  itemFillKey,
+  ItemsEditor,
   StageAnswers,
   StageFields,
+  TablesEditor,
 } from "@/components/inquiries/stage-form";
 import { usePageTitle } from "@/components/providers/page-title-provider";
 import { useToast } from "@/components/providers/toast-provider";
@@ -370,27 +371,10 @@ export function InquiryDetailClient({
     },
   };
 
-  // Every paper prepared so far, with its number.
-  const references = inquiry.steps.flatMap((step) => {
-    if (step.state === "locked") return [];
-    const list = documentsInUse(step.key, step.fields).flatMap((doc) => {
-      const number =
-        doc.key === mainDocument(step.key)?.key
-          ? step.documentNumber
-          : (step.documentNumbers[doc.key] ?? "");
-      return number ? [{ key: doc.key, label: doc.title, number }] : [];
-    });
-    return step.key === "lpo_in_or_out" && step.fields.customerLpoNumber
-      ? [
-          {
-            key: "customer_lpo",
-            label: "Customer LPO",
-            number: step.fields.customerLpoNumber,
-          },
-          ...list,
-        ]
-      : list;
-  });
+  const stepNumber =
+    viewedStep.state === "locked" ? "" : viewedStep.documentNumber;
+  const setFields = (fields: Record<string, string>) =>
+    setDraft({ ...draft, fields });
 
   return (
     <main className="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6 print:block print:p-0">
@@ -448,19 +432,6 @@ export function InquiryDetailClient({
             ) : null}
           </div>
         </div>
-        {references.length > 0 ? (
-          <div className="flex flex-wrap gap-x-5 gap-y-1 border-t border-slate-100 pt-3 text-xs text-slate-600">
-            {references.map((reference) => (
-              <span key={reference.key} className="inline-flex items-center gap-1">
-                <DocumentIcon className="h-3.5 w-3.5 text-slate-400" />
-                {reference.label}{" "}
-                <span className="font-medium text-slate-900">
-                  {reference.number}
-                </span>
-              </span>
-            ))}
-          </div>
-        ) : null}
         {inquiry.status === "cancelled" ? (
           <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">
             Closed as lost: {inquiry.closeReason}
@@ -469,243 +440,320 @@ export function InquiryDetailClient({
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:items-start print:block">
-        <div className="w-full shrink-0 lg:w-64 print:hidden">
+        <div className="flex w-full shrink-0 flex-col gap-4 lg:w-72 print:hidden">
           <InquiryStepper
             steps={inquiry.steps}
             viewing={viewedStep.key}
             assignedStaffName={inquiry.assignedStaffName}
             onSelect={setViewing}
           />
+          <InquiryExtras
+            key={`${inquiry.currentStage}-${inquiry.status}`}
+            inquiry={inquiry}
+            pending={pending}
+            actions={sideActions}
+          />
         </div>
 
-        <form
-          onSubmit={(event: FormEvent) => {
-            event.preventDefault();
-            void save(false);
-          }}
-          className="card min-w-0 flex-1"
-        >
-          <div className="border-b border-slate-200 px-4 py-4 sm:px-5 print:hidden">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
-                Step {viewedStep.number} of {inquiry.steps.length}
-              </span>
-              <DepartmentChip department={viewedStep.departmentKey} />
-              {viewedStep.documentNumber && viewedStep.key !== "inquiry" ? (
-                <span className="chip bg-slate-100 text-slate-700">
-                  {viewedStep.documentNumber}
-                </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-4 print:block">
+          <HandlingBar
+            key={`${inquiry.currentStage}-${inquiry.assignedStaffId}`}
+            inquiry={inquiry}
+            staffOptions={assignable[inquiry.owningDepartmentKey] ?? []}
+            myStaffId={myStaffId}
+            pending={pending}
+            unsavedChanges={dirty}
+            actions={sideActions}
+          />
+
+          <form
+            onSubmit={(event: FormEvent) => {
+              event.preventDefault();
+              void save(false);
+            }}
+            className="card min-w-0"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 border-b border-slate-200 px-4 py-4 sm:px-5 print:hidden">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                    Step {viewedStep.number} of {inquiry.steps.length}
+                  </span>
+                  <DepartmentChip department={viewedStep.departmentKey} />
+                </div>
+                <h3 className="mt-1.5 font-display text-lg font-semibold text-slate-900">
+                  {viewedStep.label}
+                </h3>
+                <p className="mt-0.5 max-w-2xl text-sm text-slate-600">
+                  {definition.purpose}
+                </p>
+              </div>
+              {stepNumber ? (
+                <div className="rounded-lg bg-slate-900 px-4 py-2 text-right text-white">
+                  <p className="text-[11px] font-medium tracking-wide text-slate-300 uppercase">
+                    {viewedStep.label} No.
+                  </p>
+                  <p className="font-display text-base font-semibold tabular-nums">
+                    {stepNumber}
+                  </p>
+                </div>
               ) : null}
             </div>
-            <h3 className="mt-1.5 font-display text-lg font-semibold text-slate-900">
-              {viewedStep.label}
-            </h3>
-            <p className="mt-0.5 text-sm text-slate-600">{definition.purpose}</p>
-          </div>
 
-          {viewedStep.state === "done" ? (
-            <p className="flex items-center gap-2 border-b border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900 sm:px-5 print:hidden">
-              <CheckIcon className="h-4 w-4 text-emerald-600" />
-              Done
-              {viewedStep.completedByName
-                ? ` by ${viewedStep.completedByName}`
-                : ""}
-              {viewedStep.completedAt
-                ? ` · ${formatFriendlyDateTime(new Date(viewedStep.completedAt))}`
-                : ""}
-            </p>
-          ) : null}
-          {viewingCurrent && inquiry.status === "open" && !editable ? (
-            <p className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 sm:px-5 print:hidden">
-              <LockIcon className="h-4 w-4 text-amber-600" />
-              {inquiry.canWork
-                ? "Assign someone on the right to start working on this step."
-                : `View only. This step is handled by ${workflowDepartmentLabel(inquiry.owningDepartmentKey)}.`}
-            </p>
-          ) : null}
-
-          <div className="flex flex-col gap-6 px-4 py-5 sm:px-5 print:p-0">
-            {hasFormFields(viewedStep.key) ? (
-              <div className="print:hidden">
-                {editable ? (
-                  <StageFields
-                    stage={viewedStep.key}
-                    values={draft.fields}
-                    disabled={pending}
-                    invalid={invalid}
-                    onChange={(fields) => setDraft({ ...draft, fields })}
-                  />
-                ) : (
-                  <StageAnswers stage={viewedStep.key} values={shown.fields} />
-                )}
-              </div>
+            {viewedStep.state === "done" ? (
+              <p className="flex items-center gap-2 border-b border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900 sm:px-5 print:hidden">
+                <CheckIcon className="h-4 w-4 text-emerald-600" />
+                Done
+                {viewedStep.completedByName
+                  ? ` by ${viewedStep.completedByName}`
+                  : ""}
+                {viewedStep.completedAt
+                  ? ` · ${formatFriendlyDateTime(new Date(viewedStep.completedAt))}`
+                  : ""}
+              </p>
+            ) : null}
+            {viewingCurrent && inquiry.status === "open" && !editable ? (
+              <p className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 sm:px-5 print:hidden">
+                <LockIcon className="h-4 w-4 text-amber-600" />
+                {inquiry.canWork
+                  ? "Assign someone above to start working on this step."
+                  : `View only. This step is handled by ${workflowDepartmentLabel(inquiry.owningDepartmentKey)}.`}
+              </p>
             ) : null}
 
-            {definition.items === "entry" ? (
-              <div className="print:hidden">
-                <InquiryItems
-                  items={shown.lineItems}
-                  disabled={!editable || pending}
-                  invalid={invalid}
-                  onChange={(lineItems) => setDraft({ ...draft, lineItems })}
-                />
-              </div>
-            ) : null}
+            <div
+              className={[
+                "grid gap-6 px-4 py-5 sm:px-5 print:block print:p-0",
+                // Filling in: the form on the left, the paper on the right.
+                paper && editable
+                  ? "xl:grid-cols-[minmax(19rem,22rem)_minmax(0,1fr)] 2xl:grid-cols-[minmax(21rem,26rem)_minmax(0,1fr)]"
+                  : "",
+              ].join(" ")}
+            >
+              {editable ? (
+                <div className="flex min-w-0 flex-col gap-5 print:hidden">
+                  {paper ? (
+                    <p className="rounded-lg bg-primary-soft px-3 py-2 text-sm text-blue-900">
+                      Fill in here. The {paper.title} beside it fills in as you
+                      type; everything else on it comes from the earlier steps.
+                    </p>
+                  ) : null}
+                  {hasFields(viewedStep.key, STEP_FORM) ? (
+                    <StageFields
+                      stage={viewedStep.key}
+                      values={draft.fields}
+                      disabled={pending}
+                      invalid={invalid}
+                      narrow={Boolean(paper)}
+                      onChange={setFields}
+                    />
+                  ) : null}
+                  {definition.items === "entry" ? (
+                    <InquiryItems
+                      items={draft.lineItems}
+                      disabled={pending}
+                      onChange={(lineItems) => setDraft({ ...draft, lineItems })}
+                    />
+                  ) : null}
+                  {paper ? (
+                    <>
+                      {hasFields(viewedStep.key, paper.key) ? (
+                        <div className="flex flex-col gap-3">
+                          <h4 className="border-b border-slate-200 pb-1.5 text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                            {paper.title}
+                          </h4>
+                          <StageFields
+                            stage={viewedStep.key}
+                            place={paper.key}
+                            values={draft.fields}
+                            disabled={pending}
+                            invalid={invalid}
+                            narrow
+                            onChange={setFields}
+                          />
+                        </div>
+                      ) : null}
+                      <ItemsEditor
+                        stage={viewedStep.key}
+                        document={paper.key}
+                        items={draft.lineItems}
+                        disabled={pending}
+                        invalid={invalid}
+                        onChange={(lineItems) =>
+                          setDraft({ ...draft, lineItems })
+                        }
+                      />
+                      <TablesEditor
+                        stage={viewedStep.key}
+                        document={paper.key}
+                        tables={draft.tables ?? {}}
+                        disabled={pending}
+                        onChange={(name, rows) =>
+                          setDraft({
+                            ...draft,
+                            tables: { ...draft.tables, [name]: rows },
+                          })
+                        }
+                      />
+                    </>
+                  ) : null}
+                </div>
+              ) : (
+                <>
+                  {hasFields(viewedStep.key, STEP_FORM) ? (
+                    <div className="print:hidden">
+                      <StageAnswers
+                        stage={viewedStep.key}
+                        values={shown.fields}
+                      />
+                    </div>
+                  ) : null}
+                  {definition.items === "entry" ? (
+                    <div className="print:hidden">
+                      <InquiryItems items={shown.lineItems} disabled />
+                    </div>
+                  ) : null}
+                </>
+              )}
 
-            {paper ? (
-              <div>
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2 print:hidden">
-                  <div className="flex flex-wrap gap-1 rounded-lg bg-slate-200/70 p-1">
-                    {papers.map((doc) => (
-                      <button
-                        key={doc.key}
-                        type="button"
-                        aria-pressed={doc.key === paper.key}
-                        onClick={() => setOpenDocument(doc.key)}
-                        className={[
-                          "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                          doc.key === paper.key
-                            ? "bg-white text-slate-900 shadow-sm"
-                            : "text-slate-600 hover:text-slate-900",
-                        ].join(" ")}
-                      >
-                        <DocumentIcon className="h-3.5 w-3.5" />
-                        {doc.title}
-                      </button>
-                    ))}
+              {paper ? (
+                <div className="min-w-0">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 print:hidden">
+                    <div className="flex flex-wrap gap-1 rounded-lg bg-slate-200/70 p-1">
+                      {papers.map((doc) => (
+                        <button
+                          key={doc.key}
+                          type="button"
+                          aria-pressed={doc.key === paper.key}
+                          onClick={() => setOpenDocument(doc.key)}
+                          className={[
+                            "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                            doc.key === paper.key
+                              ? "bg-white text-slate-900 shadow-sm"
+                              : "text-slate-600 hover:text-slate-900",
+                          ].join(" ")}
+                        >
+                          <DocumentIcon className="h-3.5 w-3.5" />
+                          {doc.title}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={editable && dirty}
+                      title={
+                        editable && dirty
+                          ? "Save first, so the printout matches what is saved"
+                          : undefined
+                      }
+                      onClick={() => window.print()}
+                      className="btn btn-secondary btn-sm"
+                    >
+                      <PrinterIcon />
+                      Print {paper.title}
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    disabled={editable && dirty}
-                    title={
-                      editable && dirty
-                        ? "Save first, so the printout matches what is saved"
+                  {/* Shown a little smaller on a laptop screen so it fits beside
+                      the form; it always prints full size. */}
+                  <div
+                    className={
+                      editable
+                        ? "xl:max-2xl:[zoom:0.8] print:[zoom:1]"
                         : undefined
                     }
-                    onClick={() => window.print()}
-                    className="btn btn-secondary btn-sm"
                   >
-                    <PrinterIcon />
-                    Print {paper.title}
-                  </button>
+                  <PaperProvider
+                    state={{
+                      company,
+                      inquiry,
+                      stage: viewedStep.key,
+                      values: shown.fields,
+                      items: shown.lineItems,
+                      tables: shown.tables ?? {},
+                      totals,
+                    }}
+                  >
+                    <StagePaper document={paper.key} />
+                  </PaperProvider>
+                  </div>
                 </div>
-                {editable ? (
-                  <p className="mb-2 text-xs text-slate-500 print:hidden">
-                    Type in the yellow places. Everything else is filled in from
-                    the earlier steps.
+              ) : null}
+            </div>
+
+            {error ? (
+              <p
+                role="alert"
+                className="flex items-start gap-2 border-t border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 sm:px-5 print:hidden"
+              >
+                <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
+                {error}
+              </p>
+            ) : null}
+
+            {editable ? (
+              <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-4 sm:px-5 print:hidden">
+                {waitingForApproval ? (
+                  <p className="text-sm text-amber-800">
+                    This step needs approval by {approver} before it can move
+                    on. Save it so they can check it.
+                  </p>
+                ) : currentStep.approvalRequired && dirty ? (
+                  <p className="text-sm text-amber-800">
+                    You changed a step that {approver} had approved. Save it
+                    and ask them to approve it again.
                   </p>
                 ) : null}
-                <PaperProvider
-                  state={{
-                    company,
-                    inquiry,
-                    stage: viewedStep.key,
-                    editable: editable && !pending,
-                    values: shown.fields,
-                    setValue: (key, value) =>
-                      setDraft({
-                        ...draft,
-                        fields: { ...draft.fields, [key]: value },
-                      }),
-                    items: shown.lineItems,
-                    setItems: (lineItems) => setDraft({ ...draft, lineItems }),
-                    tables: shown.tables ?? {},
-                    setTable: (name, rows) =>
-                      setDraft({
-                        ...draft,
-                        tables: { ...draft.tables, [name]: rows },
-                      }),
-                    totals,
-                    invalid,
-                  }}
-                >
-                  <StagePaper document={paper.key} />
-                </PaperProvider>
-              </div>
-            ) : null}
-          </div>
-
-          {error ? (
-            <p
-              role="alert"
-              className="flex items-start gap-2 border-t border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 sm:px-5 print:hidden"
-            >
-              <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
-              {error}
-            </p>
-          ) : null}
-
-          {editable ? (
-            <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-4 sm:px-5 print:hidden">
-              {waitingForApproval ? (
-                <p className="text-sm text-amber-800">
-                  This step needs approval by {approver} before it can move on.
-                  Save it so they can check it.
-                </p>
-              ) : currentStep.approvalRequired && dirty ? (
-                <p className="text-sm text-amber-800">
-                  You changed a step that was already approved. Save it and ask{" "}
-                  {approver} to approve it again.
-                </p>
-              ) : null}
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <button
-                  type="button"
-                  disabled={pending || !dirty}
-                  onClick={() => {
-                    setDraft(saved);
-                    setError(null);
-                  }}
-                  className="btn btn-secondary"
-                >
-                  Discard
-                </button>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="submit"
-                    disabled={pending || !dirty}
-                    className="btn btn-secondary"
-                  >
-                    Save
-                  </button>
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <button
                     type="button"
-                    disabled={
-                      pending ||
-                      waitingForApproval ||
-                      (currentStep.approvalRequired && dirty)
-                    }
-                    onClick={() => void save(true)}
-                    className="btn btn-go !items-center !py-1.5 text-left"
+                    disabled={pending || !dirty}
+                    onClick={() => {
+                      setDraft(saved);
+                      setInvalid(new Set());
+                      setError(null);
+                    }}
+                    className="btn btn-secondary"
                   >
-                    <span className="flex flex-col leading-tight">
-                      <span>
-                        {nextStep
-                          ? "Save & Go to Next Step"
-                          : "Save & Complete Inquiry"}
-                      </span>
-                      <span className="text-xs font-normal text-emerald-50">
-                        {nextStep
-                          ? `Goes to ${workflowDepartmentLabel(nextStep.departmentKey)} · ${nextStep.number}. ${nextStep.label}`
-                          : "The job is paid and closed"}
-                      </span>
-                    </span>
-                    <ArrowRightIcon className="h-5 w-5" />
+                    Discard
                   </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="submit"
+                      disabled={pending || !dirty}
+                      className="btn btn-secondary"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      disabled={
+                        pending ||
+                        waitingForApproval ||
+                        (currentStep.approvalRequired && dirty)
+                      }
+                      onClick={() => void save(true)}
+                      className="btn btn-go !items-center !py-1.5 text-left"
+                    >
+                      <span className="flex flex-col leading-tight">
+                        <span>
+                          {nextStep
+                            ? "Save & Go to Next Step"
+                            : "Save & Complete Inquiry"}
+                        </span>
+                        <span className="text-xs font-normal text-emerald-50">
+                          {nextStep
+                            ? `Goes to ${workflowDepartmentLabel(nextStep.departmentKey)} · ${nextStep.number}. ${nextStep.label}`
+                            : "The job is paid and closed"}
+                        </span>
+                      </span>
+                      <ArrowRightIcon className="h-5 w-5" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : null}
-        </form>
-
-        <InquirySidePanel
-          key={`${inquiry.currentStage}-${inquiry.status}`}
-          inquiry={inquiry}
-          staffOptions={assignable[inquiry.owningDepartmentKey] ?? []}
-          myStaffId={myStaffId}
-          pending={pending}
-          actions={sideActions}
-        />
+            ) : null}
+          </form>
+        </div>
       </div>
     </main>
   );

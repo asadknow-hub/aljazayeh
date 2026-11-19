@@ -398,6 +398,7 @@ export async function loadDemoInquiries(
             : stepAnswers(stage.key, today, view.totals.total);
       const items = view.lineItems.map((line, lineIndex) => ({
         ...line,
+        unit: demo.items[lineIndex]?.[2] ?? line.unit,
         unitPrice: demo.items[lineIndex]?.[3] ?? line.unitPrice,
         deliveredQuantity: line.quantity,
       }));

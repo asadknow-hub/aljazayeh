@@ -1,6 +1,6 @@
 "use client";
 
-import { fillId, itemFillKey, emptyLineItem } from "@/components/inquiries/paper";
+import type { ReactNode } from "react";
 import { PlusIcon, TrashIcon } from "@/components/ui/icons";
 import { formatFormDate } from "@/lib/datetime/format";
 import type { InquiryStageKey } from "@/lib/inquiries/stages";
@@ -11,18 +11,34 @@ import {
   stageFieldDisplay,
   type StageField,
 } from "@/lib/inquiries/stage-forms";
-import type { InquiryLineItemInput } from "@/lib/inquiries/types";
+import type { InquiryLineItemInput, StageTables } from "@/lib/inquiries/types";
 
-/** The step's own questions: the ones that are not written on a paper. */
-function formFields(stage: InquiryStageKey): StageField[] {
-  return STAGE_DEFINITIONS[stage].fields.filter(
-    (field) => field.on === STEP_FORM,
-  );
+/** The id of the place where something is typed, so it can be focused. */
+export const fillId = (key: string) => `fill-${key}`;
+export const itemFillKey = (index: number, field: string) =>
+  `item-${index}-${field}`;
+
+export function emptyLineItem(): InquiryLineItemInput {
+  return {
+    description: "",
+    quantity: "1",
+    unit: "Nos",
+    unitPrice: "",
+    deliveredQuantity: "",
+    details: {},
+  };
 }
 
-export function hasFormFields(stage: InquiryStageKey): boolean {
-  return formFields(stage).length > 0;
+/** The questions asked in one place: the step's own form, or one of its papers. */
+function fieldsOn(stage: InquiryStageKey, place: string): StageField[] {
+  return STAGE_DEFINITIONS[stage].fields.filter((field) => field.on === place);
 }
+
+export function hasFields(stage: InquiryStageKey, place: string): boolean {
+  return fieldsOn(stage, place).length > 0;
+}
+
+const SHORT_TYPES = new Set(["date", "time", "amount", "number"]);
 
 function FieldInput({
   field,
@@ -30,23 +46,28 @@ function FieldInput({
   onChange,
   disabled,
   invalid,
+  fullWidth,
 }: {
   field: StageField;
   value: string;
   onChange: (value: string) => void;
   disabled: boolean;
   invalid: boolean;
+  fullWidth: boolean;
 }) {
   const id = fillId(field.key);
+  const span = fullWidth ? "col-span-2" : "col-span-2 sm:col-span-1";
 
   if (field.type === "yesno") {
     return (
       <label
         htmlFor={id}
         className={[
-          "flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800",
+          "col-span-2 flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm font-medium",
+          value === "yes"
+            ? "border-blue-300 bg-primary-soft text-slate-900"
+            : "border-slate-200 bg-slate-50 text-slate-800",
           disabled ? "cursor-not-allowed opacity-70" : "cursor-pointer",
-          field.wide ? "sm:col-span-2" : "",
         ].join(" ")}
       >
         <input
@@ -72,12 +93,7 @@ function FieldInput({
   };
 
   return (
-    <div
-      className={[
-        "flex flex-col gap-1.5",
-        field.wide ? "sm:col-span-2" : "",
-      ].join(" ")}
-    >
+    <div className={`flex flex-col gap-1.5 ${span}`}>
       <label htmlFor={id} className="field-label">
         {field.label}
         {field.required ? (
@@ -104,7 +120,13 @@ function FieldInput({
       ) : (
         <input
           {...shared}
-          type={field.type === "date" ? "date" : "text"}
+          type={
+            field.type === "date"
+              ? "date"
+              : field.type === "time"
+                ? "time"
+                : "text"
+          }
           inputMode={
             field.type === "amount" || field.type === "number"
               ? "decimal"
@@ -120,30 +142,40 @@ function FieldInput({
   );
 }
 
-/** The step's own questions, for filling in. */
+/**
+ * The questions of one place, for filling in. In the narrow column beside a
+ * paper only short answers (dates, numbers) sit two to a row.
+ */
 export function StageFields({
   stage,
+  place = STEP_FORM,
   values,
   onChange,
   disabled = false,
   invalid,
+  narrow = false,
 }: {
   stage: InquiryStageKey;
+  place?: string;
   values: Record<string, string>;
   onChange: (values: Record<string, string>) => void;
   disabled?: boolean;
   /** Questions that still have to be answered, shown in red. */
   invalid?: ReadonlySet<string>;
+  narrow?: boolean;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
-      {formFields(stage).map((field) => (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
+      {fieldsOn(stage, place).map((field) => (
         <FieldInput
           key={field.key}
           field={field}
           value={values[field.key] ?? ""}
           disabled={disabled}
           invalid={Boolean(invalid?.has(field.key)) && !values[field.key]}
+          fullWidth={
+            Boolean(field.wide) || (narrow && !SHORT_TYPES.has(field.type))
+          }
           onChange={(value) => onChange({ ...values, [field.key]: value })}
         />
       ))}
@@ -161,7 +193,7 @@ export function StageAnswers({
 }) {
   return (
     <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-      {formFields(stage).map((field) => {
+      {fieldsOn(stage, STEP_FORM).map((field) => {
         const value = values[field.key] ?? "";
         const shown =
           field.type === "date" && value
@@ -193,12 +225,10 @@ export function InquiryItems({
   items,
   onChange,
   disabled = false,
-  invalid,
 }: {
   items: InquiryLineItemInput[];
   onChange?: (items: InquiryLineItemInput[]) => void;
   disabled?: boolean;
-  invalid?: ReadonlySet<string>;
 }) {
   const editable = !disabled && Boolean(onChange);
   const total = items.reduce((sum, item) => sum + lineAmount(item), 0);
@@ -254,13 +284,7 @@ export function InquiryItems({
                   <td className={`${cell} pt-3 text-slate-500`}>{index + 1}</td>
                   <td className={cell}>
                     <input
-                      id={fillId(itemFillKey(index, "description"))}
                       aria-label={`Item ${index + 1} description`}
-                      aria-invalid={
-                        (invalid?.has(itemFillKey(index, "description")) &&
-                          !item.description) ||
-                        undefined
-                      }
                       className={input}
                       disabled={!editable}
                       value={item.description}
@@ -333,5 +357,314 @@ export function InquiryItems({
         </table>
       </div>
     </div>
+  );
+}
+
+/* --------------------- the form beside a paper: its lists -------------------- */
+
+/** A small labelled box in the column beside a paper. */
+function SmallInput({
+  id,
+  label,
+  row,
+  value,
+  onChange,
+  disabled,
+  invalid = false,
+  numeric = false,
+  className = "",
+}: {
+  id?: string;
+  label: string;
+  /** Which row it belongs to, read out with the label: "Item 2". */
+  row: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  invalid?: boolean;
+  numeric?: boolean;
+  className?: string;
+}) {
+  return (
+    <label className={`flex min-w-0 flex-col gap-1 ${className}`}>
+      <span className="field-label">{label}</span>
+      <input
+        id={id}
+        aria-label={`${row} ${label.toLowerCase()}`}
+        value={value}
+        disabled={disabled}
+        aria-invalid={invalid || undefined}
+        inputMode={numeric ? "decimal" : undefined}
+        onChange={(event) => onChange(event.target.value)}
+        className="field w-full !px-2 !py-1.5"
+      />
+    </label>
+  );
+}
+
+function RowCard({
+  title,
+  onRemove,
+  children,
+}: {
+  title: string;
+  onRemove?: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <p className="text-sm font-semibold text-slate-800">{title}</p>
+        {onRemove ? (
+          <button
+            type="button"
+            aria-label={`Remove ${title}`}
+            onClick={onRemove}
+            className="rounded-md p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+          >
+            <TrashIcon />
+          </button>
+        ) : null}
+      </div>
+      <div className="grid grid-cols-6 gap-2">{children}</div>
+    </div>
+  );
+}
+
+function AddButton({
+  children,
+  onClick,
+}: {
+  children: string;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" onClick={onClick} className="btn btn-secondary btn-sm">
+      <PlusIcon className="h-3.5 w-3.5" />
+      {children}
+    </button>
+  );
+}
+
+/**
+ * The job's items as far as the paper on screen is concerned: the whole list
+ * on the quotation, the delivered quantities on the delivery note, and on any
+ * paper the details it writes against each item (a remark, a heat number).
+ */
+export function ItemsEditor({
+  stage,
+  document,
+  items,
+  onChange,
+  disabled,
+  invalid,
+}: {
+  stage: InquiryStageKey;
+  document: string;
+  items: InquiryLineItemInput[];
+  onChange: (items: InquiryLineItemInput[]) => void;
+  disabled: boolean;
+  invalid: ReadonlySet<string>;
+}) {
+  const definition = STAGE_DEFINITIONS[stage];
+  const details = definition.itemDetails.filter((detail) =>
+    detail.on.includes(document),
+  );
+  const listOpen = definition.items === "priced";
+  const delivery = definition.items === "delivery";
+  if (!listOpen && !delivery && details.length === 0) return null;
+
+  const update = (index: number, patch: Partial<InquiryLineItemInput>) =>
+    onChange(items.map((item, i) => (i === index ? { ...item, ...patch } : item)));
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <h4 className="text-sm font-semibold text-slate-800">Items</h4>
+      {items.length === 0 ? (
+        <p className="text-sm text-slate-500">No items yet.</p>
+      ) : null}
+      {items.map((item, index) => (
+        <RowCard
+          key={item.id ?? `new-${index}`}
+          title={
+            listOpen
+              ? `Item ${index + 1}`
+              : `${index + 1}. ${item.description} · ${item.quantity} ${item.unit}`
+          }
+          onRemove={
+            listOpen && !disabled
+              ? () => onChange(items.filter((_, i) => i !== index))
+              : undefined
+          }
+        >
+          {listOpen ? (
+            <>
+              <SmallInput
+                row={`Item ${index + 1}`}
+                label="Description"
+                value={item.description}
+                disabled={disabled}
+                className="col-span-6"
+                onChange={(description) => update(index, { description })}
+              />
+              <SmallInput
+                row={`Item ${index + 1}`}
+                label="Unit"
+                value={item.unit}
+                disabled={disabled}
+                className="col-span-2"
+                onChange={(unit) => update(index, { unit })}
+              />
+              <SmallInput
+                row={`Item ${index + 1}`}
+                label="Qty"
+                value={item.quantity}
+                disabled={disabled}
+                numeric
+                className="col-span-2"
+                onChange={(quantity) => update(index, { quantity })}
+              />
+              <SmallInput
+                row={`Item ${index + 1}`}
+                id={fillId(itemFillKey(index, "unitPrice"))}
+                label="Unit price"
+                value={item.unitPrice}
+                disabled={disabled}
+                numeric
+                invalid={
+                  invalid.has(itemFillKey(index, "unitPrice")) &&
+                  !Number(item.unitPrice)
+                }
+                className="col-span-2"
+                onChange={(unitPrice) => update(index, { unitPrice })}
+              />
+            </>
+          ) : null}
+          {delivery ? (
+            <SmallInput
+                row={`Item ${index + 1}`}
+              id={fillId(itemFillKey(index, "deliveredQuantity"))}
+              label="Delivered qty"
+              value={item.deliveredQuantity}
+              disabled={disabled}
+              numeric
+              invalid={
+                invalid.has(itemFillKey(index, "deliveredQuantity")) &&
+                !item.deliveredQuantity
+              }
+              className="col-span-2"
+              onChange={(deliveredQuantity) =>
+                update(index, { deliveredQuantity })
+              }
+            />
+          ) : null}
+          {details.map((detail) => (
+            <SmallInput
+                row={`Item ${index + 1}`}
+              key={detail.key}
+              label={detail.label}
+              value={item.details[detail.key] ?? ""}
+              disabled={disabled}
+              className={
+                details.length + (delivery ? 1 : 0) === 1
+                  ? "col-span-6"
+                  : delivery
+                    ? "col-span-4"
+                    : "col-span-3"
+              }
+              onChange={(value) =>
+                update(index, {
+                  details: { ...item.details, [detail.key]: value },
+                })
+              }
+            />
+          ))}
+        </RowCard>
+      ))}
+      {listOpen && !disabled ? (
+        <div>
+          <AddButton onClick={() => onChange([...items, emptyLineItem()])}>
+            Add item
+          </AddButton>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** The lists a paper keeps of its own: purchase order lines, packages. */
+export function TablesEditor({
+  stage,
+  document,
+  tables,
+  onChange,
+  disabled,
+}: {
+  stage: InquiryStageKey;
+  document: string;
+  tables: StageTables;
+  onChange: (name: string, rows: Record<string, string>[]) => void;
+  disabled: boolean;
+}) {
+  const lists = Object.entries(STAGE_DEFINITIONS[stage].tables).filter(
+    ([, table]) => table.on === document,
+  );
+  if (lists.length === 0) return null;
+
+  return (
+    <>
+      {lists.map(([name, table]) => {
+        const rows = tables[name] ?? [];
+        return (
+          <div key={name} className="flex flex-col gap-2.5">
+            <h4 className="text-sm font-semibold text-slate-800">
+              {table.title}
+            </h4>
+            {rows.map((row, index) => (
+              <RowCard
+                key={index}
+                title={`${table.rowLabel} ${index + 1}`}
+                onRemove={
+                  disabled
+                    ? undefined
+                    : () =>
+                        onChange(
+                          name,
+                          rows.filter((_, i) => i !== index),
+                        )
+                }
+              >
+                {table.columns.map((column, columnIndex) => (
+                  <SmallInput
+                    row={`${table.rowLabel} ${index + 1}`}
+                    key={column.key}
+                    label={column.label}
+                    value={row[column.key] ?? ""}
+                    disabled={disabled}
+                    numeric={column.numeric}
+                    className={columnIndex === 0 ? "col-span-6" : "col-span-3"}
+                    onChange={(value) =>
+                      onChange(
+                        name,
+                        rows.map((item, i) =>
+                          i === index ? { ...item, [column.key]: value } : item,
+                        ),
+                      )
+                    }
+                  />
+                ))}
+              </RowCard>
+            ))}
+            {disabled ? null : (
+              <div>
+                <AddButton onClick={() => onChange(name, [...rows, {}])}>
+                  {`Add ${table.rowLabel.toLowerCase()}`}
+                </AddButton>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </>
   );
 }

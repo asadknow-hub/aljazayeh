@@ -281,7 +281,7 @@ responsible for it.
 | --- | --- | --- | --- |
 | 1 | Inquiry | none: the customer's details and the items with quantity and price | `AJE/INQ/2026/0001` |
 | 2 | Quotation | Quotation (Commercial Quotation for an export job), two pages | `AJE/QTN/…` |
-| 3 | LPO In or Out | the customer's LPO is recorded (in); Purchase Order to a supplier when material must be bought (out) | `AJE/PO/…` |
+| 3 | LPO In or Out | the customer's LPO is recorded (in); Purchase Order to a supplier when material must be bought (out) | `AJE/LPO/…`, `AJE/PO/…` |
 | 4 | Proforma Invoice | Proforma Invoice | `AJE/PI/…` |
 | 5 | Job Card | Job Card; Certificate of Compliance and Coating Certificate when the job needs them | `AJE/JC/…`, `AJE/COC/…`, `AJE/CC/…` |
 | 6 | Progress Invoice | Progress Invoice | `AJE/PRG/…` |
@@ -294,12 +294,17 @@ A local job has nine steps. An export job has the Commercial Invoice as
 step 9 and the Receipt Voucher as step 10.
 
 - Each step shows its paper as it prints, laid out like the company's own
-  form. What the form says is written by hand is typed straight onto the
-  paper (the yellow places); everything else is filled in from the earlier
-  steps: customer details, items, prices, and the numbers of the quotation,
-  LPO, job card and delivery note.
-- A paper gets its number the first time its step is saved with that paper in
-  use. **Print** prints the paper that is on screen and nothing else.
+  form. While the step is being filled in, a simple form is on the left and
+  the paper on the right fills in as you type. Only what the company's form
+  says is written by hand is asked for; everything else comes from the
+  earlier steps: customer details, items, prices, and the numbers of the
+  quotation, LPO, job card and delivery note.
+- A step gets its number the moment the job reaches it, shown beside the
+  step's name and in the step list. The LPO step has its own number too,
+  next to the customer's LPO number.
+- An optional paper (purchase order, certificate, packing list) gets its
+  number the first time the step is saved with it switched on. **Print**
+  prints the paper that is on screen and nothing else.
 - Which papers a step has, what is typed on them and what is required is in
   `src/lib/inquiries/stage-forms.ts`. How each paper looks is in
   `src/components/inquiries/papers.tsx`.

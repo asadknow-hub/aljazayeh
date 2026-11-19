@@ -38,6 +38,7 @@ import {
   mainDocument,
   missingStageFields,
   STAGE_DEFINITIONS,
+  stageCounterKey,
 } from "@/lib/inquiries/stage-forms";
 import type {
   AssignableStaff,
@@ -807,7 +808,7 @@ async function saveLineItems(
   ) => ({
     ...current,
     ...Object.fromEntries(
-      itemDetails.map((key) => [key, item.details[key] ?? ""]),
+      itemDetails.map(({ key }) => [key, item.details[key] ?? ""]),
     ),
   });
 
@@ -860,6 +861,16 @@ async function saveLineItems(
       await tx.insert(inquiryLineItems).values({ inquiryId, ...values });
     }
   }
+}
+
+/** The next number for a step, or nothing for a step that has none. */
+async function nextStageNumber(
+  tx: DbTransaction,
+  org: ResolvedOrg,
+  stage: InquiryStageKey,
+): Promise<string> {
+  const counterKey = stageCounterKey(stage);
+  return counterKey ? nextDocumentNumber(tx, org, counterKey) : "";
 }
 
 /** Save what was typed into one step. Returns the answers as stored. */
@@ -931,8 +942,10 @@ async function saveStageAnswers(
         : fields,
     tables: normalizeStageTables(stage, input.tables),
     documentNumbers,
-    ...(main && !record?.documentNumber
-      ? { documentNumber: await nextDocumentNumber(tx, org, main.counterKey) }
+    // Normally given when the job reached the step; older inquiries get it
+    // here.
+    ...(stage !== "inquiry" && !record?.documentNumber
+      ? { documentNumber: await nextStageNumber(tx, org, stage) }
       : {}),
   });
   await saveLineItems(tx, row.id, stage, items);
@@ -1156,7 +1169,10 @@ async function enterStage(
 ) {
   const owner = departmentForStage(map, toStage);
   const [record] = await tx
-    .select({ handledByStaffId: inquiryStageRecords.handledByStaffId })
+    .select({
+      handledByStaffId: inquiryStageRecords.handledByStaffId,
+      documentNumber: inquiryStageRecords.documentNumber,
+    })
     .from(inquiryStageRecords)
     .where(
       and(
@@ -1181,6 +1197,12 @@ async function enterStage(
       updatedAt: new Date(),
     })
     .where(eq(inquiries.id, row.id));
+  // The step has its number from the moment the job reaches it.
+  if (!record?.documentNumber) {
+    await writeStageRecord(tx, org, row.id, toStage, {
+      documentNumber: await nextStageNumber(tx, org, toStage),
+    });
+  }
   await recordEvent(tx, org, userId, row.id, {
     from: stageOf(row),
     to: toStage,

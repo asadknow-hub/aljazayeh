@@ -9,19 +9,12 @@ import {
   CompanyHeading,
   darkBar,
   darkHead,
-  DocumentNumber,
   Fill,
-  ItemDetailFill,
-  ItemFill,
-  ItemListControls,
   Line,
   PaperSheet,
   PaperTitle,
   Shaded,
   SignatureBox,
-  TableFill,
-  TableRowControls,
-  useItemListOpen,
   usePaper,
 } from "@/components/inquiries/paper";
 import type { InquiryStageKey } from "@/lib/inquiries/stages";
@@ -146,7 +139,6 @@ function TotalsLines({ grandLabel }: { grandLabel: string }) {
 function QuotationPaper() {
   const job = useJob();
   const { items, totals, company, inquiry } = job;
-  const listOpen = useItemListOpen();
   const terms: [string, string][] = [
     ["Material Scope & Standards", "termMaterial"],
     ["Delivery Scope & Logistics", "termDelivery"],
@@ -176,7 +168,7 @@ function QuotationPaper() {
         <div>
           <p className="mb-1 font-bold uppercase">Quotation Reference Details</p>
           <Line label="Quotation Reference No:">
-            <DocumentNumber value={job.numbers.quotation} />
+            {job.numbers.quotation}
           </Line>
           <Line label="Inquiry Channel:">{job.customer.channel}</Line>
           <Line label="Query Ref No:">{job.numbers.inquiry}</Line>
@@ -210,7 +202,6 @@ function QuotationPaper() {
             <th className={`${darkHead} w-16`}>Qty</th>
             <th className={`${darkHead} w-24 text-right`}>Unit Price (AED)</th>
             <th className={`${darkHead} w-24 text-right`}>Total (AED)</th>
-            {listOpen ? <th className="w-6 print:hidden" /> : null}
           </tr>
         </thead>
         <tbody>
@@ -218,31 +209,25 @@ function QuotationPaper() {
             <tr key={item.id ?? `new-${index}`} className="even:bg-[#eef1f6]">
               <td className={cell}>{index + 1}</td>
               <td className={cell}>
-                <ItemFill index={index} column="description" />
+                {item.description}
               </td>
               <td className={cell}>
-                <ItemFill index={index} column="unit" />
+                {item.unit}
               </td>
               <td className={cell}>
-                <ItemFill index={index} column="quantity" />
+                {item.quantity}
               </td>
               <td className={`${cell} text-right`}>
-                <ItemFill index={index} column="unitPrice" />
+                {formatMoney(Number(item.unitPrice) || 0)}
               </td>
               <td className={`${cell} text-right tabular-nums`}>
                 {formatMoney(amountOf(item))}
               </td>
-              {listOpen ? (
-                <td className="bg-white pl-1 align-middle print:hidden">
-                  <ItemListControls index={index} />
-                </td>
-              ) : null}
             </tr>
           ))}
           <BlankRows have={items.length} columns={6} atLeast={5} />
         </tbody>
       </table>
-      <ItemListControls />
 
       <table className="mt-3 ml-auto w-[60%] border-collapse">
         <tbody>
@@ -255,12 +240,12 @@ function QuotationPaper() {
           <tr>
             <td className="py-1 pr-4 text-right">Discount :</td>
             <td className="py-1 text-right">
-              <Fill name="discount" className="w-28 text-right" />
+              <Fill name="discount" />
             </td>
           </tr>
           <tr>
             <td className="py-1 pr-4 text-right">
-              VAT @ <Fill name="vatPercent" className="w-10 text-center" />% :
+              VAT @ <Fill name="vatPercent" />% :
             </td>
             <td className="py-1 text-right tabular-nums">
               {formatMoney(totals.vat)}
@@ -289,7 +274,7 @@ function QuotationPaper() {
           {terms.map(([label, key]) => (
             <li key={key}>
               <span className="font-semibold">{label}:</span>{" "}
-              <Fill name={key} className="w-[60%]" />
+              <Fill name={key} />
             </li>
           ))}
         </ol>
@@ -330,8 +315,8 @@ function PurchaseOrderPaper() {
         <td className={`${box} font-bold`}>{right[0]}</td>
       </tr>
       <tr>
-        <td className={`${box} font-bold`}>{left[1]}</td>
-        <td className={`${box} font-bold`}>{right[1]}</td>
+        <td className={`${box} h-6 font-bold`}>{left[1]}</td>
+        <td className={`${box} h-6 font-bold`}>{right[1]}</td>
       </tr>
     </>
   );
@@ -356,20 +341,20 @@ function PurchaseOrderPaper() {
         <table className="w-full border-collapse">
           <tbody>
             {pair(
-              ["Voucher No.", <DocumentNumber key="n" value={job.numbers.purchaseOrder} />],
+              ["Voucher No.", job.numbers.purchaseOrder],
               ["Dated", <Fill key="d" name="poDate" />],
             )}
             {pair(
-              ["Mode/Terms of Payment", <Fill key="m" name="poPaymentMode" className="w-full" />],
-              ["Other Reference(s)", <Fill key="o" name="poOtherReference" className="w-full" />],
+              ["Mode/Terms of Payment", <Fill key="m" name="poPaymentMode" />],
+              ["Other Reference(s)", <Fill key="o" name="poOtherReference" />],
             )}
             {pair(
-              ["Supplier's Ref./Order No.", <Fill key="s" name="poSupplierRef" className="w-full" />],
-              ["Despatch through", <Fill key="t" name="poDespatch" className="w-full" />],
+              ["Supplier's Ref./Order No.", <Fill key="s" name="poSupplierRef" />],
+              ["Despatch through", <Fill key="t" name="poDespatch" />],
             )}
             {pair(
-              ["Destination", <Fill key="x" name="poDestination" className="w-full" />],
-              ["Terms of Delivery", <Fill key="y" name="poDeliveryTerms" className="w-full" />],
+              ["Destination", <Fill key="x" name="poDestination" />],
+              ["Terms of Delivery", <Fill key="y" name="poDeliveryTerms" />],
             )}
           </tbody>
         </table>
@@ -387,7 +372,7 @@ function PurchaseOrderPaper() {
             Consignee:
           </p>
           <p className="border-b border-black px-1.5 py-1 font-bold uppercase">
-            <Fill name="supplierName" className="w-full" />
+            <Fill name="supplierName" />
           </p>
           <p className="border-b border-black px-1.5 py-1 font-bold">
             PH: <Fill name="supplierPhone" />
@@ -402,11 +387,7 @@ function PurchaseOrderPaper() {
         <div className="border border-l-0 border-black px-1.5 py-1 font-bold">
           <p>TERMS AND CONDITIONS:</p>
           <div className="mt-1">
-            <Fill
-              name="poTerms"
-              className="w-full"
-              placeholder="Payment terms, delivery, …"
-            />
+            <Fill name="poTerms" />
           </div>
         </div>
       </div>
@@ -421,7 +402,6 @@ function PurchaseOrderPaper() {
             <th className={`${box} w-24`}>TOTAL AMOUNT</th>
             <th className={`${box} w-20`}>Tax {vat}%</th>
             <th className={`${box} w-28`}>Total Amount Including Vat</th>
-            {job.editable ? <th className="w-6 print:hidden" /> : null}
           </tr>
         </thead>
         <tbody>
@@ -429,13 +409,13 @@ function PurchaseOrderPaper() {
             <tr key={index}>
               <td className={box}>{index + 1}</td>
               <td className={box}>
-                <TableFill table="poLines" row={index} column="description" />
+                {row.description}
               </td>
               <td className={box}>
-                <TableFill table="poLines" row={index} column="quantity" />
+                {row.quantity}
               </td>
               <td className={box}>
-                <TableFill table="poLines" row={index} column="rate" />
+                {formatMoney(Number(row.rate) || 0)}
               </td>
               <td className={box}>{formatMoney(lineTotal(row))}</td>
               <td className={box}>
@@ -444,11 +424,6 @@ function PurchaseOrderPaper() {
               <td className={box}>
                 {formatMoney(lineTotal(row) * (1 + vat / 100))}
               </td>
-              {job.editable ? (
-                <td className="pl-1 print:hidden">
-                  <TableRowControls table="poLines" row={index} />
-                </td>
-              ) : null}
             </tr>
           ))}
           <tr>
@@ -461,7 +436,6 @@ function PurchaseOrderPaper() {
           </tr>
         </tbody>
       </table>
-      <TableRowControls table="poLines" />
 
       <div className="mt-1 flex justify-between">
         <span>Amount Chargeable (in words)</span>
@@ -537,13 +511,13 @@ function InvoicePaper({
         </div>
         <div>
           <Line label="Invoice No:">
-            <DocumentNumber value={number} />
+            {number}
           </Line>
           <Line label="Invoice Date:">
             <Fill name={dateField} />
           </Line>
           <Line label="Payment Terms:">
-            <Fill name="paymentTerms" className="w-32" />
+            <Fill name="paymentTerms" />
           </Line>
           <Line label="Due Date:">
             <Fill name="dueDate" />
@@ -616,11 +590,11 @@ function InvoicePaper({
             <tbody>
               <tr>
                 <td className="py-1.5">
-                  AED <Fill name="creditLimit" className="w-28" />
+                  AED <Fill name="creditLimit" />
                 </td>
                 <td className="py-1.5">AED {formatMoney(totals.total)}</td>
                 <td className="py-1.5">
-                  AED <Fill name="previousOutstanding" className="w-28" />
+                  AED <Fill name="previousOutstanding" />
                 </td>
                 <td className="py-1.5 font-bold">
                   AED {formatMoney(totals.total + previous)}
@@ -635,15 +609,11 @@ function InvoicePaper({
             <>
               <p className="mb-1 font-bold uppercase">Advance Payment</p>
               <Line label="Advance:">
-                <Fill name="advancePercent" className="w-12 text-center" /> % of
+                <Fill name="advancePercent" /> % of
                 the grand total
               </Line>
               <Line label="Advance amount (AED):">
-                <Fill
-                  name="advanceAmount"
-                  className="w-28"
-                  placeholder={advance ? formatMoney(advance) : ""}
-                />
+                <Fill name="advanceAmount" />
               </Line>
               <Line label="Payable now:">AED {formatMoney(advance)}</Line>
             </>
@@ -651,14 +621,10 @@ function InvoicePaper({
             <>
               <p className="mb-1 font-bold uppercase">Progress Billing</p>
               <Line label="Work completed:">
-                <Fill name="progressPercent" className="w-12 text-center" /> %
+                <Fill name="progressPercent" /> %
               </Line>
               <Line label="Amount billed now (AED):">
-                <Fill
-                  name="amount"
-                  className="w-28"
-                  placeholder={billedNow ? formatMoney(billedNow) : ""}
-                />
+                <Fill name="amount" />
               </Line>
               <Line label="Payable now:">AED {formatMoney(billedNow)}</Line>
             </>
@@ -692,7 +658,7 @@ function JobCardPaper() {
     <div className="border border-slate-300 px-2 py-2 leading-[2.2]">
       <p className="font-bold">{title}</p>
       <p>
-        Name: <Fill name={name} className="w-36" blank="w-36" />
+        Name: <Fill name={name} blank="w-36" />
       </p>
       <p>
         Sign: <Blank className="w-36" />
@@ -720,7 +686,7 @@ function JobCardPaper() {
             <td className={value}>{job.customer.name}</td>
             <td className={label}>ORDER NO:</td>
             <td className={value}>
-              <DocumentNumber value={job.numbers.jobCard} />
+              {job.numbers.jobCard}
             </td>
           </tr>
           <tr>
@@ -759,7 +725,7 @@ function JobCardPaper() {
                 {item.quantity} {item.unit}
               </td>
               <td className={cell}>
-                <ItemDetailFill index={index} name="jobRemark" label="remark" />
+                {item.details.jobRemark}
               </td>
             </tr>
           ))}
@@ -787,19 +753,15 @@ function JobCardPaper() {
           </p>
           <p>
             • Total Technician Hours:{" "}
-            <Fill name="technicianHours" className="w-16" blank="w-16" /> Hours
+            <Fill name="technicianHours" blank="w-16" /> Hours
           </p>
           <p>
             • Total Overtime Hours:{" "}
-            <Fill name="overtimeHours" className="w-16" blank="w-16" /> Hours
+            <Fill name="overtimeHours" blank="w-16" /> Hours
           </p>
         </div>
         <div className="border-l border-slate-300 px-2 py-2">
-          <Fill
-            name="technicianRemarks"
-            className="w-full"
-            placeholder="Technician remarks"
-          />
+          <Fill name="technicianRemarks" />
         </div>
       </div>
     </PaperSheet>
@@ -844,7 +806,7 @@ function ComplianceCertificatePaper() {
         <div>
           <p className="font-bold uppercase">Certificate Details:</p>
           <Line label="Certificate No :">
-            <DocumentNumber value={job.numbers.compliance} />
+            {job.numbers.compliance}
           </Line>
           <Line label="Issue Date :">
             <Fill name="complianceIssueDate" />
@@ -880,17 +842,13 @@ function ComplianceCertificatePaper() {
                 {item.quantity} {item.unit}
               </td>
               <td className={cell}>
-                <ItemDetailFill index={index} name="heatNo" label="heat no." />
+                {item.details.heatNo}
               </td>
               <td className={cell}>
-                <ItemDetailFill index={index} name="origin" label="origin" />
+                {item.details.origin}
               </td>
               <td className={cell}>
-                <ItemDetailFill
-                  index={index}
-                  name="complianceRemark"
-                  label="remarks"
-                />
+                {item.details.complianceRemark}
               </td>
             </tr>
           ))}
@@ -942,7 +900,7 @@ function CoatingCertificatePaper() {
           <p>
             CERTIFICATE NO :{" "}
             <span className="font-normal">
-              <DocumentNumber value={job.numbers.coating} />
+              {job.numbers.coating}
             </span>
           </p>
           <p>
@@ -972,7 +930,7 @@ function CoatingCertificatePaper() {
                 {item.quantity} {item.unit}
               </td>
               <td className={cell}>
-                <ItemDetailFill index={index} name="heatNo" label="heat no." />
+                {item.details.heatNo}
               </td>
             </tr>
           ))}
@@ -991,7 +949,7 @@ function CoatingCertificatePaper() {
                 {label}
               </td>
               <td className="border-b border-slate-200 px-1.5 py-1">
-                <Fill name={key} className="w-full" />
+                <Fill name={key} />
               </td>
             </tr>
           ))}
@@ -1017,7 +975,7 @@ function CoatingCertificatePaper() {
               blisters or bare spots.
             </td>
             <td className={`${cell} text-center font-bold`}>
-              <Fill name="appearanceResult" className="w-20 text-center" />
+              <Fill name="appearanceResult" />
             </td>
           </tr>
           <tr>
@@ -1027,21 +985,17 @@ function CoatingCertificatePaper() {
               knife (ASTM B571).
             </td>
             <td className={`${cell} text-center font-bold`}>
-              <Fill name="adhesionResult" className="w-20 text-center" />
+              <Fill name="adhesionResult" />
             </td>
           </tr>
           <tr>
             <td className={`${cell} font-bold`}>3. Coating Thickness</td>
             <td className={cell}>
               Readings:{" "}
-              <Fill
-                name="thicknessReadings"
-                className="w-[80%]"
-                placeholder="Sample 1: … μm | Sample 2: … μm | Average …"
-              />
+              <Fill name="thicknessReadings" />
             </td>
             <td className={`${cell} text-center font-bold`}>
-              <Fill name="thicknessResult" className="w-20 text-center" />
+              <Fill name="thicknessResult" />
             </td>
           </tr>
         </tbody>
@@ -1084,7 +1038,7 @@ function DeliveryNotePaper() {
           <p>{job.customer.name}</p>
           <p>
             Address:{" "}
-            <Fill name="deliveryAddress" className="w-[70%]" />
+            <Fill name="deliveryAddress" />
           </p>
           <p className="mt-2">Contact Person: {job.customer.attention}</p>
           <p>
@@ -1095,7 +1049,7 @@ function DeliveryNotePaper() {
         </div>
         <div className="text-[13.5px] leading-[1.7]">
           <p>
-            DN No: <DocumentNumber value={job.numbers.deliveryNote} />
+            DN No: {job.numbers.deliveryNote}
           </p>
           <p>
             Date: <Fill name="deliveryDate" />
@@ -1129,18 +1083,10 @@ function DeliveryNotePaper() {
                 {item.quantity} {item.unit}
               </td>
               <td className={`${cell} text-center`}>
-                <ItemFill
-                  index={index}
-                  column="deliveredQuantity"
-                  className="w-full text-center"
-                />
+                {item.deliveredQuantity}
               </td>
               <td className={cell}>
-                <ItemDetailFill
-                  index={index}
-                  name="deliveryRemark"
-                  label="remarks"
-                />
+                {item.details.deliveryRemark}
               </td>
             </tr>
           ))}
@@ -1215,7 +1161,7 @@ function CommercialInvoicePaper() {
             <td className={`${box} w-1/2`}>
               INVOICE NO:{" "}
               <span className="font-normal">
-                <DocumentNumber value={job.numbers.commercialInvoice} />
+                {job.numbers.commercialInvoice}
               </span>
             </td>
             <td className={box}>
@@ -1242,7 +1188,7 @@ function CommercialInvoicePaper() {
             <td className={box}>
               PAYMENT TERMS:{" "}
               <span className="font-normal">
-                <Fill name="ciPaymentTerms" className="w-40" />
+                <Fill name="ciPaymentTerms" />
               </span>
             </td>
           </tr>
@@ -1269,13 +1215,13 @@ function CommercialInvoicePaper() {
               <td className={`${box} text-left`}>{item.description}</td>
               <td className={box}>{item.quantity}</td>
               <td className={box}>
-                <ItemDetailFill index={index} name="heatNo" label="heat no." />
+                {item.details.heatNo}
               </td>
               <td className={box}>
-                <ItemDetailFill index={index} name="origin" label="origin" />
+                {item.details.origin}
               </td>
               <td className={box}>
-                <ItemDetailFill index={index} name="hsCode" label="HS code" />
+                {item.details.hsCode}
               </td>
               <td className={`${box} text-right tabular-nums`}>
                 {formatMoney(Number(item.unitPrice) || 0)}
@@ -1346,16 +1292,16 @@ function PackingListPaper() {
           <Line label="Company Name:">{job.customer.name}</Line>
           <Line label="Consignee TRN:">{job.customer.trn}</Line>
           <Line label="Delivery Site Address:">
-            <Fill name="deliverySiteAddress" className="w-[55%]" />
+            <Fill name="deliverySiteAddress" />
           </Line>
           <Line label="Site Contact Person:">
-            <Fill name="siteContactPerson" className="w-[55%]" />
+            <Fill name="siteContactPerson" />
           </Line>
           <Line label="Contact / WhatsApp:">
-            <Fill name="siteContact" className="w-[55%]" />
+            <Fill name="siteContact" />
           </Line>
           <Line label="Final Destination:">
-            <Fill name="finalDestination" className="w-[55%]" />
+            <Fill name="finalDestination" />
           </Line>
         </div>
         <div>
@@ -1363,7 +1309,7 @@ function PackingListPaper() {
             Packing &amp; Shipping Reference
           </p>
           <Line label="Packing List No:">
-            <DocumentNumber value={job.numbers.packingList} />
+            {job.numbers.packingList}
           </Line>
           <Line label="Dispatch Date:">
             <Fill name="dispatchDate" />
@@ -1371,13 +1317,13 @@ function PackingListPaper() {
           <Line label="LPO Ref No:">{job.numbers.lpo}</Line>
           <Line label="Invoice Ref:">{job.numbers.commercialInvoice}</Line>
           <Line label="Carrier / Freight Co:">
-            <Fill name="carrier" className="w-[50%]" />
+            <Fill name="carrier" />
           </Line>
           <Line label="Vehicle / Container No:">
-            <Fill name="vehicleNumber" className="w-[45%]" />
+            <Fill name="vehicleNumber" />
           </Line>
           <Line label="Port of Loading / Origin:">
-            <Fill name="portOfLoading" className="w-[42%]" />
+            <Fill name="portOfLoading" />
           </Line>
         </div>
       </Shaded>
@@ -1404,16 +1350,16 @@ function PackingListPaper() {
               <td className={cell}>{item.description}</td>
               <td className={`${cell} text-center`}>{item.quantity}</td>
               <td className={cell}>
-                <ItemDetailFill index={index} name="hsCode" label="HS code" />
+                {item.details.hsCode}
               </td>
               <td className={cell}>
-                <ItemDetailFill index={index} name="heatNo" label="heat no." />
+                {item.details.heatNo}
               </td>
               <td className={cell}>
-                <ItemDetailFill index={index} name="origin" label="origin" />
+                {item.details.origin}
               </td>
               <td className={cell}>
-                <ItemDetailFill index={index} name="packNo" label="pack no." />
+                {item.details.packNo}
               </td>
             </tr>
           ))}
@@ -1431,34 +1377,27 @@ function PackingListPaper() {
             <th className={darkHead}>Package Type</th>
             <th className={`${darkHead} w-28`}>Gross Wt.</th>
             <th className={`${darkHead} w-44`}>Dimensions (LxWxH)</th>
-            {job.editable ? <th className="w-6 print:hidden" /> : null}
           </tr>
         </thead>
         <tbody>
-          {packages.map((_, index) => (
+          {packages.map((pack, index) => (
             <tr key={index} className="even:bg-[#eef1f6]">
               {["mark", "packageType", "grossWeight", "dimensions"].map(
                 (column) => (
                   <td key={column} className={cell}>
-                    <TableFill table="packages" row={index} column={column} />
+                    {pack[column]}
                   </td>
                 ),
               )}
-              {job.editable ? (
-                <td className="bg-white pl-1 print:hidden">
-                  <TableRowControls table="packages" row={index} />
-                </td>
-              ) : null}
             </tr>
           ))}
           <BlankRows have={packages.length} columns={4} atLeast={2} />
         </tbody>
       </table>
-      <TableRowControls table="packages" />
 
       <Shaded className="mt-2 text-center font-bold">
         TOTAL GROSS WEIGHT:{" "}
-        <Fill name="totalGrossWeight" className="w-24 text-center" /> KG
+        <Fill name="totalGrossWeight" /> KG
       </Shaded>
 
       <p className="mt-5 mb-1 text-[13px] font-bold uppercase">
@@ -1495,7 +1434,7 @@ function ReceiptVoucherPaper() {
       <Shaded className="grid grid-cols-2 gap-4">
         <div>
           <Line label="Voucher No:">
-            <DocumentNumber value={job.numbers.receipt} />
+            {job.numbers.receipt}
           </Line>
           <Line label="Date:">
             <Fill name="receiptDate" />
@@ -1510,11 +1449,11 @@ function ReceiptVoucherPaper() {
       <div className="mt-5 space-y-2.5 text-[13.5px]">
         <p>
           <span className="font-bold">Received from:</span>{" "}
-          <Fill name="receivedFrom" className="w-[60%]" />
+          <Fill name="receivedFrom" />
         </p>
         <p>
           <span className="font-bold">The sum of AED:</span>{" "}
-          <Fill name="amountReceived" className="w-32" />
+          <Fill name="amountReceived" />
         </p>
         <p>
           <span className="font-bold">Amount in words:</span>{" "}
@@ -1523,19 +1462,15 @@ function ReceiptVoucherPaper() {
         <p>
           <span className="font-bold">Paid by:</span> <Fill name="paymentMethod" />
           <span className="ml-6 font-bold">Cheque / transfer ref:</span>{" "}
-          <Fill name="reference" className="w-36" />
+          <Fill name="reference" />
         </p>
         <p>
           <span className="font-bold">Bank:</span>{" "}
-          <Fill name="bank" className="w-48" />
+          <Fill name="bank" />
         </p>
         <p>
           <span className="font-bold">Being payment for:</span>{" "}
-          <Fill
-            name="remarks"
-            className="w-[65%]"
-            placeholder={job.inquiry.title}
-          />
+          <Fill name="remarks" />
         </p>
       </div>
 

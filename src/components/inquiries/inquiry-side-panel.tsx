@@ -95,24 +95,41 @@ function ReasonAction({
   );
 }
 
-export function InquirySidePanel({
+function initialsOf(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]!.toUpperCase())
+    .join("");
+}
+
+/**
+ * Who is handling the current step, and whether it has been approved. Shown
+ * above the step so nobody has to look for it.
+ */
+export function HandlingBar({
   inquiry,
   staffOptions,
   myStaffId,
   pending,
+  unsavedChanges,
   actions,
 }: {
   inquiry: InquiryView;
   staffOptions: AssignableStaff[];
   myStaffId: string;
   pending: boolean;
-  actions: InquirySideActions;
+  /** The step has been changed on screen since it was saved. */
+  unsavedChanges: boolean;
+  actions: Pick<InquirySideActions, "assign" | "approve">;
 }) {
+  const [choosing, setChoosing] = useState(false);
   const [assignStaffId, setAssignStaffId] = useState("");
-  const [note, setNote] = useState("");
 
-  const open = inquiry.status === "open";
-  const unassigned = open && !inquiry.assignedStaffId;
+  if (inquiry.status !== "open") return null;
+
+  const assigned = inquiry.assignedStaffName;
   const department = workflowDepartmentLabel(inquiry.owningDepartmentKey);
   const canAssignMe =
     inquiry.canAssign &&
@@ -125,121 +142,167 @@ export function InquirySidePanel({
         inquiry.steps.find((step) => step.key === inquiry.currentStage)
           ?.approvalRequiredBy,
     )?.label ?? "";
-  const approvalRequired = open && approver !== "";
-  const firstStep = inquiry.steps[0]?.key === inquiry.currentStage;
+  // An approval covers what was approved: changing the step undoes it.
+  const approved = inquiry.currentStageApproved && !unsavedChanges;
 
   return (
-    <aside className="flex w-full shrink-0 flex-col gap-4 xl:w-80 print:hidden">
-      {open ? (
-        <section
+    <section
+      className={[
+        "card flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3 print:hidden",
+        assigned ? "" : "!border-orange-300 !bg-accent-soft",
+      ].join(" ")}
+    >
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+        <span
+          aria-hidden
           className={[
-            "card p-4",
-            unassigned ? "!border-orange-300 !bg-accent-soft" : "",
+            "flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold",
+            assigned ? "bg-primary text-white" : "bg-orange-200 text-accent",
           ].join(" ")}
         >
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-            {unassigned ? (
-              <AlertIcon className="h-4 w-4 text-accent" />
-            ) : (
-              <UserIcon className="h-4 w-4 text-slate-500" />
-            )}
-            Who is handling this step
-          </h3>
-          <p className="mt-1.5 text-sm text-slate-700">
-            {inquiry.assignedStaffName ? (
-              <span className="font-medium">{inquiry.assignedStaffName}</span>
-            ) : (
-              `Nobody yet. Someone from ${department} has to be assigned before work can start.`
-            )}
+          {assigned ? initialsOf(assigned) : <AlertIcon className="h-5 w-5" />}
+        </span>
+        <div className="min-w-0">
+          <p className="text-xs font-medium tracking-wide text-slate-500 uppercase">
+            Handling this step
           </p>
-          {inquiry.canAssign ? (
-            <div className="mt-3 flex flex-col gap-2">
+          <p
+            className={[
+              "truncate font-display text-base font-semibold",
+              assigned ? "text-slate-900" : "text-accent",
+            ].join(" ")}
+          >
+            {assigned ?? `Nobody yet · someone from ${department} must be assigned`}
+          </p>
+        </div>
+
+        {inquiry.canAssign ? (
+          choosing || !assigned ? (
+            <div className="flex flex-wrap items-center gap-2">
               {canAssignMe ? (
                 <button
                   type="button"
                   disabled={pending}
-                  onClick={() => actions.assign(myStaffId)}
+                  onClick={() => {
+                    actions.assign(myStaffId);
+                    setChoosing(false);
+                  }}
                   className="btn btn-primary btn-sm"
                 >
                   Assign to me
                 </button>
               ) : null}
-              <div className="flex gap-2">
-                <select
-                  aria-label={`Choose someone from ${department}`}
-                  value={assignStaffId}
-                  onChange={(event) => setAssignStaffId(event.target.value)}
-                  className="field min-w-0 flex-1 !py-1.5"
-                >
-                  <option value="">Choose from {department}…</option>
-                  {staffOptions.map((staff) => (
-                    <option key={staff.id} value={staff.id}>
-                      {staff.fullName}
-                      {staff.jobTitle ? ` · ${staff.jobTitle}` : ""}
-                    </option>
-                  ))}
-                </select>
+              <select
+                aria-label={`Choose someone from ${department}`}
+                value={assignStaffId}
+                onChange={(event) => setAssignStaffId(event.target.value)}
+                className="field !py-1.5"
+              >
+                <option value="">Choose from {department}…</option>
+                {staffOptions.map((staff) => (
+                  <option key={staff.id} value={staff.id}>
+                    {staff.fullName}
+                    {staff.jobTitle ? ` · ${staff.jobTitle}` : ""}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={pending || !assignStaffId}
+                onClick={() => {
+                  actions.assign(assignStaffId);
+                  setAssignStaffId("");
+                  setChoosing(false);
+                }}
+                className="btn btn-secondary btn-sm"
+              >
+                Assign
+              </button>
+              {assigned ? (
                 <button
                   type="button"
-                  disabled={pending || !assignStaffId}
-                  onClick={() => {
-                    actions.assign(assignStaffId);
-                    setAssignStaffId("");
-                  }}
+                  onClick={() => setChoosing(false)}
                   className="btn btn-secondary btn-sm"
                 >
-                  Assign
+                  Cancel
                 </button>
-              </div>
+              ) : null}
               {staffOptions.length === 0 ? (
-                <p className="text-xs text-slate-600">
+                <p className="w-full text-xs text-slate-600">
                   Nobody is in {department} yet. Add the department to a staff
                   member under Staff.
                 </p>
               ) : null}
             </div>
-          ) : null}
-        </section>
-      ) : null}
+          ) : (
+            <button
+              type="button"
+              onClick={() => setChoosing(true)}
+              className="btn btn-secondary btn-sm"
+            >
+              <UserIcon />
+              Change
+            </button>
+          )
+        ) : null}
+      </div>
 
-      {approvalRequired ? (
-        <section
+      {approver ? (
+        <div
           className={[
-            "card p-4",
-            inquiry.currentStageApproved
-              ? "!border-emerald-300 !bg-emerald-50"
-              : "!border-amber-300 !bg-amber-50",
+            "flex flex-wrap items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium ring-1 ring-inset",
+            approved
+              ? "bg-emerald-50 text-emerald-900 ring-emerald-300"
+              : "bg-amber-50 text-amber-900 ring-amber-300",
           ].join(" ")}
         >
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-            {inquiry.currentStageApproved ? (
+          <span className="flex items-center gap-2">
+            {approved ? (
               <CheckIcon className="h-4 w-4 text-emerald-600" />
             ) : (
               <AlertIcon className="h-4 w-4 text-amber-600" />
             )}
-            {inquiry.currentStageApproved
+            {approved
               ? `Approved by ${approver}`
-              : `Needs approval by ${approver}`}
-          </h3>
-          {!inquiry.currentStageApproved ? (
-            <p className="mt-1.5 text-sm text-slate-700">
-              Save the step, then {approver} approves it before it can move on.
-            </p>
-          ) : null}
-          {inquiry.canApproveCurrentStage ? (
+              : inquiry.currentStageApproved
+                ? `Changed since ${approver} approved it · needs approval again once saved`
+                : `Needs approval by ${approver}`}
+          </span>
+          {inquiry.canApproveCurrentStage && !unsavedChanges ? (
             <button
               type="button"
-              disabled={pending || unassigned}
+              disabled={pending || !assigned}
               onClick={actions.approve}
-              className="btn btn-go btn-sm mt-3 w-full"
+              className="btn btn-go btn-sm"
             >
               <CheckIcon />
               Approve this step
             </button>
           ) : null}
-        </section>
+        </div>
       ) : null}
+    </section>
+  );
+}
 
+/** Notes, the less common actions and the history of the inquiry. */
+export function InquiryExtras({
+  inquiry,
+  pending,
+  actions,
+}: {
+  inquiry: InquiryView;
+  pending: boolean;
+  actions: Omit<InquirySideActions, "assign" | "approve">;
+}) {
+  const [note, setNote] = useState("");
+
+  const open = inquiry.status === "open";
+  const unassigned = open && !inquiry.assignedStaffId;
+  const firstStep = inquiry.steps[0]?.key === inquiry.currentStage;
+
+  return (
+    <div className="flex flex-col gap-4 print:hidden">
       <section className="card">
         <h3 className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900">
           Notes
@@ -352,6 +415,6 @@ export function InquirySidePanel({
           ))}
         </ul>
       </section>
-    </aside>
+    </div>
   );
 }

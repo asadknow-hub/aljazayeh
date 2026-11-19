@@ -78,8 +78,8 @@ export function InquiryStepper({
                       )}
                     </span>
                   ) : null}
-                  {step.state === "done" && step.documentNumber ? (
-                    <span className="mt-1 block truncate text-xs text-slate-500">
+                  {!locked && step.documentNumber ? (
+                    <span className="mt-1 block truncate text-xs font-medium text-slate-600 tabular-nums">
                       {step.documentNumber}
                     </span>
                   ) : null}

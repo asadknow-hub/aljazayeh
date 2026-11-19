@@ -65,7 +65,18 @@ type StageDocument = {
 type StageTable = {
   /** The document the list is written on. */
   on: string;
+  /** What the list and one row of it are called. */
+  title: string;
+  rowLabel: string;
   columns: readonly { key: string; label: string; numeric?: boolean }[];
+};
+
+/** Something a step writes against each item: a remark, a heat number, … */
+type ItemDetail = {
+  key: string;
+  label: string;
+  /** The documents of the step it is printed on. */
+  on: readonly string[];
 };
 
 type StageDefinition = {
@@ -73,10 +84,11 @@ type StageDefinition = {
   purpose: string;
   /** The step's papers. The first one without `enabledBy` is its main one. */
   documents: StageDocument[];
+  /** Code of the step's own number, for a step without a main paper. */
+  counterKey?: string;
   fields: StageField[];
   items: StageItemsMode;
-  /** What this step writes against each item (remark, heat no., …). */
-  itemDetails: readonly string[];
+  itemDetails: readonly ItemDetail[];
   /** Lists the step keeps of its own. */
   tables: Record<string, StageTable>;
 };
@@ -248,11 +260,14 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         enabledBy: "supplierOrderNeeded",
       },
     ],
+    counterKey: "LPO",
     items: "fixed",
     itemDetails: [],
     tables: {
       poLines: {
         on: "purchase_order",
+        title: "What is being ordered",
+        rowLabel: "Line",
         columns: [
           { key: "description", label: "Item & Description" },
           { key: "quantity", label: "QTY" },
@@ -423,7 +438,20 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
       },
     ],
     items: "fixed",
-    itemDetails: ["jobRemark", "heatNo", "origin", "complianceRemark"],
+    itemDetails: [
+      { key: "jobRemark", label: "Remark", on: ["job_card"] },
+      {
+        key: "heatNo",
+        label: "Heat No.",
+        on: ["compliance_certificate", "coating_certificate"],
+      },
+      { key: "origin", label: "Origin", on: ["compliance_certificate"] },
+      {
+        key: "complianceRemark",
+        label: "Remarks",
+        on: ["compliance_certificate"],
+      },
+    ],
     tables: {},
     fields: [
       {
@@ -614,7 +642,9 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
       { key: "delivery_note", title: "Delivery Note", counterKey: "DN" },
     ],
     items: "delivery",
-    itemDetails: ["deliveryRemark"],
+    itemDetails: [
+      { key: "deliveryRemark", label: "Remarks / Status", on: ["delivery_note"] },
+    ],
     tables: {},
     fields: [
       {
@@ -691,10 +721,29 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
       },
     ],
     items: "fixed",
-    itemDetails: ["heatNo", "origin", "hsCode", "packNo"],
+    itemDetails: [
+      {
+        key: "hsCode",
+        label: "HS Code",
+        on: ["commercial_invoice", "packing_list"],
+      },
+      {
+        key: "heatNo",
+        label: "Heat #",
+        on: ["commercial_invoice", "packing_list"],
+      },
+      {
+        key: "origin",
+        label: "Origin",
+        on: ["commercial_invoice", "packing_list"],
+      },
+      { key: "packNo", label: "Pack No.", on: ["packing_list"] },
+    ],
     tables: {
       packages: {
         on: "packing_list",
+        title: "Packages",
+        rowLabel: "Package",
         columns: [
           { key: "mark", label: "Mark / Pkg No." },
           { key: "packageType", label: "Package Type" },
@@ -850,6 +899,16 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
 export function mainDocument(stage: InquiryStageKey): StageDocument | null {
   return (
     STAGE_DEFINITIONS[stage].documents.find((doc) => !doc.enabledBy) ?? null
+  );
+}
+
+/**
+ * The code of the number a step gets as soon as the job reaches it: its main
+ * paper's, or the step's own where it has no main paper.
+ */
+export function stageCounterKey(stage: InquiryStageKey): string | null {
+  return (
+    mainDocument(stage)?.counterKey ?? STAGE_DEFINITIONS[stage].counterKey ?? null
   );
 }
 

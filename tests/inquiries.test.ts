@@ -209,6 +209,12 @@ describe("one job from inquiry to payment", () => {
     assert.equal(moved.steps[0]?.fields.receivedVia, "phone");
     assert.equal(moved.steps[0]?.fields.nonsense, undefined);
     assert.equal(moved.assignedStaffId, null);
+    // The next step has its number as soon as the job reaches it.
+    assert.equal(
+      moved.steps[1]?.documentNumber,
+      `${ORG.toUpperCase()}/QTN/${YEAR}/0001`,
+    );
+    assert.equal(moved.steps[2]?.documentNumber, "");
   });
 
   test("the quotation prices the items and gets its own number", async () => {
@@ -442,7 +448,7 @@ describe("one job from inquiry to payment", () => {
     assert.ok(paid.steps.every((step) => step.state === "done"));
     assert.deepEqual(
       paid.steps.map((step) => step.documentNumber.split("/")[1] ?? ""),
-      ["INQ", "QTN", "", "PI", "JC", "PRG", "DN", "INV", "RV"],
+      ["INQ", "QTN", "LPO", "PI", "JC", "PRG", "DN", "INV", "RV"],
     );
     assert.equal(paid.canWork, false);
     await refused(
