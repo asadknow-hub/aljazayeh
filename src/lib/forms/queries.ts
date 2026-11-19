@@ -30,7 +30,8 @@ import {
 type FormRow = typeof approvalForms.$inferSelect;
 
 /** A form is raised by Reception or by the department it belongs to. */
-function canRaise(access: OrgAccess, type: FormType): boolean {
+/** The person works where this kind of form is raised and listed. */
+export function canRaise(access: OrgAccess, type: FormType): boolean {
   const place = FORM_DEFINITIONS[type].raisedIn;
   return place === "reception"
     ? can.useReception(access)
@@ -262,6 +263,82 @@ export async function getApprovalFormDocumentForUser(
         jobTitle: raiser?.jobTitle ?? "",
       },
       signoffs: await loadSignoffState(tx, org, form.formType, form.id),
+    };
+  });
+}
+
+/**
+ * What is needed to show a new form as it will print while it is being
+ * filled in: the letterhead, who raises it, who will sign, and the employees
+ * it can be about.
+ */
+export type FormDraftContext = Pick<
+  ApprovalFormDocument,
+  "company" | "raisedBy" | "signoffs"
+> & {
+  employees: { id: string; fullName: string; jobTitle: string }[];
+};
+
+export async function getFormDraftContextForUser(
+  userId: string,
+  orgCode: string,
+  formType: FormType,
+): Promise<FormDraftContext | null> {
+  return withTenantContext(userId, async (tx) => {
+    const org = await resolveOrg(tx, userId, orgCode);
+    if (!org || !canRaise(org.access, formType)) return null;
+
+    const [raiser] = await tx
+      .select({
+        fullName: staffMembers.fullName,
+        jobTitle: staffMembers.jobTitle,
+      })
+      .from(staffMembers)
+      .where(eq(staffMembers.id, org.access.staffId))
+      .limit(1);
+    const employees = FORM_DEFINITIONS[formType].aboutEmployee
+      ? await tx
+          .select({
+            id: staffMembers.id,
+            fullName: staffMembers.fullName,
+            jobTitle: staffMembers.jobTitle,
+          })
+          .from(staffMembers)
+          .where(
+            and(
+              eq(staffMembers.organizationId, org.id),
+              eq(staffMembers.status, "active"),
+            ),
+          )
+          .orderBy(staffMembers.fullName)
+      : [];
+    const [settings] = await tx
+      .select({
+        nameArabic: organizationSettings.nameArabic,
+        logoImage: organizationSettings.logoImage,
+      })
+      .from(organizationSettings)
+      .where(eq(organizationSettings.organizationId, org.id))
+      .limit(1);
+
+    return {
+      company: {
+        name: org.name,
+        nameArabic: settings?.nameArabic ?? "",
+        logoImage: settings?.logoImage ?? null,
+      },
+      raisedBy: {
+        fullName: raiser?.fullName ?? "",
+        jobTitle: raiser?.jobTitle ?? "",
+      },
+      // Nobody has signed a form that does not exist yet.
+      signoffs: await loadSignoffState(
+        tx,
+        org,
+        formType,
+        crypto.randomUUID(),
+      ),
+      employees,
     };
   });
 }

@@ -95,3 +95,24 @@ export function filterVacationsByList(
 ): VacationRequestView[] {
   return items.filter((item) => vacationListBucket(item, today) === filter);
 }
+
+/**
+ * What is needed to show a leave request as its form before it is saved:
+ * the letterhead, who will sign, and the staff records the form prints.
+ */
+export type LeaveDraftContext = {
+  company: LeaveDocument["company"];
+  signoffs: SignoffState;
+  employees: {
+    id: string;
+    fullName: string;
+    designation: string;
+    department: string;
+    localContact: string;
+    homeCountryContact: string;
+    passportNumber: string;
+    joinedOn: string;
+    /** Last days of their approved leave so far. */
+    approvedLeaveEnds: string[];
+  }[];
+};

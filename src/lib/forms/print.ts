@@ -27,6 +27,9 @@ export type PrintedForm = {
 
 const money = (value: number) => formatAmount(value);
 const num = (value: string | undefined) => Number(value) || 0;
+/** An amount as typed; blank while nothing has been typed. */
+const typed = (value: string | undefined) =>
+  value?.trim() ? money(num(value)) : "";
 
 export function printedForm(form: ApprovalFormDocument): PrintedForm {
   const { fields, lines } = form;
@@ -51,8 +54,8 @@ export function printedForm(form: ApprovalFormDocument): PrintedForm {
         table: null,
         letter: [
           `Dear ${form.employee?.fullName ?? ""},`,
-          `Kindly be informed that it is noticed from the office that you have ${fields.reason?.replace(/\.$/, "")}.`,
-          `Hence there will be a fine of AED-${Number(fields.amount)}/- which will be deducted from your upcoming salary and strict action will be taken if you will continue the same with any staff from ${form.company.name}.`,
+          `Kindly be informed that it is noticed from the office that you have ${(fields.reason ?? "").trim().replace(/\.$/, "") || "…"}.`,
+          `Hence there will be a fine of AED-${fields.amount?.trim() ? Number(fields.amount) : "…"}/- which will be deducted from your upcoming salary and strict action will be taken if you will continue the same with any staff from ${form.company.name}.`,
         ],
         employeeBox: `FINE ISSUED TO ${employeeName}`,
         managingRemarks: true,
@@ -61,7 +64,9 @@ export function printedForm(form: ApprovalFormDocument): PrintedForm {
     case "medical_claim": {
       const total = num(fields.total);
       const company = Math.round(total * MEDICAL_COMPANY_SHARE * 100) / 100;
-      const row = [money(company), money(total - company), money(total)];
+      const row = fields.total?.trim()
+        ? [money(company), money(total - company), money(total)]
+        : ["", "", ""];
       return {
         orientation: "portrait",
         details: reference,
@@ -110,13 +115,13 @@ export function printedForm(form: ApprovalFormDocument): PrintedForm {
           ],
           rows: lines.map((line, index) => [
             String(index + 1),
-            line.receivedAmount ? money(num(line.receivedAmount)) : "",
+            typed(line.receivedAmount),
             line.vehicleNo ?? "",
             line.paidBy ?? "",
             line.foodFor ?? "",
             line.description ?? "",
             line.invoiceQty ?? "",
-            money(num(line.invoiceAmount)),
+            typed(line.invoiceAmount),
           ]),
           totals: [
             "GRAND TOTAL",
@@ -208,15 +213,16 @@ export function printedForm(form: ApprovalFormDocument): PrintedForm {
           ],
           rows: lines.map((line, index) => {
             const total = num(line.qty) * num(line.jobPrice);
+            const priced = Boolean(line.qty?.trim() && line.jobPrice?.trim());
             return [
               String(index + 1),
               line.approvedBy ?? "",
               line.materialDescription ?? "",
               line.qty ?? "",
-              money(num(line.jobPrice)),
-              money(total),
-              money(total * VAT_RATE),
-              money(total * (1 + VAT_RATE)),
+              typed(line.jobPrice),
+              priced ? money(total) : "",
+              priced ? money(total * VAT_RATE) : "",
+              priced ? money(total * (1 + VAT_RATE)) : "",
               line.sampleNo ?? "",
             ];
           }),

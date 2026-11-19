@@ -15,6 +15,7 @@ import {
   saveInquiryStageForUser,
   saveInquiryWorkflowMapForUser,
   sendInquiryBackForUser,
+  uploadInquiryAttachmentForUser,
 } from "@/lib/inquiries/queries";
 import type { InquiryWorkflowMap } from "@/lib/inquiries/stages";
 import type { InquiryStageInput, InquiryView } from "@/lib/inquiries/types";
@@ -141,4 +142,21 @@ export async function reopenInquiryStepAction(
   return inquiryAction((userId) =>
     reopenInquiryStepForUser(userId, orgCode, inquiryId, reason),
   );
+}
+
+/** Upload a file to the current step of an inquiry. */
+export async function uploadInquiryAttachmentAction(
+  orgCode: string,
+  inquiryId: string,
+  input: { fileName: string; dataUrl: string },
+) {
+  return runAction(async () => {
+    const session = await requireSession();
+    return uploadInquiryAttachmentForUser(
+      session.userId,
+      orgCode,
+      inquiryId,
+      input,
+    );
+  });
 }

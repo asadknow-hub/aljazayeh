@@ -12,6 +12,7 @@ import type {
   StageTables,
 } from "@/lib/inquiries/types";
 import { UserError } from "@/lib/errors";
+import { isUuid } from "@/lib/ids";
 
 const MAX_TEXT_LENGTH = 4000;
 
@@ -65,6 +66,12 @@ export function normalizeStageFields(
       case "choice":
         if (!field.options?.some((option) => option.value === value)) {
           throw new UserError(`Choose one of the options for ${field.label}.`);
+        }
+        fields[field.key] = value;
+        break;
+      case "file":
+        if (!isUuid(value)) {
+          throw new UserError(`Upload ${field.label} again.`);
         }
         fields[field.key] = value;
         break;

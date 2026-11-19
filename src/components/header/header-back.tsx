@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useDeclaredBackTarget } from "@/components/providers/page-title-provider";
 import { ArrowLeftIcon } from "@/components/ui/icons";
 
 /** Parts of a path that only group pages and have no page of their own. */
@@ -25,9 +26,14 @@ function parentOf(pathname: string): string | null {
   return `/${segments.join("/")}`;
 }
 
-/** Back button at the left of the header, on every page that has a parent. */
+/**
+ * Back button at the left of the header, on every page that has a parent. A
+ * page may say where its own list is; otherwise it is one level up.
+ */
 export function HeaderBack() {
-  const parent = parentOf(usePathname());
+  const declared = useDeclaredBackTarget();
+  const pathname = usePathname();
+  const parent = declared ?? parentOf(pathname);
   if (!parent) return null;
 
   return (

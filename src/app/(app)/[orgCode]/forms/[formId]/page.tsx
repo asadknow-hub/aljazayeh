@@ -1,15 +1,16 @@
 import { notFound } from "next/navigation";
-import { DocumentActions } from "@/components/documents/document-actions";
+import { DocumentSplit } from "@/components/documents/document-split";
 import { ApprovalFormSheet } from "@/components/forms/approval-form-sheet";
+import { ApprovalPanel } from "@/components/signoffs/approval-panel";
 import { signApprovalFormAction } from "@/lib/forms/actions";
-import { FORM_DEFINITIONS } from "@/lib/forms/definitions";
+import { FORM_DEFINITIONS, formListPath } from "@/lib/forms/definitions";
 import { printedForm } from "@/lib/forms/print";
-import { getApprovalFormDocumentForUser } from "@/lib/forms/queries";
+import { canRaise, getApprovalFormDocumentForUser } from "@/lib/forms/queries";
 import { loadOrgPage } from "@/lib/org/page";
 
 export const instant = false;
 
-/** One of the signed forms: on screen exactly as it prints. */
+/** One of the signed forms: where its approval stands, beside the form. */
 export default async function ApprovalFormPage({
   params,
 }: {
@@ -27,15 +28,25 @@ export default async function ApprovalFormPage({
   if (!form) notFound();
 
   return (
-    <main className="flex-1 p-4 sm:p-6 print:p-0">
-      <DocumentActions
-        title={FORM_DEFINITIONS[form.formType].title}
-        backHref={`/${org.code}`}
-        landscape={printedForm(form).orientation === "landscape"}
-        signoffs={form.signoffs}
-        onSign={signApprovalFormAction.bind(null, org.code, form.id)}
-      />
+    <DocumentSplit
+      // Someone who only signs it came from their tasks on the home screen.
+      backHref={
+        canRaise(org.access, form.formType)
+          ? formListPath(org.code, form.formType)
+          : `/${org.code}`
+      }
+      landscape={printedForm(form).orientation === "landscape"}
+      printLabel="Print"
+      side={
+        <ApprovalPanel
+          title={FORM_DEFINITIONS[form.formType].title}
+          reference={form.referenceNo}
+          signoffs={form.signoffs}
+          onSign={signApprovalFormAction.bind(null, org.code, form.id)}
+        />
+      }
+    >
       <ApprovalFormSheet form={form} />
-    </main>
+    </DocumentSplit>
   );
 }

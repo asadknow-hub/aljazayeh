@@ -21,6 +21,7 @@ import type { InquiryStageKey } from "@/lib/inquiries/stages";
 import {
   amountInWords,
   formatMoney,
+  lpoReference,
   STAGE_DEFINITIONS,
   stageFieldDisplay,
 } from "@/lib/inquiries/stage-forms";
@@ -62,9 +63,11 @@ function useJob() {
     numbers: {
       inquiry: paper.inquiry.number,
       quotation: step("quotation")?.documentNumber ?? "",
-      lpo: answers("lpo_in_or_out").customerLpoNumber ?? "",
-      purchaseOrder:
-        step("lpo_in_or_out")?.documentNumbers.purchase_order ?? "",
+      lpo: lpoReference({
+        documentNumber: step("lpo")?.documentNumber ?? "",
+        fields: answers("lpo"),
+      }),
+      purchaseOrder: step("lpo")?.documentNumber ?? "",
       proforma: step("proforma_invoice")?.documentNumber ?? "",
       jobCard: step("job_card")?.documentNumber ?? "",
       compliance:

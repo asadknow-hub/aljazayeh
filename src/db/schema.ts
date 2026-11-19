@@ -679,6 +679,40 @@ export const inquiryStageRecords = pgTable(
   ],
 );
 
+/**
+ * A file uploaded on an inquiry, such as the customer's LPO. The file itself
+ * is kept in the database (base64), so backing up the database backs up the
+ * papers too.
+ */
+export const inquiryAttachments = pgTable(
+  "inquiry_attachments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    inquiryId: uuid("inquiry_id")
+      .notNull()
+      .references(() => inquiries.id, { onDelete: "cascade" }),
+    stageKey: text("stage_key").notNull(),
+    fileName: text("file_name").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    content: text("content").notNull(),
+    uploadedByUserId: uuid("uploaded_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ...timestamps,
+  },
+  (table) => [
+    index("inquiry_attachments_inquiry_idx").on(table.inquiryId),
+    index("inquiry_attachments_org_idx").on(table.organizationId),
+    allowSelect("inquiry_attachments_member_select", isOrgMember()),
+    allowInsert("inquiry_attachments_member_insert", isOrgMember()),
+    allowDelete("inquiry_attachments_member_delete", isOrgMember()),
+  ],
+);
+
 /** Stage approvals required by Inquiry Settings before advancing. */
 export const inquiryStageApprovals = pgTable(
   "inquiry_stage_approvals",

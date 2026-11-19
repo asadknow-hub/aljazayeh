@@ -107,6 +107,20 @@ export type SignoffState = {
   canSign: boolean;
 };
 
+/**
+ * The first box somebody has to approve: a new document goes to them when it
+ * is sent, the preparer's own box being signed as it is raised.
+ */
+export function firstApprover(
+  type: DocumentType,
+  steps: SignoffStepView[],
+): SignoffStepView | null {
+  const index = DOCUMENT_CHAINS[type].findIndex(
+    (step) => step.signer !== "preparer",
+  );
+  return steps[index] ?? null;
+}
+
 export const APPROVAL_PIN_PATTERN = /^\d{4,6}$/;
 /** Largest signature image accepted, as a data URL. */
 export const MAX_SIGNATURE_LENGTH = 200_000;
