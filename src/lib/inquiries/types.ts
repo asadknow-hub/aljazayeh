@@ -108,6 +108,8 @@ export type InquiryView = InquirySummary & {
   createdByName: string;
   steps: InquiryStepView[];
   lineItems: InquiryLineItemView[];
+  /** Files uploaded on the inquiry, such as the customer's LPO. */
+  attachments: { id: string; fileName: string; contentType: string }[];
   /** The current step has been sent for approval and not yet answered. */
   approvalRequested: boolean;
   currentStageApproved: boolean;

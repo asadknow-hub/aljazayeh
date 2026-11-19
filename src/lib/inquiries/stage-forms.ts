@@ -18,7 +18,11 @@ type StageFieldType =
   | "amount"
   | "number"
   | "choice"
-  | "yesno";
+  | "yesno"
+  | "file";
+
+/** "Only when this answer of the step has this value." */
+type Condition = { field: string; value: string };
 
 /** A step's own details that are not written on a paper. */
 export const STEP_FORM = "form";
@@ -31,6 +35,8 @@ export type StageField = {
   on: string;
   /** Must be filled in before the step can be completed. */
   required?: boolean;
+  /** Asked only when another answer of the step has this value. */
+  showWhen?: Condition;
   options?: readonly { value: string; label: string }[];
   /** Takes the full width of the form. */
   wide?: boolean;
@@ -56,10 +62,13 @@ type StageItemsMode = "entry" | "priced" | "delivery" | "fixed";
 type StageDocument = {
   key: string;
   title: string;
-  /** Short code in the document's number, e.g. AJE/QTN/2026/0001. */
-  counterKey: string;
-  /** The yes/no answer of the step that says this document is needed. */
-  enabledBy?: string;
+  /**
+   * Short code in the document's number, e.g. AJE/QTN/2026/0001. A document
+   * without one carries the number of its step.
+   */
+  counterKey?: string;
+  /** The answer of the step that says this document is needed. */
+  enabledWhen?: Condition;
 };
 
 type StageTable = {
@@ -82,7 +91,7 @@ type ItemDetail = {
 type StageDefinition = {
   /** One line telling the person what this step is for. */
   purpose: string;
-  /** The step's papers. The first one without `enabledBy` is its main one. */
+  /** The step's papers. The first one without `enabledWhen` is its main one. */
   documents: StageDocument[];
   /** Code of the step's own number, for a step without a main paper. */
   counterKey?: string;
@@ -249,15 +258,14 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
     ],
   },
 
-  lpo_in_or_out: {
+  lpo: {
     purpose:
-      "Record the customer's purchase order (LPO in). If material has to be bought for this job, prepare our purchase order to the supplier (LPO out).",
+      "Choose whose LPO this job runs on: the customer's own LPO, which is uploaded here, or our LPO, which is prepared here.",
     documents: [
       {
         key: "purchase_order",
-        title: "Purchase Order",
-        counterKey: "PO",
-        enabledBy: "supplierOrderNeeded",
+        title: "Our LPO",
+        enabledWhen: { field: "lpoType", value: "own" },
       },
     ],
     counterKey: "LPO",
@@ -277,11 +285,33 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
     },
     fields: [
       {
+        key: "lpoType",
+        label: "Which LPO is this?",
+        type: "choice",
+        on: STEP_FORM,
+        required: true,
+        wide: true,
+        options: [
+          { value: "customer", label: "Customer's LPO: they sent it to us" },
+          { value: "own", label: "Our own LPO: we prepare it" },
+        ],
+      },
+      {
+        key: "customerLpoFile",
+        label: "The customer's LPO (PDF or photo)",
+        type: "file",
+        on: STEP_FORM,
+        required: true,
+        wide: true,
+        showWhen: { field: "lpoType", value: "customer" },
+      },
+      {
         key: "customerLpoNumber",
         label: "Customer LPO number",
         type: "text",
         on: STEP_FORM,
         required: true,
+        showWhen: { field: "lpoType", value: "customer" },
       },
       {
         key: "customerLpoDate",
@@ -289,6 +319,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         type: "date",
         on: STEP_FORM,
         required: true,
+        showWhen: { field: "lpoType", value: "customer" },
       },
       {
         key: "customerLpoAmount",
@@ -296,6 +327,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         type: "amount",
         on: STEP_FORM,
         prefill: "grandTotal",
+        showWhen: { field: "lpoType", value: "customer" },
       },
       {
         key: "customerLpoNotes",
@@ -303,14 +335,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         type: "longtext",
         on: STEP_FORM,
         wide: true,
-      },
-      {
-        key: "supplierOrderNeeded",
-        label:
-          "LPO out: material has to be ordered from a supplier for this job",
-        type: "yesno",
-        on: STEP_FORM,
-        wide: true,
+        showWhen: { field: "lpoType", value: "customer" },
       },
       {
         key: "poDate",
@@ -428,13 +453,13 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         key: "compliance_certificate",
         title: "Certificate of Compliance",
         counterKey: "COC",
-        enabledBy: "complianceCertificate",
+        enabledWhen: { field: "complianceCertificate", value: "yes" },
       },
       {
         key: "coating_certificate",
         title: "Coating Certificate",
         counterKey: "CC",
-        enabledBy: "coatingCertificate",
+        enabledWhen: { field: "coatingCertificate", value: "yes" },
       },
     ],
     items: "fixed",
@@ -717,7 +742,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         key: "packing_list",
         title: "Packing List",
         counterKey: "PL",
-        enabledBy: "packingList",
+        enabledWhen: { field: "packingList", value: "yes" },
       },
     ],
     items: "fixed",
@@ -898,7 +923,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
 /** The step's main document: the one it always produces. */
 export function mainDocument(stage: InquiryStageKey): StageDocument | null {
   return (
-    STAGE_DEFINITIONS[stage].documents.find((doc) => !doc.enabledBy) ?? null
+    STAGE_DEFINITIONS[stage].documents.find((doc) => !doc.enabledWhen) ?? null
   );
 }
 
@@ -917,9 +942,34 @@ export function documentsInUse(
   stage: InquiryStageKey,
   fields: Record<string, string>,
 ): StageDocument[] {
-  return STAGE_DEFINITIONS[stage].documents.filter(
-    (doc) => !doc.enabledBy || fields[doc.enabledBy] === "yes",
+  return STAGE_DEFINITIONS[stage].documents.filter((doc) =>
+    holds(doc.enabledWhen, fields),
   );
+}
+
+function holds(
+  condition: Condition | undefined,
+  fields: Record<string, string>,
+): boolean {
+  return !condition || fields[condition.field] === condition.value;
+}
+
+/** Whether a question is being asked, given the step's other answers. */
+export function fieldShown(
+  field: StageField,
+  fields: Record<string, string>,
+): boolean {
+  return holds(field.showWhen, fields);
+}
+
+/** The LPO the rest of the job refers to: the customer's number, or ours. */
+export function lpoReference(
+  lpo: { documentNumber: string; fields: Record<string, string> } | undefined,
+): string {
+  if (!lpo) return "";
+  return lpo.fields.lpoType === "own"
+    ? lpo.documentNumber
+    : (lpo.fields.customerLpoNumber ?? "");
 }
 
 /**
@@ -936,7 +986,11 @@ export function missingStageFields(
     ...documentsInUse(stage, fields).map((doc) => doc.key),
   ]);
   return STAGE_DEFINITIONS[stage].fields.filter(
-    (field) => field.required && inUse.has(field.on) && !fields[field.key],
+    (field) =>
+      field.required &&
+      inUse.has(field.on) &&
+      fieldShown(field, fields) &&
+      !fields[field.key],
   );
 }
 

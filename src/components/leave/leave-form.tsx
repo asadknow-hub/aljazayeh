@@ -66,7 +66,9 @@ export function LeaveForm({ leave }: { leave: LeaveDocument }) {
           <tbody>
             <tr>
               <td className={label}>Leave Requested for</td>
-              <td className={`${cell} text-center`}>{leave.dayCount}</td>
+              <td className={`${cell} text-center`}>
+                {leave.dayCount || ""}
+              </td>
               <td className={label}>DAYS</td>
               <td className={cell} />
             </tr>
@@ -128,7 +130,9 @@ export function LeaveForm({ leave }: { leave: LeaveDocument }) {
               <td className={`${cell} text-center`}>
                 {employee.previousReturn
                   ? formatFormDate(employee.previousReturn)
-                  : "Not went for Vacation"}
+                  : leave.staffId
+                    ? "Not went for Vacation"
+                    : ""}
               </td>
             </tr>
           </tbody>

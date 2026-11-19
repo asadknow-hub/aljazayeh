@@ -274,6 +274,11 @@ export function formTypesRaisedIn(
   return FORM_TYPES.filter((type) => FORM_DEFINITIONS[type].raisedIn === place);
 }
 
+/** The list a kind of form is raised from and kept in. */
+export function formListPath(orgCode: string, type: FormType): string {
+  return `/${orgCode}/${FORM_DEFINITIONS[type].raisedIn}?section=${type}`;
+}
+
 export type ApprovalFormInput = FormAnswers & { staffId: string };
 
 /** A form in a list. */

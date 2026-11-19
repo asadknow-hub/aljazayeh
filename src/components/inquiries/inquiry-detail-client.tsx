@@ -24,6 +24,7 @@ import {
   StageAnswers,
   StageFields,
   TablesEditor,
+  type FileHandling,
 } from "@/components/inquiries/stage-form";
 import { usePageTitle } from "@/components/providers/page-title-provider";
 import { useToast } from "@/components/providers/toast-provider";
@@ -54,6 +55,7 @@ import {
   requestInquiryApprovalAction,
   saveInquiryStageAction,
   sendInquiryBackAction,
+  uploadInquiryAttachmentAction,
 } from "@/lib/inquiries/actions";
 import {
   INQUIRY_APPROVAL_ROLES,
@@ -98,6 +100,18 @@ function versionOf(inquiry: InquiryView): string {
     inquiry.comments.length,
     inquiry.activityLogs.length,
   ].join("|");
+}
+
+/** Same limit as the server; checked here first to answer at once. */
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Could not read the file."));
+    reader.readAsDataURL(file);
+  });
 }
 
 /** The current step may be filled in by the signed-in person right now. */
@@ -236,6 +250,8 @@ export function InquiryDetailClient({
   const [pending, setPending] = useState(false);
   /** Which of the step's papers is on screen. */
   const [openDocument, setOpenDocument] = useState<string | null>(null);
+  /** Files uploaded on this screen that the step has not been saved with yet. */
+  const [uploads, setUploads] = useState<InquiryView["attachments"]>([]);
   /** Places that have to be filled in before the step can be completed. */
   const [invalid, setInvalid] = useState<ReadonlySet<string>>(new Set());
 
@@ -249,6 +265,7 @@ export function InquiryDetailClient({
     setDraft(nextDraft);
     setViewing(next.currentStage);
     setInvalid(new Set());
+    setUploads([]);
   }
 
   // A newer copy from the server replaces what is on screen. A copy that
@@ -318,6 +335,43 @@ export function InquiryDetailClient({
 
   const papers = documentsInUse(viewedStep.key, shown.fields);
   const paper = papers.find((doc) => doc.key === openDocument) ?? papers[0];
+
+  // Files on the inquiry, and the ones uploaded just now but not saved yet.
+  const allFiles = [...inquiry.attachments, ...uploads];
+  const files: FileHandling = {
+    nameOf: (id) =>
+      allFiles.find((file) => file.id === id)?.fileName ?? "Uploaded file",
+    hrefOf: (id) => `/${orgCode}/files/${id}`,
+    upload: async (file) => {
+      setError(null);
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setError("The file is too large. Use one under 5 MB.");
+        return null;
+      }
+      try {
+        const uploaded = await unwrap(
+          uploadInquiryAttachmentAction(orgCode, inquiry.id, {
+            fileName: file.name,
+            dataUrl: await readAsDataUrl(file),
+          }),
+        );
+        setUploads((current) => [...current, uploaded]);
+        return uploaded.id;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not upload.");
+        return null;
+      }
+    },
+  };
+  // A step whose paper is a file from outside shows that file as its paper.
+  const uploadedPaper = paper
+    ? undefined
+    : allFiles.find((file) =>
+        definition.fields.some(
+          (field) =>
+            field.type === "file" && shown.fields[field.key] === file.id,
+        ),
+      );
 
   /**
    * Whether everything the step needs is there. If not, the missing places
@@ -599,14 +653,14 @@ export function InquiryDetailClient({
               className={[
                 "grid gap-6 px-4 py-5 sm:px-5 print:block print:p-0",
                 // Filling in: the form on the left, the paper on the right.
-                paper && editable
+                (paper || uploadedPaper) && editable
                   ? "xl:grid-cols-[minmax(19rem,22rem)_minmax(0,1fr)] 2xl:grid-cols-[minmax(21rem,26rem)_minmax(0,1fr)]"
                   : "",
               ].join(" ")}
             >
               {editable ? (
                 <div className="flex min-w-0 flex-col gap-5 print:hidden">
-                  {paper ? (
+                  {paper && viewedStep.key !== "lpo" ? (
                     <p className="rounded-lg bg-primary-soft px-3 py-2 text-sm text-blue-900">
                       Fill in here. The {paper.title} beside it fills in as you
                       type; everything else on it comes from the earlier steps.
@@ -618,7 +672,8 @@ export function InquiryDetailClient({
                       values={draft.fields}
                       disabled={pending}
                       invalid={invalid}
-                      narrow={Boolean(paper)}
+                      narrow={Boolean(paper || uploadedPaper)}
+                      files={files}
                       onChange={setFields}
                     />
                   ) : null}
@@ -679,6 +734,7 @@ export function InquiryDetailClient({
                       <StageAnswers
                         stage={viewedStep.key}
                         values={shown.fields}
+                        files={files}
                       />
                     </div>
                   ) : null}
@@ -750,6 +806,37 @@ export function InquiryDetailClient({
                     <StagePaper document={paper.key} />
                   </PaperProvider>
                   </div>
+                </div>
+              ) : uploadedPaper ? (
+                <div className="min-w-0 print:hidden">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <p className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-700">
+                      <DocumentIcon className="h-4 w-4" />
+                      {uploadedPaper.fileName}
+                    </p>
+                    <a
+                      href={files.hrefOf(uploadedPaper.id)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-secondary btn-sm"
+                    >
+                      Open in a new tab
+                    </a>
+                  </div>
+                  {uploadedPaper.contentType === "application/pdf" ? (
+                    <iframe
+                      title={uploadedPaper.fileName}
+                      src={files.hrefOf(uploadedPaper.id)}
+                      className="h-[75vh] w-full rounded-lg border border-slate-300 bg-white"
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element -- an uploaded scan, served as it is
+                    <img
+                      src={files.hrefOf(uploadedPaper.id)}
+                      alt={uploadedPaper.fileName}
+                      className="w-full rounded-lg border border-slate-300 bg-white"
+                    />
+                  )}
                 </div>
               ) : null}
             </div>

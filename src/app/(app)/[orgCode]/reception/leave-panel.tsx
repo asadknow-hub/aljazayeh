@@ -1,21 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent } from "react";
-import { unwrap } from "@/lib/actions/result";
-import { daysInclusive, isIsoDate } from "@/lib/datetime/calendar";
+import { useMemo, useState } from "react";
+import { PlusIcon } from "@/components/ui/icons";
 import { formatLeavePeriod } from "@/lib/datetime/format";
 import type { StaffOption } from "@/lib/staff/types";
-import { createVacationRequestAction } from "@/lib/vacation/actions";
 import {
-  LEAVE_TYPES,
   filterVacationsByList,
   leaveTypeLabel,
-  vacationDayCountLabel,
   vacationStatusLabel,
   type VacationListFilter,
-  type VacationRequestInput,
   type VacationRequestView,
 } from "@/lib/vacation/types";
 
@@ -24,21 +18,6 @@ const FILTERS: { key: VacationListFilter; label: string; empty: string }[] = [
   { key: "completed", label: "Completed", empty: "No completed leave yet." },
   { key: "rejected", label: "Rejected", empty: "No rejected requests." },
 ];
-
-const emptyForm: VacationRequestInput = {
-  staffId: "",
-  startDate: "",
-  endDate: "",
-  leaveType: "annual",
-  reason: "",
-  jobHandledBy: "",
-  leaveAvailableDays: "",
-  officeComments: "",
-};
-
-const inputClass =
-  "field";
-const labelClass = "field-label";
 
 /** Reception → Vacation: raise leave requests and follow their approval. */
 export function LeavePanel({
@@ -52,42 +31,13 @@ export function LeavePanel({
   staffOptions: StaffOption[];
   requests: VacationRequestView[];
 }) {
-  const router = useRouter();
   const [filter, setFilter] = useState<VacationListFilter>("active");
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [form, setForm] = useState(emptyForm);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
 
   const visible = useMemo(
     () => filterVacationsByList(requests, filter, today),
     [requests, filter, today],
   );
-  const activeStaff = staffOptions.filter((item) => item.status === "active");
-  const days =
-    isIsoDate(form.startDate) &&
-    isIsoDate(form.endDate) &&
-    form.endDate >= form.startDate
-      ? daysInclusive(form.startDate, form.endDate)
-      : null;
-
-  const set = (patch: Partial<VacationRequestInput>) =>
-    setForm((current) => ({ ...current, ...patch }));
-
-  async function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    if (pending) return;
-    setError(null);
-    setPending(true);
-    try {
-      const created = await unwrap(createVacationRequestAction(orgCode, form));
-      // Straight to the form, where the signatures are collected.
-      router.push(`/${orgCode}/leave/${created.id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save.");
-      setPending(false);
-    }
-  }
+  const hasStaff = staffOptions.some((item) => item.status === "active");
 
   return (
     <div className="w-full max-w-4xl">
@@ -100,18 +50,12 @@ export function LeavePanel({
             Raise a leave request for an employee and follow its approval.
           </p>
         </div>
-        <button
-          type="button"
-          disabled={activeStaff.length === 0}
-          onClick={() => {
-            setForm(emptyForm);
-            setError(null);
-            setEditorOpen(true);
-          }}
-          className="btn btn-primary"
-        >
-          New leave request
-        </button>
+        {hasStaff ? (
+          <Link href={`/${orgCode}/leave/new`} className="btn btn-primary">
+            <PlusIcon />
+            New leave request
+          </Link>
+        ) : null}
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
@@ -171,170 +115,10 @@ export function LeavePanel({
         )}
       </div>
 
-      {activeStaff.length === 0 ? (
+      {!hasStaff ? (
         <p className="mt-4 text-sm text-slate-600">
           Add staff members first before raising a leave request.
         </p>
-      ) : null}
-
-      {editorOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
-          <form
-            onSubmit={onSubmit}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="leave-request-title"
-            className="card max-h-[90vh] w-full max-w-2xl overflow-auto shadow-lg"
-          >
-            <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
-              <h3
-                id="leave-request-title"
-                className="font-display text-base font-semibold text-slate-900"
-              >
-                New leave request
-              </h3>
-              <p className="mt-1 text-sm text-slate-600">
-                The employee&apos;s details come from their staff record. After
-                saving, the form goes round for signatures.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 px-4 py-4 sm:grid-cols-2 sm:px-5">
-              <label className="flex flex-col gap-1.5 sm:col-span-2">
-                <span className={labelClass}>Employee</span>
-                <select
-                  required
-                  value={form.staffId}
-                  onChange={(event) => set({ staffId: event.target.value })}
-                  className={inputClass}
-                >
-                  <option value="">Select an employee</option>
-                  {activeStaff.map((staff) => (
-                    <option key={staff.id} value={staff.id}>
-                      {staff.fullName}
-                      {staff.jobTitle ? ` · ${staff.jobTitle}` : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1.5">
-                <span className={labelClass}>Leave from</span>
-                <input
-                  type="date"
-                  required
-                  value={form.startDate}
-                  onChange={(event) => set({ startDate: event.target.value })}
-                  className={inputClass}
-                />
-              </label>
-              <label className="flex flex-col gap-1.5">
-                <span className={labelClass}>Last day of leave</span>
-                <input
-                  type="date"
-                  required
-                  min={form.startDate || undefined}
-                  value={form.endDate}
-                  onChange={(event) => set({ endDate: event.target.value })}
-                  className={inputClass}
-                />
-              </label>
-              <p className="text-sm text-slate-600 sm:col-span-2">
-                {days === null
-                  ? "Choose both dates to see the number of days."
-                  : `Leave requested for ${vacationDayCountLabel(days)}. Back on duty the day after the last day.`}
-              </p>
-              <label className="flex flex-col gap-1.5">
-                <span className={labelClass}>Type of leave</span>
-                <select
-                  value={form.leaveType}
-                  onChange={(event) =>
-                    set({
-                      leaveType: event.target
-                        .value as VacationRequestInput["leaveType"],
-                    })
-                  }
-                  className={inputClass}
-                >
-                  {LEAVE_TYPES.map((type) => (
-                    <option key={type.value} value={type.value}>
-                      {type.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1.5">
-                <span className={labelClass}>Reason</span>
-                <input
-                  value={form.reason}
-                  onChange={(event) => set({ reason: event.target.value })}
-                  className={inputClass}
-                />
-              </label>
-
-              <p className="border-t border-slate-200 pt-3 text-sm font-medium text-slate-900 sm:col-span-2">
-                Office use (optional)
-              </p>
-              <label className="flex flex-col gap-1.5">
-                <span className={labelClass}>Job to be handled by</span>
-                <input
-                  value={form.jobHandledBy}
-                  onChange={(event) =>
-                    set({ jobHandledBy: event.target.value })
-                  }
-                  className={inputClass}
-                />
-              </label>
-              <label className="flex flex-col gap-1.5">
-                <span className={labelClass}>Leave available (days)</span>
-                <input
-                  inputMode="numeric"
-                  value={form.leaveAvailableDays}
-                  onChange={(event) =>
-                    set({ leaveAvailableDays: event.target.value })
-                  }
-                  className={inputClass}
-                />
-              </label>
-              <label className="flex flex-col gap-1.5 sm:col-span-2">
-                <span className={labelClass}>Comments</span>
-                <input
-                  value={form.officeComments}
-                  onChange={(event) =>
-                    set({ officeComments: event.target.value })
-                  }
-                  className={inputClass}
-                />
-              </label>
-            </div>
-
-            {error ? (
-              <p
-                className="border-t border-slate-200 px-4 py-3 text-sm text-red-700 sm:px-5"
-                role="alert"
-              >
-                {error}
-              </p>
-            ) : null}
-
-            <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-4 py-3 sm:px-5">
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => setEditorOpen(false)}
-                className="btn btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={pending}
-                className="btn btn-primary"
-              >
-                {pending ? "Saving…" : "Save and send for signatures"}
-              </button>
-            </div>
-          </form>
-        </div>
       ) : null}
     </div>
   );

@@ -60,6 +60,14 @@ import {
 } from "@/lib/inquiries/validate";
 import { appDateValue } from "@/lib/datetime/format";
 import { nextDocumentNumber } from "@/lib/documents/numbering";
+import {
+  insertAttachment,
+  keepOnlyAttachments,
+  listAttachments,
+  loadAttachmentFile,
+  readUploadedFile,
+  type AttachmentView,
+} from "@/lib/inquiries/attachments";
 import { requireOrg, resolveOrg, type ResolvedOrg } from "@/lib/org/resolve";
 import { isUuid } from "@/lib/ids";
 
@@ -672,6 +680,7 @@ async function loadInquiryView(
     createdByName,
     steps,
     lineItems,
+    attachments: await listAttachments(tx, row.id),
     approvalRequested,
     currentStageApproved,
     canApproveCurrentStage:
@@ -948,7 +957,10 @@ async function saveStageAnswers(
   const main = mainDocument(stage);
   const documentNumbers = { ...(record?.documentNumbers ?? {}) };
   for (const doc of documentsInUse(stage, fields)) {
-    if (doc.key === main?.key || documentNumbers[doc.key]) continue;
+    // A paper without a code of its own carries the number of its step.
+    if (doc.key === main?.key || !doc.counterKey || documentNumbers[doc.key]) {
+      continue;
+    }
     documentNumbers[doc.key] = await nextDocumentNumber(tx, org, doc.counterKey);
   }
 
@@ -970,6 +982,14 @@ async function saveStageAnswers(
       : {}),
   });
   await saveLineItems(tx, row.id, stage, items);
+  await keepOnlyAttachments(
+    tx,
+    row.id,
+    stage,
+    STAGE_DEFINITIONS[stage].fields.flatMap((field) =>
+      field.type === "file" && fields[field.key] ? [fields[field.key]!] : [],
+    ),
+  );
 
   return fields;
 }
@@ -1605,4 +1625,54 @@ export async function reopenInquiryForUser(
 
     return reloadInquiryView(tx, org, inquiryId);
   });
+}
+
+/* ---------------------------------- files --------------------------------- */
+
+/**
+ * Upload a file to the current step, such as the customer's LPO. It becomes
+ * part of the step when the step is saved with it.
+ */
+export async function uploadInquiryAttachmentForUser(
+  userId: string,
+  orgCode: string,
+  inquiryId: string,
+  input: { fileName: string; dataUrl: string },
+): Promise<AttachmentView> {
+  const file = readUploadedFile(input);
+
+  return withTenantContext(userId, async (tx) => {
+    const org = await requireOrg(tx, userId, orgCode);
+    const existing = await requireWorkableInquiry(
+      tx,
+      org,
+      inquiryId,
+      "Assign someone before working on this step.",
+    );
+    return insertAttachment(tx, {
+      organizationId: org.id,
+      inquiryId,
+      stageKey: stageOf(existing),
+      uploadedByUserId: userId,
+      ...file,
+    });
+  });
+}
+
+/** A file of an inquiry, for whoever may open that inquiry. */
+export async function getInquiryAttachmentForUser(
+  userId: string,
+  orgCode: string,
+  attachmentId: string,
+): Promise<{ fileName: string; contentType: string; bytes: Buffer } | null> {
+  const file = await loadAttachmentFile(userId, attachmentId);
+  if (!file) return null;
+  // The inquiry is only returned to people allowed to see it.
+  const inquiry = await getInquiryForUser(userId, orgCode, file.inquiryId);
+  if (!inquiry) return null;
+  return {
+    fileName: file.fileName,
+    contentType: file.contentType,
+    bytes: Buffer.from(file.content, "base64"),
+  };
 }

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, gte, lt, lte, ne } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lt, lte, ne } from "drizzle-orm";
 import { withTenantContext, type DbTransaction } from "@/db/client";
 import {
   organizationSettings,
@@ -27,6 +27,7 @@ import {
 import {
   leaveTypeLabel,
   type LeaveDocument,
+  type LeaveDraftContext,
   type LeaveType,
   type VacationRequestInput,
   type VacationRequestView,
@@ -313,6 +314,93 @@ export async function getLeaveDocumentForUser(
       leaveAvailableDays: request.leaveAvailableDays,
       officeComments: request.officeComments,
       signoffs,
+    };
+  });
+}
+
+/**
+ * Everything the screen needs to show a new leave request as its form while
+ * it is being filled in. Only for people who may raise one.
+ */
+export async function getLeaveDraftContextForUser(
+  userId: string,
+  orgCode: string,
+): Promise<LeaveDraftContext | null> {
+  return withTenantContext(userId, async (tx) => {
+    const org = await resolveOrg(tx, userId, orgCode);
+    if (!org || !can.useReception(org.access)) return null;
+
+    const staff = await tx
+      .select()
+      .from(staffMembers)
+      .where(
+        and(
+          eq(staffMembers.organizationId, org.id),
+          eq(staffMembers.status, "active"),
+        ),
+      )
+      .orderBy(asc(staffMembers.fullName));
+    const departments = await tx
+      .select({
+        staffId: staffDepartmentAssignments.staffId,
+        key: staffDepartmentAssignments.departmentKey,
+      })
+      .from(staffDepartmentAssignments)
+      .innerJoin(
+        staffMembers,
+        eq(staffMembers.id, staffDepartmentAssignments.staffId),
+      )
+      .where(eq(staffMembers.organizationId, org.id));
+    const approved = await tx
+      .select({
+        staffId: vacationRequests.staffId,
+        endDate: vacationRequests.endDate,
+      })
+      .from(vacationRequests)
+      .where(
+        and(
+          eq(vacationRequests.organizationId, org.id),
+          eq(vacationRequests.status, "approved"),
+        ),
+      );
+    const [settings] = await tx
+      .select({
+        nameArabic: organizationSettings.nameArabic,
+        logoImage: organizationSettings.logoImage,
+      })
+      .from(organizationSettings)
+      .where(eq(organizationSettings.organizationId, org.id))
+      .limit(1);
+
+    return {
+      company: {
+        name: org.name,
+        nameArabic: settings?.nameArabic ?? "",
+        logoImage: settings?.logoImage ?? null,
+      },
+      // Nobody has signed a request that does not exist yet.
+      signoffs: await loadSignoffState(
+        tx,
+        org,
+        DOCUMENT_TYPE,
+        crypto.randomUUID(),
+      ),
+      employees: staff.map((person) => ({
+        id: person.id,
+        fullName: person.fullName,
+        designation: person.jobTitle,
+        department: departments
+          .filter((item) => item.staffId === person.id)
+          .map((item) => departmentLabel(item.key))
+          .join(", "),
+        localContact: person.phone,
+        homeCountryContact: person.homeCountryContact,
+        passportNumber: person.passportNumber,
+        joinedOn: person.joinedOn ?? "",
+        approvedLeaveEnds: approved
+          .filter((item) => item.staffId === person.id)
+          .map((item) => item.endDate),
+      })),
     };
   });
 }

@@ -11,6 +11,7 @@ import {
   requestInquiryApprovalForUser,
   saveInquiryStageForUser,
   saveInquiryWorkflowMapForUser,
+  uploadInquiryAttachmentForUser,
 } from "@/lib/inquiries/queries";
 import {
   INQUIRY_STAGES,
@@ -28,7 +29,7 @@ const STEP_DEPARTMENTS: Record<InquiryStageKey, InquiryWorkflowDepartmentKey> =
   {
     inquiry: "admin",
     quotation: "admin",
-    lpo_in_or_out: "admin",
+    lpo: "admin",
     proforma_invoice: "accounts",
     job_card: "admin",
     progress_invoice: "accounts",
@@ -99,7 +100,7 @@ const DEMO_INQUIRIES: DemoInquiry[] = [
       ["MS staircase, 14 steps, painted", "1", "Set", "9800"],
       ["MS railing both sides", "9", "m", "420"],
     ],
-    reach: "lpo_in_or_out",
+    reach: "lpo",
     unassigned: true,
   },
   {
@@ -185,6 +186,29 @@ const DEMO_INQUIRIES: DemoInquiry[] = [
   },
 ];
 
+/** A one-page PDF with a line of text, as a data URL. */
+function samplePdf(text: string): string {
+  const stream = `BT /F1 16 Tf 60 760 Td (${text.replace(/[()\\]/g, "")}) Tj ET`;
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = objects.map((object, index) => {
+    const offset = pdf.length;
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+    return offset;
+  });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets
+    .map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`)
+    .join("")}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return `data:application/pdf;base64,${Buffer.from(pdf, "latin1").toString("base64")}`;
+}
+
 /** Plausible answers for every step after the first two. */
 function stepAnswers(
   stage: InquiryStageKey,
@@ -192,8 +216,9 @@ function stepAnswers(
   total: number,
 ): Record<string, string> {
   switch (stage) {
-    case "lpo_in_or_out":
+    case "lpo":
       return {
+        lpoType: "customer",
         customerLpoNumber: `LPO-${Math.round(total)}`,
         customerLpoDate: day,
         customerLpoAmount: total.toFixed(2),
@@ -382,7 +407,7 @@ export async function loadDemoInquiries(
       const handler = handlers[view.owningDepartmentKey] ?? handlers.admin;
       await assignInquiryForUser(ownerId, orgCode, id, handler.staffId);
 
-      const fields =
+      const fields: Record<string, string> =
         stage.key === "inquiry"
           ? inquiryFields
           : stage.key === "quotation"
@@ -397,6 +422,21 @@ export async function loadDemoInquiries(
                 termValidity: "30 days",
               }
             : stepAnswers(stage.key, today, view.totals.total);
+      if (stage.key === "lpo") {
+        // A stand-in for the LPO the customer would have sent.
+        const file = await uploadInquiryAttachmentForUser(
+          handler.userId,
+          orgCode,
+          id,
+          {
+            fileName: `${fields.customerLpoNumber}.pdf`,
+            dataUrl: samplePdf(
+              `${demo.customer} - LPO ${fields.customerLpoNumber} (sample)`,
+            ),
+          },
+        );
+        fields.customerLpoFile = file.id;
+      }
       const items = view.lineItems.map((line, lineIndex) => ({
         ...line,
         unit: demo.items[lineIndex]?.[2] ?? line.unit,

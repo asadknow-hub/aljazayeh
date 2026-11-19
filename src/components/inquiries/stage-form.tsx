@@ -1,10 +1,11 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { PlusIcon, TrashIcon } from "@/components/ui/icons";
+import { useState, type ReactNode } from "react";
+import { DocumentIcon, PlusIcon, TrashIcon } from "@/components/ui/icons";
 import { formatFormDate } from "@/lib/datetime/format";
 import type { InquiryStageKey } from "@/lib/inquiries/stages";
 import {
+  fieldShown,
   formatMoney,
   STAGE_DEFINITIONS,
   STEP_FORM,
@@ -29,13 +30,99 @@ export function emptyLineItem(): InquiryLineItemInput {
   };
 }
 
-/** The questions asked in one place: the step's own form, or one of its papers. */
-function fieldsOn(stage: InquiryStageKey, place: string): StageField[] {
-  return STAGE_DEFINITIONS[stage].fields.filter((field) => field.on === place);
+/**
+ * The questions asked in one place (the step's own form, or one of its
+ * papers), leaving out the ones the other answers make irrelevant.
+ */
+function fieldsOn(
+  stage: InquiryStageKey,
+  place: string,
+  values: Record<string, string>,
+): StageField[] {
+  return STAGE_DEFINITIONS[stage].fields.filter(
+    (field) => field.on === place && fieldShown(field, values),
+  );
 }
 
 export function hasFields(stage: InquiryStageKey, place: string): boolean {
-  return fieldsOn(stage, place).length > 0;
+  return STAGE_DEFINITIONS[stage].fields.some((field) => field.on === place);
+}
+
+/** What a form needs to take in and show uploaded files. */
+export type FileHandling = {
+  /** The name of an uploaded file, by its id. */
+  nameOf: (id: string) => string;
+  /** Where an uploaded file can be opened. */
+  hrefOf: (id: string) => string;
+  /** Upload a file; gives its id, or nothing if it was refused. */
+  upload: (file: File) => Promise<string | null>;
+};
+
+/** Choose, see and replace an uploaded file. */
+function FileInput({
+  id,
+  value,
+  onChange,
+  disabled,
+  invalid,
+  files,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  invalid: boolean;
+  files: FileHandling;
+}) {
+  const [uploading, setUploading] = useState(false);
+
+  return (
+    <div
+      className={[
+        "flex flex-wrap items-center gap-3 rounded-lg border border-dashed px-3 py-3",
+        invalid ? "border-red-500 bg-red-50" : "border-slate-300 bg-slate-50",
+      ].join(" ")}
+    >
+      {value ? (
+        <a
+          href={files.hrefOf(value)}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex min-w-0 items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+        >
+          <DocumentIcon className="h-4 w-4 shrink-0" />
+          <span className="truncate">{files.nameOf(value)}</span>
+        </a>
+      ) : (
+        <span className="text-sm text-slate-600">No file chosen yet.</span>
+      )}
+      <label
+        className={[
+          "btn btn-sm",
+          value ? "btn-secondary" : "btn-primary",
+          disabled || uploading ? "pointer-events-none opacity-50" : "",
+        ].join(" ")}
+      >
+        {uploading ? "Uploading…" : value ? "Replace" : "Choose file"}
+        <input
+          id={id}
+          type="file"
+          accept="application/pdf,image/png,image/jpeg"
+          disabled={disabled || uploading}
+          className="sr-only"
+          onChange={async (event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (!file) return;
+            setUploading(true);
+            const uploaded = await files.upload(file);
+            setUploading(false);
+            if (uploaded) onChange(uploaded);
+          }}
+        />
+      </label>
+    </div>
+  );
 }
 
 const SHORT_TYPES = new Set(["date", "time", "amount", "number"]);
@@ -47,6 +134,7 @@ function FieldInput({
   disabled,
   invalid,
   fullWidth,
+  files,
 }: {
   field: StageField;
   value: string;
@@ -54,6 +142,7 @@ function FieldInput({
   disabled: boolean;
   invalid: boolean;
   fullWidth: boolean;
+  files?: FileHandling;
 }) {
   const id = fillId(field.key);
   const span = fullWidth ? "col-span-2" : "col-span-2 sm:col-span-1";
@@ -102,7 +191,18 @@ function FieldInput({
           </span>
         ) : null}
       </label>
-      {field.type === "longtext" ? (
+      {field.type === "file" ? (
+        files ? (
+          <FileInput
+            id={id}
+            value={value}
+            onChange={onChange}
+            disabled={disabled}
+            invalid={invalid}
+            files={files}
+          />
+        ) : null
+      ) : field.type === "longtext" ? (
         <textarea
           {...shared}
           rows={3}
@@ -154,6 +254,7 @@ export function StageFields({
   disabled = false,
   invalid,
   narrow = false,
+  files,
 }: {
   stage: InquiryStageKey;
   place?: string;
@@ -163,10 +264,11 @@ export function StageFields({
   /** Questions that still have to be answered, shown in red. */
   invalid?: ReadonlySet<string>;
   narrow?: boolean;
+  files?: FileHandling;
 }) {
   return (
     <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
-      {fieldsOn(stage, place).map((field) => (
+      {fieldsOn(stage, place, values).map((field) => (
         <FieldInput
           key={field.key}
           field={field}
@@ -176,6 +278,7 @@ export function StageFields({
           fullWidth={
             Boolean(field.wide) || (narrow && !SHORT_TYPES.has(field.type))
           }
+          files={files}
           onChange={(value) => onChange({ ...values, [field.key]: value })}
         />
       ))}
@@ -187,13 +290,15 @@ export function StageFields({
 export function StageAnswers({
   stage,
   values,
+  files,
 }: {
   stage: InquiryStageKey;
   values: Record<string, string>;
+  files: Pick<FileHandling, "nameOf" | "hrefOf">;
 }) {
   return (
     <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-      {fieldsOn(stage, STEP_FORM).map((field) => {
+      {fieldsOn(stage, STEP_FORM, values).map((field) => {
         const value = values[field.key] ?? "";
         const shown =
           field.type === "date" && value
@@ -205,7 +310,21 @@ export function StageAnswers({
           <div key={field.key} className={field.wide ? "sm:col-span-2" : ""}>
             <dt className="field-label">{field.label}</dt>
             <dd className="mt-0.5 text-sm whitespace-pre-wrap text-slate-900">
-              {value || field.type === "yesno" ? shown : "—"}
+              {field.type === "file" && value ? (
+                <a
+                  href={files.hrefOf(value)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline"
+                >
+                  <DocumentIcon className="h-4 w-4" />
+                  {files.nameOf(value)}
+                </a>
+              ) : value || field.type === "yesno" ? (
+                shown
+              ) : (
+                "—"
+              )}
             </dd>
           </div>
         );

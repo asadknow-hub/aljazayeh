@@ -220,11 +220,16 @@ If purpose = **Inquiry**, the system creates a starter inquiry in the same trans
 
 Built from the company's paper "Leave Request Application".
 
-- Reception raises a request for an employee: first and last day, type, reason, and the optional
-  office-use fields. The employee's details (designation, contacts, passport, joining date) come
-  from their staff record; day count, return date, working duration and last return are worked out.
-- The request is a **form** (`/{code}/leave/{id}`) laid out like the paper one. What is on screen
-  is what prints: two A4 pages with the letterhead.
+- Reception raises a request on its own page (`/{code}/leave/new`): the details are typed on the
+  left (employee, first and last day, type, reason, and the optional office-use fields) and the
+  leave form on the right fills in as they are typed. The employee's details (designation,
+  contacts, passport, joining date) come from their staff record; day count, return date,
+  working duration and last return are worked out. The button is **Send for Approval**, and says
+  who it goes to.
+- An existing request (`/{code}/leave/{id}`) shows the same way: on the left where its approval
+  stands (sent, waiting for whom, approved, rejected and why, and the list of who has signed), on
+  the right the form, laid out like the paper one. Printing is a secondary button and prints
+  only the form: two A4 pages with the letterhead.
 - It is **signed in order**: Prepared By (whoever raised it), Foreman, Accountant, CEO & Managing
   Partner, Managing Director. Each signer sees it under **My Tasks** on the company home when it
   is their turn, opens it, and approves or rejects with their **approval PIN**. Approving stamps
@@ -254,8 +259,11 @@ Five more of the company's paper forms use the same sign-off mechanism as leave 
 | Material Request Approval Form | Engineering workspace | Foreman, Purchaser, Accounts, Managing Partner, Managing Director |
 | Verbal Work Approval Form (adds 5% VAT) | Admin workspace | Foreman, Purchaser, Accounts, Managing Partner, Managing Director |
 
-Each gets a running reference number per year (`AJE/FN/2026/0001`), appears under My Tasks for
-whoever signs next, and prints like its paper version at `/{code}/forms/{id}`. Forms about an
+Each is raised and followed on the same kind of screen as a leave request: fields on the left,
+the form filling in on the right, **Send for Approval** (`/{code}/forms/new/{type}`), then the
+approval panel beside the form (`/{code}/forms/{id}`). Each gets a running reference number per
+year (`AJE/FN/2026/0001`) when it is sent, appears under My Tasks for whoever signs next, and
+prints like its paper version. Forms about an
 employee leave a box for that employee to sign on the printed copy.
 
 A form is **defined, not programmed**: what it asks is in
@@ -281,7 +289,7 @@ responsible for it.
 | --- | --- | --- | --- |
 | 1 | Inquiry | none: the customer's details and the items with quantity and price | `AJE/INQ/2026/0001` |
 | 2 | Quotation | Quotation (Commercial Quotation for an export job), two pages | `AJE/QTN/…` |
-| 3 | LPO In or Out | the customer's LPO is recorded (in); Purchase Order to a supplier when material must be bought (out) | `AJE/LPO/…`, `AJE/PO/…` |
+| 3 | LPO | chosen first, from a dropdown: the **customer's LPO** (their file is uploaded, with its number and date) or **our own LPO** (prepared here on the company's Purchase Order form) | `AJE/LPO/…` |
 | 4 | Proforma Invoice | Proforma Invoice | `AJE/PI/…` |
 | 5 | Job Card | Job Card; Certificate of Compliance and Coating Certificate when the job needs them | `AJE/JC/…`, `AJE/COC/…`, `AJE/CC/…` |
 | 6 | Progress Invoice | Progress Invoice | `AJE/PRG/…` |
@@ -301,9 +309,15 @@ step 9 and the Receipt Voucher as step 10.
   quotation, LPO, job card and delivery note.
 - A step gets its number the moment the job reaches it, shown beside the
   step's name, in the step list, and as a pill at the top of the inquiry
-  together with the numbers of all the other steps reached so far. The LPO step has its own number too,
-  next to the customer's LPO number.
-- An optional paper (purchase order, certificate, packing list) gets its
+  together with the numbers of all the other steps reached so far.
+- The LPO step starts with one choice, which decides what the step asks for.
+  **Customer's LPO**: the file they sent (PDF or photo, up to 5 MB) is
+  uploaded and shown beside the fields, and its number and date are typed in.
+  **Our own LPO**: the company's Purchase Order form is filled in and carries
+  the step's own number. The papers that follow (job card, delivery note,
+  invoices) quote whichever LPO number was chosen. Uploaded files are kept
+  in the database and can only be opened by people allowed to see the inquiry.
+- An optional paper (certificate, packing list) gets its
   number the first time the step is saved with it switched on. **Print**
   prints the paper that is on screen and nothing else.
 - Which papers a step has, what is typed on them and what is required is in
@@ -497,7 +511,7 @@ Env essentials:
 - Personal Salary / Contract under Account duplicate the HR record and will be replaced by a
   read-only view of it.
 - Ending other sessions when a password changes.
-- Email / WhatsApp sending, file attachments.
+- Email / WhatsApp sending; file attachments other than the customer's LPO.
 
 ---
 

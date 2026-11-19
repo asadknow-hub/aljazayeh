@@ -110,7 +110,6 @@ export function ReceptionClient({
               orgCode={org.code}
               formType={section}
               forms={forms[section] ?? []}
-              staffOptions={staffOptions}
             />
           ) : null}
         </div>

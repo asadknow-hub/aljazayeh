@@ -15,6 +15,7 @@ import {
   assignInquiryForUser,
   closeInquiryForUser,
   createInquiryForUser,
+  getInquiryAttachmentForUser,
   getInquiryForUser,
   getInquiryWorkflowMapForUser,
   listInquiriesForUser,
@@ -23,6 +24,7 @@ import {
   saveInquiryStageForUser,
   saveInquiryWorkflowMapForUser,
   sendInquiryBackForUser,
+  uploadInquiryAttachmentForUser,
 } from "@/lib/inquiries/queries";
 import { stagesForJob } from "@/lib/inquiries/stages";
 import type {
@@ -259,7 +261,7 @@ describe("one job from inquiry to payment", () => {
       `${ORG.toUpperCase()}/QTN/${YEAR}/0001`,
     );
     assert.equal(quoted.lineItems[1]?.unit, "Nos");
-    assert.equal(quoted.currentStage, "lpo_in_or_out");
+    assert.equal(quoted.currentStage, "lpo");
 
     const [listed] = (await listInquiriesForUser(owner, ORG)).filter(
       (inquiry) => inquiry.id === inquiryId,
@@ -271,7 +273,11 @@ describe("one job from inquiry to payment", () => {
     const saved = await workStep(
       people.adam,
       inquiryId,
-      { customerLpoNumber: "LPO-7781", customerLpoDate: "2030-02-03" },
+      {
+        lpoType: "customer",
+        customerLpoNumber: "LPO-7781",
+        customerLpoDate: "2030-02-03",
+      },
       { complete: false, lineItems: [item("Sneaked in", "1", "1")] },
     );
     assert.equal(saved.lineItems.length, 2);
@@ -307,12 +313,8 @@ describe("one job from inquiry to payment", () => {
     assert.equal(again.steps[2]?.fields.customerLpoNumber, "LPO-7781");
   });
 
-  test("a purchase order to a supplier gets its own number and lines", async () => {
-    const lpo = {
-      customerLpoNumber: "LPO-7781",
-      customerLpoDate: "2030-02-03",
-      supplierOrderNeeded: "yes",
-    };
+  test("our own LPO is prepared on the step, under the step's number", async () => {
+    const lpo = { lpoType: "own" };
     await refused(
       workStep(people.adam, inquiryId, lpo, { complete: true }),
       /Still needed: Supplier/,
@@ -338,10 +340,9 @@ describe("one job from inquiry to payment", () => {
       { complete: true },
     );
     const step = ordered.steps[2];
-    assert.equal(
-      step?.documentNumbers.purchase_order,
-      `${ORG.toUpperCase()}/PO/${YEAR}/0001`,
-    );
+    assert.equal(step?.label, "LPO");
+    assert.equal(step?.documentNumber, `${ORG.toUpperCase()}/LPO/${YEAR}/0001`);
+    assert.deepEqual(step?.documentNumbers, {});
     // Blank rows are dropped and only the form's own columns are kept.
     assert.deepEqual(step?.tables.poLines, [
       { description: "MS rod 5 mm", quantity: "8", rate: "8.00" },
@@ -464,7 +465,13 @@ describe("one job from inquiry to payment", () => {
   });
 });
 
+/** A one-pixel picture, standing in for a scanned LPO. */
+const TINY_PNG =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
 describe("a job shipped abroad", () => {
+  let lpoFileId = "";
+
   test("has the Commercial Invoice as step 9 and the Receipt Voucher as 10", async () => {
     const created = await createInquiryForUser(people.adam.userId, ORG, {
       fields: {
@@ -489,7 +496,8 @@ describe("a job shipped abroad", () => {
         vatPercent: "0",
         termPayment: "LC at sight",
       },
-      lpo_in_or_out: {
+      lpo: {
+        lpoType: "customer",
         customerLpoNumber: "PO-9",
         customerLpoDate: "2030-03-02",
       },
@@ -506,8 +514,31 @@ describe("a job shipped abroad", () => {
     };
     let view = created;
     while (view.currentStage !== "commercial_invoice") {
+      const handler = handlers[view.owningDepartmentKey]!;
+      if (view.currentStage === "lpo") {
+        // The customer's LPO has to be uploaded before the step can finish.
+        await refused(
+          workStep(handler, view.id, answers.lpo!, { complete: true }),
+          /Still needed: The customer's LPO/,
+        );
+        await refused(
+          uploadInquiryAttachmentForUser(handler.userId, ORG, view.id, {
+            fileName: "lpo.html",
+            dataUrl: "data:text/html;base64,PGI+aGk8L2I+",
+          }),
+          /PDF, or a JPG or PNG/,
+        );
+        const file = await uploadInquiryAttachmentForUser(
+          handler.userId,
+          ORG,
+          view.id,
+          { fileName: "PO-9.png", dataUrl: TINY_PNG },
+        );
+        answers.lpo = { ...answers.lpo, customerLpoFile: file.id };
+        lpoFileId = file.id;
+      }
       view = await workStep(
-        handlers[view.owningDepartmentKey]!,
+        handler,
         view.id,
         answers[view.currentStage]!,
         {
@@ -520,6 +551,17 @@ describe("a job shipped abroad", () => {
       );
     }
     assert.equal(view.steps[8]?.state, "current");
+
+    // Whoever may open the inquiry may open its file; nobody else.
+    const opened = await getInquiryAttachmentForUser(owner, ORG, lpoFileId);
+    assert.equal(opened?.contentType, "image/png");
+    assert.equal(opened?.fileName, "PO-9.png");
+    assert.equal(
+      await getInquiryAttachmentForUser(people.eli.userId, ORG, lpoFileId),
+      null,
+    );
+    // The job's papers refer to the customer's LPO number.
+    assert.equal(view.steps[2]?.fields.customerLpoNumber, "PO-9");
 
     const shipped = await workStep(
       handlers[view.owningDepartmentKey]!,

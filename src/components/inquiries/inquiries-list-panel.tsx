@@ -359,6 +359,9 @@ export function InquiriesListPanel({
           orgCode={orgCode}
           onClose={() => setCreating(false)}
           onCreated={(inquiry) => {
+            // Closed first: this list stays alive behind the next page, and
+            // coming back must not find the dialog still saving.
+            setCreating(false);
             showToast(`${inquiry.number} created`);
             router.push(detailHref(inquiry));
           }}

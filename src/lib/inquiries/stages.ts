@@ -1,7 +1,7 @@
 export const INQUIRY_STAGES = [
   { key: "inquiry", label: "Inquiry" },
   { key: "quotation", label: "Quotation" },
-  { key: "lpo_in_or_out", label: "LPO In or Out" },
+  { key: "lpo", label: "LPO" },
   { key: "proforma_invoice", label: "Proforma Invoice" },
   { key: "job_card", label: "Job Card" },
   { key: "progress_invoice", label: "Progress Invoice" },
