@@ -21,6 +21,9 @@ import {
   getInquiryWorkflowMapForUser,
   listInquiriesForDepartment,
   listInquiriesForUser,
+  listInquiryTasksForUser,
+  reopenInquiryStepForUser,
+  requestInquiryApprovalForUser,
   saveInquiryStageForUser,
   saveInquiryWorkflowMapForUser,
   sendInquiryBackForUser,
@@ -441,25 +444,53 @@ describe("inquiry pipeline", () => {
       }),
       /Approval required by Management/,
     );
-    await refused(
-      approveInquiryStageForUser(people.sara.userId, ORG, inquiryId),
-      /Only Management/,
-    );
-    // An unfinished step cannot be approved either.
-    await refused(
-      approveInquiryStageForUser(people.mona.userId, ORG, inquiryId),
-      /not ready to approve. Still needed: Inquiry title, Contact/,
-    );
     // The refused attempt saved nothing, so the step is still as it was.
     const view = await getInquiryForUser(people.sara.userId, ORG, inquiryId);
     assert.equal(view?.title, "");
 
-    await saveInquiryStageForUser(
+    // Nothing is waiting on Management until the step is sent to them.
+    await refused(
+      approveInquiryStageForUser(people.mona.userId, ORG, inquiryId),
+      /has not been sent for approval/,
+    );
+    assert.deepEqual(await listInquiryTasksForUser(people.mona.userId, ORG), []);
+  });
+
+  test("a step is sent for approval complete, and only its approver approves it", async () => {
+    await refused(
+      requestInquiryApprovalForUser(people.sara.userId, ORG, inquiryId, {
+        fields: { customerName: "Walk-in Customer" },
+        lineItems: [],
+      }),
+      /Still needed: Inquiry title, Contact/,
+    );
+    await denied(
+      requestInquiryApprovalForUser(
+        people.mona.userId,
+        ORG,
+        inquiryId,
+        inquiryStep(),
+      ),
+    );
+
+    const sent = await requestInquiryApprovalForUser(
       people.sara.userId,
       ORG,
       inquiryId,
       inquiryStep(),
-      { complete: false },
+    );
+    assert.equal(sent.approvalRequested, true);
+    assert.equal(sent.canApproveCurrentStage, false, "not by its own handler");
+    assert.deepEqual(
+      (await listInquiryTasksForUser(people.mona.userId, ORG)).map(
+        (task) => [task.inquiry.id, task.reason],
+      ),
+      [[inquiryId, "approval"]],
+    );
+
+    await refused(
+      approveInquiryStageForUser(people.sara.userId, ORG, inquiryId),
+      /Only Management/,
     );
     const approved = await approveInquiryStageForUser(
       people.mona.userId,
@@ -467,6 +498,38 @@ describe("inquiry pipeline", () => {
       inquiryId,
     );
     assert.equal(approved.currentStageApproved, true);
+    assert.equal(approved.approvalRequested, false);
+  });
+
+  test("the approver can ask for changes instead", async () => {
+    // Sent again, then turned back by Management with what has to change.
+    await requestInquiryApprovalForUser(
+      people.sara.userId,
+      ORG,
+      inquiryId,
+      inquiryStep(),
+    );
+    const returned = await reopenInquiryStepForUser(
+      people.mona.userId,
+      ORG,
+      inquiryId,
+      "Add the handrail length",
+    );
+    assert.equal(returned.approvalRequested, false);
+    assert.equal(returned.currentStageApproved, false);
+    assert.ok(
+      returned.activityLogs.some((log) =>
+        /Changes asked for: Add the handrail length/.test(log.label),
+      ),
+    );
+
+    await requestInquiryApprovalForUser(
+      people.sara.userId,
+      ORG,
+      inquiryId,
+      inquiryStep(),
+    );
+    await approveInquiryStageForUser(people.mona.userId, ORG, inquiryId);
   });
 
   test("changing a step after approval voids the approval", async () => {
@@ -507,6 +570,10 @@ describe("inquiry pipeline", () => {
       ),
       /Approval required/,
     );
+    await requestInquiryApprovalForUser(people.sara.userId, ORG, inquiryId, {
+      fields: inquiryStep().fields,
+      lineItems: edited.lineItems,
+    });
     await approveInquiryStageForUser(people.mona.userId, ORG, inquiryId);
   });
 

@@ -108,7 +108,10 @@ export type InquiryView = InquirySummary & {
   createdByName: string;
   steps: InquiryStepView[];
   lineItems: InquiryLineItemView[];
+  /** The current step has been sent for approval and not yet answered. */
+  approvalRequested: boolean;
   currentStageApproved: boolean;
+  /** The signed-in person is the one who must approve the current step. */
   canApproveCurrentStage: boolean;
   /** The signed-in person may close this inquiry as lost, or reopen it. */
   canClose: boolean;

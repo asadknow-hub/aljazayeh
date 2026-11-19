@@ -10,6 +10,8 @@ import {
   closeInquiryForUser,
   createInquiryForUser,
   reopenInquiryForUser,
+  reopenInquiryStepForUser,
+  requestInquiryApprovalForUser,
   saveInquiryStageForUser,
   saveInquiryWorkflowMapForUser,
   sendInquiryBackForUser,
@@ -116,5 +118,27 @@ export async function closeInquiryAction(
 export async function reopenInquiryAction(orgCode: string, inquiryId: string) {
   return inquiryAction((userId) =>
     reopenInquiryForUser(userId, orgCode, inquiryId),
+  );
+}
+
+/** Save the current step and send it to whoever must approve it. */
+export async function requestInquiryApprovalAction(
+  orgCode: string,
+  inquiryId: string,
+  input: InquiryStageInput,
+) {
+  return inquiryAction((userId) =>
+    requestInquiryApprovalForUser(userId, orgCode, inquiryId, input),
+  );
+}
+
+/** Take the current step back from approval so it can be changed. */
+export async function reopenInquiryStepAction(
+  orgCode: string,
+  inquiryId: string,
+  reason: string,
+) {
+  return inquiryAction((userId) =>
+    reopenInquiryStepForUser(userId, orgCode, inquiryId, reason),
   );
 }

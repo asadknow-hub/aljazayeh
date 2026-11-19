@@ -300,7 +300,8 @@ step 9 and the Receipt Voucher as step 10.
   earlier steps: customer details, items, prices, and the numbers of the
   quotation, LPO, job card and delivery note.
 - A step gets its number the moment the job reaches it, shown beside the
-  step's name and in the step list. The LPO step has its own number too,
+  step's name, in the step list, and as a pill at the top of the inquiry
+  together with the numbers of all the other steps reached so far. The LPO step has its own number too,
   next to the customer's LPO number.
 - An optional paper (purchase order, certificate, packing list) gets its
   number the first time the step is saved with it switched on. **Print**
@@ -346,11 +347,16 @@ step 9 and the Receipt Voucher as step 10.
 
 If Inquiry Settings marks a step as needing approval:
 
-- It cannot move on until Management or Engineering (whichever is named)
-  approves it. Whoever must approve can open the inquiry.
-- A step with required answers missing cannot be approved.
-- Changing the step after approval voids the approval; saving it unchanged
-  does not.
+- The person handling it fills it in and presses **Send for Approval**. The
+  step has to be complete to be sent. They then see that it is done and
+  waiting, and can no longer change it unless they take it back with
+  **Change something**.
+- It appears under My Tasks for whoever must approve (Management or
+  Engineering, whichever is named). They open it and press **Approve**, or
+  **Ask for changes** with what has to be changed.
+- Once approved, the person handling it presses **Save & Go to Next Step**.
+- Changing a step after it was sent or approved undoes that; it has to be
+  sent again.
 
 #### Sources
 
