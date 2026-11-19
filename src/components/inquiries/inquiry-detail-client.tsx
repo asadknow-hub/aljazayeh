@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import {
@@ -8,7 +7,8 @@ import {
   StatusChip,
 } from "@/components/inquiries/inquiry-chips";
 import {
-  HandlingBar,
+  ApprovalBanner,
+  HandlingBlock,
   InquiryExtras,
   type InquirySideActions,
 } from "@/components/inquiries/inquiry-side-panel";
@@ -29,7 +29,6 @@ import { usePageTitle } from "@/components/providers/page-title-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import {
   AlertIcon,
-  ArrowLeftIcon,
   ArrowRightIcon,
   CheckIcon,
   ClockIcon,
@@ -51,6 +50,8 @@ import {
   assignInquiryAction,
   closeInquiryAction,
   reopenInquiryAction,
+  reopenInquiryStepAction,
+  requestInquiryApprovalAction,
   saveInquiryStageAction,
   sendInquiryBackAction,
 } from "@/lib/inquiries/actions";
@@ -92,6 +93,7 @@ function versionOf(inquiry: InquiryView): string {
     inquiry.updatedAt,
     inquiry.status,
     inquiry.assignedStaffId,
+    inquiry.approvalRequested,
     inquiry.currentStageApproved,
     inquiry.comments.length,
     inquiry.activityLogs.length,
@@ -182,6 +184,38 @@ function missingFrom(
   return missing;
 }
 
+/** The green button that finishes a step and hands the job on. */
+function NextStepButton({
+  nextStep,
+  disabled,
+  onClick,
+}: {
+  nextStep: InquiryView["steps"][number] | undefined;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="btn btn-go !items-center !py-1.5 text-left"
+    >
+      <span className="flex flex-col leading-tight">
+        <span>
+          {nextStep ? "Save & Go to Next Step" : "Save & Complete Inquiry"}
+        </span>
+        <span className="text-xs font-normal text-emerald-50">
+          {nextStep
+            ? `Goes to ${workflowDepartmentLabel(nextStep.departmentKey)} · ${nextStep.number}. ${nextStep.label}`
+            : "The job is paid and closed"}
+        </span>
+      </span>
+      <ArrowRightIcon className="h-5 w-5" />
+    </button>
+  );
+}
+
 export function InquiryDetailClient({
   orgCode,
   initialInquiry,
@@ -253,15 +287,16 @@ export function InquiryDetailClient({
     inquiry.steps.find((step) => step.key === viewing) ?? currentStep;
   const definition = STAGE_DEFINITIONS[viewedStep.key];
   const viewingCurrent = viewedStep.key === inquiry.currentStage;
-  const editable = viewingCurrent && canEdit(inquiry);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
-
   const approver =
     INQUIRY_APPROVAL_ROLES.find(
       (role) => role.key === currentStep.approvalRequiredBy,
     )?.label ?? "";
-  const waitingForApproval =
-    currentStep.approvalRequired && !inquiry.currentStageApproved;
+  // Once a step is sent for approval or approved it is not changed, unless
+  // it is taken back first.
+  const heldForApproval =
+    inquiry.approvalRequested || inquiry.currentStageApproved;
+  const editable = viewingCurrent && canEdit(inquiry) && !heldForApproval;
+  const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
 
   // The step on screen shows what is typed; other steps show what is saved.
   const shown: InquiryStageInput = viewingCurrent
@@ -284,47 +319,40 @@ export function InquiryDetailClient({
   const papers = documentsInUse(viewedStep.key, shown.fields);
   const paper = papers.find((doc) => doc.key === openDocument) ?? papers[0];
 
-  async function save(complete: boolean) {
-    if (complete) {
-      // Show what is missing right where it has to be written.
-      const missing = missingFrom(inquiry.currentStage, draft);
-      if (missing.length > 0) {
-        const first = missing[0]!;
-        setInvalid(new Set(missing.map((item) => item.key)));
-        setViewing(inquiry.currentStage);
-        if (first.on !== STEP_FORM) setOpenDocument(first.on);
-        // Jump to the first one once it is on screen.
-        window.setTimeout(() => {
-          const place = document.getElementById(fillId(first.key));
-          place?.scrollIntoView({ block: "center", behavior: "smooth" });
-          place?.focus({ preventScroll: true });
-        }, 60);
-        setError(
-          missing.length === 1
-            ? "One thing is still needed before this can move on. It is marked in red."
-            : `${missing.length} things are still needed before this can move on. They are marked in red.`,
-        );
-        return;
-      }
-    }
+  /**
+   * Whether everything the step needs is there. If not, the missing places
+   * are marked in red and the first one is brought into view.
+   */
+  function complete(purpose: string): boolean {
+    const missing = missingFrom(inquiry.currentStage, draft);
+    if (missing.length === 0) return true;
+
+    const first = missing[0]!;
+    setInvalid(new Set(missing.map((item) => item.key)));
+    setViewing(inquiry.currentStage);
+    if (first.on !== STEP_FORM) setOpenDocument(first.on);
+    // Jump to the first one once it is on screen.
+    window.setTimeout(() => {
+      const place = document.getElementById(fillId(first.key));
+      place?.scrollIntoView({ block: "center", behavior: "smooth" });
+      place?.focus({ preventScroll: true });
+    }, 60);
+    setError(
+      missing.length === 1
+        ? `One thing is still needed before this can ${purpose}. It is marked in red.`
+        : `${missing.length} things are still needed before this can ${purpose}. They are marked in red.`,
+    );
+    return false;
+  }
+
+  async function save(moveOn: boolean) {
+    if (moveOn && !complete("move on")) return;
     const updated = await run(() =>
-      saveInquiryStageAction(orgCode, inquiry.id, draft, complete),
+      saveInquiryStageAction(orgCode, inquiry.id, draft, moveOn),
     );
     if (!updated) return;
-    if (!complete) {
+    if (!moveOn) {
       showToast("Saved");
-      // A step that needs approval has to be complete to be approved.
-      const missing = updated.steps.find(
-        (step) => step.key === updated.currentStage,
-      )?.approvalRequired
-        ? missingFrom(updated.currentStage, draftOf(updated))
-        : [];
-      if (missing.length > 0) {
-        setInvalid(new Set(missing.map((item) => item.key)));
-        setError(
-          `Saved, but it cannot be approved yet: ${missing.length === 1 ? "one thing is" : `${missing.length} things are`} still needed, marked in red.`,
-        );
-      }
     } else if (updated.status === "completed") {
       showToast("Inquiry completed");
     } else {
@@ -336,17 +364,35 @@ export function InquiryDetailClient({
     }
   }
 
+  async function sendForApproval() {
+    if (!complete("be sent for approval")) return;
+    if (
+      await run(() => requestInquiryApprovalAction(orgCode, inquiry.id, draft))
+    ) {
+      showToast(`Sent to ${approver} for approval`);
+    }
+  }
+
+  async function assign(staffId: string) {
+    if (await run(() => assignInquiryAction(orgCode, inquiry.id, staffId))) {
+      showToast("Assigned");
+    }
+  }
+
+  async function approve() {
+    if (await run(() => approveInquiryStageAction(orgCode, inquiry.id))) {
+      showToast("Approved");
+    }
+  }
+
+  /** Take the step back from approval so it can be changed. */
+  async function reopenStep(reason: string): Promise<boolean> {
+    return Boolean(
+      await run(() => reopenInquiryStepAction(orgCode, inquiry.id, reason)),
+    );
+  }
+
   const sideActions: InquirySideActions = {
-    assign: async (staffId) => {
-      if (await run(() => assignInquiryAction(orgCode, inquiry.id, staffId))) {
-        showToast("Assigned");
-      }
-    },
-    approve: async () => {
-      if (await run(() => approveInquiryStageAction(orgCode, inquiry.id))) {
-        showToast("Step approved");
-      }
-    },
     addNote: async (body) =>
       Boolean(
         await run(() => addInquiryCommentAction(orgCode, inquiry.id, body)),
@@ -373,19 +419,26 @@ export function InquiryDetailClient({
 
   const stepNumber =
     viewedStep.state === "locked" ? "" : viewedStep.documentNumber;
+  // The number of every step the job has reached, and of their extra papers.
+  const numbers = inquiry.steps.flatMap((step) =>
+    step.state === "locked"
+      ? []
+      : [
+          ...(step.documentNumber
+            ? [{ key: step.key as string, label: step.label, number: step.documentNumber }]
+            : []),
+          ...documentsInUse(step.key, step.fields).flatMap((doc) =>
+            step.documentNumbers[doc.key]
+              ? [{ key: doc.key, label: doc.title, number: step.documentNumbers[doc.key]! }]
+              : [],
+          ),
+        ],
+  );
   const setFields = (fields: Record<string, string>) =>
     setDraft({ ...draft, fields });
 
   return (
     <main className="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6 print:block print:p-0">
-      <Link
-        href={backHref}
-        className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-slate-600 transition-colors hover:text-primary print:hidden"
-      >
-        <ArrowLeftIcon />
-        Back to inquiries
-      </Link>
-
       <header className="card flex flex-col gap-3 p-4 sm:p-5 print:hidden">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
@@ -417,6 +470,14 @@ export function InquiryDetailClient({
                 : ""}
             </p>
           </div>
+          <HandlingBlock
+            key={`${inquiry.currentStage}-${inquiry.assignedStaffId}`}
+            inquiry={inquiry}
+            staffOptions={assignable[inquiry.owningDepartmentKey] ?? []}
+            myStaffId={myStaffId}
+            pending={pending}
+            onAssign={assign}
+          />
           <div className="text-right">
             <p className="text-xs font-medium text-slate-500">Job value</p>
             <p className="font-display text-xl font-semibold text-slate-900 tabular-nums">
@@ -431,6 +492,17 @@ export function InquiryDetailClient({
               </p>
             ) : null}
           </div>
+        </div>
+        <div className="flex flex-wrap gap-1.5 border-t border-slate-100 pt-3">
+          {numbers.map((item) => (
+            <span
+              key={item.key}
+              className="chip bg-slate-100 text-slate-700 ring-1 ring-slate-200 ring-inset"
+            >
+              <span className="font-normal text-slate-500">{item.label}</span>
+              <span className="tabular-nums">{item.number}</span>
+            </span>
+          ))}
         </div>
         {inquiry.status === "cancelled" ? (
           <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">
@@ -456,16 +528,6 @@ export function InquiryDetailClient({
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-4 print:block">
-          <HandlingBar
-            key={`${inquiry.currentStage}-${inquiry.assignedStaffId}`}
-            inquiry={inquiry}
-            staffOptions={assignable[inquiry.owningDepartmentKey] ?? []}
-            myStaffId={myStaffId}
-            pending={pending}
-            unsavedChanges={dirty}
-            actions={sideActions}
-          />
-
           <form
             onSubmit={(event: FormEvent) => {
               event.preventDefault();
@@ -500,6 +562,15 @@ export function InquiryDetailClient({
               ) : null}
             </div>
 
+            {viewingCurrent && inquiry.status === "open" ? (
+              <ApprovalBanner
+                inquiry={inquiry}
+                approver={approver}
+                pending={pending}
+                onApprove={approve}
+                onReopen={reopenStep}
+              />
+            ) : null}
             {viewedStep.state === "done" ? (
               <p className="flex items-center gap-2 border-b border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900 sm:px-5 print:hidden">
                 <CheckIcon className="h-4 w-4 text-emerald-600" />
@@ -512,7 +583,10 @@ export function InquiryDetailClient({
                   : ""}
               </p>
             ) : null}
-            {viewingCurrent && inquiry.status === "open" && !editable ? (
+            {viewingCurrent &&
+            inquiry.status === "open" &&
+            !editable &&
+            !heldForApproval ? (
               <p className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 sm:px-5 print:hidden">
                 <LockIcon className="h-4 w-4 text-amber-600" />
                 {inquiry.canWork
@@ -691,65 +765,60 @@ export function InquiryDetailClient({
             ) : null}
 
             {editable ? (
-              <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-4 sm:px-5 print:hidden">
-                {waitingForApproval ? (
-                  <p className="text-sm text-amber-800">
-                    This step needs approval by {approver} before it can move
-                    on. Save it so they can check it.
-                  </p>
-                ) : currentStep.approvalRequired && dirty ? (
-                  <p className="text-sm text-amber-800">
-                    You changed a step that {approver} had approved. Save it
-                    and ask them to approve it again.
-                  </p>
-                ) : null}
-                <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-4 sm:px-5 print:hidden">
+                <button
+                  type="button"
+                  disabled={pending || !dirty}
+                  onClick={() => {
+                    setDraft(saved);
+                    setInvalid(new Set());
+                    setError(null);
+                  }}
+                  className="btn btn-secondary"
+                >
+                  Discard
+                </button>
+                <div className="flex flex-wrap items-center gap-2">
                   <button
-                    type="button"
+                    type="submit"
                     disabled={pending || !dirty}
-                    onClick={() => {
-                      setDraft(saved);
-                      setInvalid(new Set());
-                      setError(null);
-                    }}
                     className="btn btn-secondary"
                   >
-                    Discard
+                    Save
                   </button>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="submit"
-                      disabled={pending || !dirty}
-                      className="btn btn-secondary"
-                    >
-                      Save
-                    </button>
+                  {currentStep.approvalRequired ? (
                     <button
                       type="button"
-                      disabled={
-                        pending ||
-                        waitingForApproval ||
-                        (currentStep.approvalRequired && dirty)
-                      }
-                      onClick={() => void save(true)}
-                      className="btn btn-go !items-center !py-1.5 text-left"
+                      disabled={pending}
+                      onClick={() => void sendForApproval()}
+                      className="btn btn-primary !items-center !py-1.5 text-left"
                     >
                       <span className="flex flex-col leading-tight">
-                        <span>
-                          {nextStep
-                            ? "Save & Go to Next Step"
-                            : "Save & Complete Inquiry"}
-                        </span>
-                        <span className="text-xs font-normal text-emerald-50">
-                          {nextStep
-                            ? `Goes to ${workflowDepartmentLabel(nextStep.departmentKey)} · ${nextStep.number}. ${nextStep.label}`
-                            : "The job is paid and closed"}
+                        <span>Send for Approval</span>
+                        <span className="text-xs font-normal text-blue-100">
+                          Goes to {approver} to approve
                         </span>
                       </span>
                       <ArrowRightIcon className="h-5 w-5" />
                     </button>
-                  </div>
+                  ) : (
+                    <NextStepButton
+                      nextStep={nextStep}
+                      disabled={pending}
+                      onClick={() => void save(true)}
+                    />
+                  )}
                 </div>
+              </div>
+            ) : viewingCurrent &&
+              canEdit(inquiry) &&
+              inquiry.currentStageApproved ? (
+              <div className="flex justify-end border-t border-slate-200 px-4 py-4 sm:px-5 print:hidden">
+                <NextStepButton
+                  nextStep={nextStep}
+                  disabled={pending}
+                  onClick={() => void save(true)}
+                />
               </div>
             ) : null}
           </form>

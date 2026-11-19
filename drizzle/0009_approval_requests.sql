@@ -1,0 +1,1 @@
+ALTER TABLE "inquiry_stage_records" ADD COLUMN "approval_requested_at" timestamp with time zone;

@@ -1,17 +1,18 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { AlertIcon, CheckIcon, UndoIcon, UserIcon } from "@/components/ui/icons";
-import { formatFriendlyDateTime } from "@/lib/datetime/format";
 import {
-  INQUIRY_APPROVAL_ROLES,
-  workflowDepartmentLabel,
-} from "@/lib/inquiries/stages";
+  AlertIcon,
+  CheckIcon,
+  ClockIcon,
+  UndoIcon,
+  UserIcon,
+} from "@/components/ui/icons";
+import { formatFriendlyDateTime } from "@/lib/datetime/format";
+import { workflowDepartmentLabel } from "@/lib/inquiries/stages";
 import type { AssignableStaff, InquiryView } from "@/lib/inquiries/types";
 
 export type InquirySideActions = {
-  assign: (staffId: string) => void;
-  approve: () => void;
   addNote: (body: string) => Promise<boolean>;
   sendBack: (reason: string) => Promise<boolean>;
   close: (reason: string) => Promise<boolean>;
@@ -27,6 +28,7 @@ function ReasonAction({
   icon,
   disabled,
   onConfirm,
+  inline = false,
 }: {
   label: string;
   prompt: string;
@@ -35,6 +37,8 @@ function ReasonAction({
   icon?: React.ReactNode;
   disabled: boolean;
   onConfirm: (reason: string) => Promise<boolean>;
+  /** Sits in a row of buttons instead of filling the width. */
+  inline?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -45,7 +49,7 @@ function ReasonAction({
         type="button"
         disabled={disabled}
         onClick={() => setOpen(true)}
-        className={`btn btn-sm w-full ${danger ? "btn-danger" : "btn-secondary"}`}
+        className={`btn ${inline ? "" : "btn-sm w-full"} ${danger ? "btn-danger" : "btn-secondary"}`}
       >
         {icon}
         {label}
@@ -55,7 +59,7 @@ function ReasonAction({
 
   return (
     <form
-      className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+      className={`rounded-lg border border-slate-200 bg-slate-50 p-3 ${inline ? "w-72" : ""}`}
       onSubmit={async (event: FormEvent) => {
         event.preventDefault();
         if (await onConfirm(reason)) {
@@ -104,25 +108,19 @@ function initialsOf(name: string): string {
     .join("");
 }
 
-/**
- * Who is handling the current step, and whether it has been approved. Shown
- * above the step so nobody has to look for it.
- */
-export function HandlingBar({
+/** Who is handling the current step, with a way to change it. */
+export function HandlingBlock({
   inquiry,
   staffOptions,
   myStaffId,
   pending,
-  unsavedChanges,
-  actions,
+  onAssign,
 }: {
   inquiry: InquiryView;
   staffOptions: AssignableStaff[];
   myStaffId: string;
   pending: boolean;
-  /** The step has been changed on screen since it was saved. */
-  unsavedChanges: boolean;
-  actions: Pick<InquirySideActions, "assign" | "approve">;
+  onAssign: (staffId: string) => void;
 }) {
   const [choosing, setChoosing] = useState(false);
   const [assignStaffId, setAssignStaffId] = useState("");
@@ -135,153 +133,209 @@ export function HandlingBar({
     inquiry.canAssign &&
     inquiry.assignedStaffId !== myStaffId &&
     staffOptions.some((staff) => staff.id === myStaffId);
-  const approver =
-    INQUIRY_APPROVAL_ROLES.find(
-      (role) =>
-        role.key ===
-        inquiry.steps.find((step) => step.key === inquiry.currentStage)
-          ?.approvalRequiredBy,
-    )?.label ?? "";
-  // An approval covers what was approved: changing the step undoes it.
-  const approved = inquiry.currentStageApproved && !unsavedChanges;
 
   return (
-    <section
+    <div
       className={[
-        "card flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3 print:hidden",
-        assigned ? "" : "!border-orange-300 !bg-accent-soft",
+        "flex flex-wrap items-center gap-3 rounded-xl px-3 py-2 ring-1 ring-inset",
+        assigned
+          ? "bg-slate-50 ring-slate-200"
+          : "bg-accent-soft ring-orange-300",
       ].join(" ")}
     >
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-        <span
-          aria-hidden
+      <span
+        aria-hidden
+        className={[
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold",
+          assigned ? "bg-primary text-white" : "bg-orange-200 text-accent",
+        ].join(" ")}
+      >
+        {assigned ? initialsOf(assigned) : <AlertIcon className="h-5 w-5" />}
+      </span>
+      <div className="min-w-0">
+        <p className="text-[11px] font-medium tracking-wide text-slate-500 uppercase">
+          Handling this step
+        </p>
+        <p
           className={[
-            "flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold",
-            assigned ? "bg-primary text-white" : "bg-orange-200 text-accent",
+            "font-display text-base leading-tight font-semibold",
+            assigned ? "text-slate-900" : "text-accent",
           ].join(" ")}
         >
-          {assigned ? initialsOf(assigned) : <AlertIcon className="h-5 w-5" />}
-        </span>
-        <div className="min-w-0">
-          <p className="text-xs font-medium tracking-wide text-slate-500 uppercase">
-            Handling this step
-          </p>
-          <p
-            className={[
-              "truncate font-display text-base font-semibold",
-              assigned ? "text-slate-900" : "text-accent",
-            ].join(" ")}
-          >
-            {assigned ?? `Nobody yet · someone from ${department} must be assigned`}
-          </p>
-        </div>
-
-        {inquiry.canAssign ? (
-          choosing || !assigned ? (
-            <div className="flex flex-wrap items-center gap-2">
-              {canAssignMe ? (
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => {
-                    actions.assign(myStaffId);
-                    setChoosing(false);
-                  }}
-                  className="btn btn-primary btn-sm"
-                >
-                  Assign to me
-                </button>
-              ) : null}
-              <select
-                aria-label={`Choose someone from ${department}`}
-                value={assignStaffId}
-                onChange={(event) => setAssignStaffId(event.target.value)}
-                className="field !py-1.5"
-              >
-                <option value="">Choose from {department}…</option>
-                {staffOptions.map((staff) => (
-                  <option key={staff.id} value={staff.id}>
-                    {staff.fullName}
-                    {staff.jobTitle ? ` · ${staff.jobTitle}` : ""}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                disabled={pending || !assignStaffId}
-                onClick={() => {
-                  actions.assign(assignStaffId);
-                  setAssignStaffId("");
-                  setChoosing(false);
-                }}
-                className="btn btn-secondary btn-sm"
-              >
-                Assign
-              </button>
-              {assigned ? (
-                <button
-                  type="button"
-                  onClick={() => setChoosing(false)}
-                  className="btn btn-secondary btn-sm"
-                >
-                  Cancel
-                </button>
-              ) : null}
-              {staffOptions.length === 0 ? (
-                <p className="w-full text-xs text-slate-600">
-                  Nobody is in {department} yet. Add the department to a staff
-                  member under Staff.
-                </p>
-              ) : null}
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setChoosing(true)}
-              className="btn btn-secondary btn-sm"
-            >
-              <UserIcon />
-              Change
-            </button>
-          )
-        ) : null}
+          {assigned ?? `Nobody yet · assign someone from ${department}`}
+        </p>
       </div>
 
-      {approver ? (
-        <div
-          className={[
-            "flex flex-wrap items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium ring-1 ring-inset",
-            approved
-              ? "bg-emerald-50 text-emerald-900 ring-emerald-300"
-              : "bg-amber-50 text-amber-900 ring-amber-300",
-          ].join(" ")}
-        >
-          <span className="flex items-center gap-2">
-            {approved ? (
-              <CheckIcon className="h-4 w-4 text-emerald-600" />
-            ) : (
-              <AlertIcon className="h-4 w-4 text-amber-600" />
-            )}
-            {approved
-              ? `Approved by ${approver}`
-              : inquiry.currentStageApproved
-                ? `Changed since ${approver} approved it · needs approval again once saved`
-                : `Needs approval by ${approver}`}
-          </span>
-          {inquiry.canApproveCurrentStage && !unsavedChanges ? (
+      {inquiry.canAssign ? (
+        choosing || !assigned ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {canAssignMe ? (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  onAssign(myStaffId);
+                  setChoosing(false);
+                }}
+                className="btn btn-primary btn-sm"
+              >
+                Assign to me
+              </button>
+            ) : null}
+            <select
+              aria-label={`Choose someone from ${department}`}
+              value={assignStaffId}
+              onChange={(event) => setAssignStaffId(event.target.value)}
+              className="field !py-1.5"
+            >
+              <option value="">Choose from {department}…</option>
+              {staffOptions.map((staff) => (
+                <option key={staff.id} value={staff.id}>
+                  {staff.fullName}
+                  {staff.jobTitle ? ` · ${staff.jobTitle}` : ""}
+                </option>
+              ))}
+            </select>
             <button
               type="button"
-              disabled={pending || !assigned}
-              onClick={actions.approve}
-              className="btn btn-go btn-sm"
+              disabled={pending || !assignStaffId}
+              onClick={() => {
+                onAssign(assignStaffId);
+                setAssignStaffId("");
+                setChoosing(false);
+              }}
+              className="btn btn-secondary btn-sm"
+            >
+              Assign
+            </button>
+            {assigned ? (
+              <button
+                type="button"
+                onClick={() => setChoosing(false)}
+                className="btn btn-secondary btn-sm"
+              >
+                Cancel
+              </button>
+            ) : null}
+            {staffOptions.length === 0 ? (
+              <p className="w-full text-xs text-slate-600">
+                Nobody is in {department} yet. Add the department to a staff
+                member under Staff.
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setChoosing(true)}
+            className="btn btn-secondary btn-sm"
+          >
+            <UserIcon />
+            Change
+          </button>
+        )
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Where a step that needs approval stands: sent and waiting, or approved.
+ * The approver gets the buttons to approve it or ask for changes; the person
+ * handling the step can take it back to change something.
+ */
+export function ApprovalBanner({
+  inquiry,
+  approver,
+  pending,
+  onApprove,
+  onReopen,
+}: {
+  inquiry: InquiryView;
+  /** Who approves this step: "Management". */
+  approver: string;
+  pending: boolean;
+  onApprove: () => void;
+  onReopen: (reason: string) => Promise<boolean>;
+}) {
+  if (!inquiry.approvalRequested && !inquiry.currentStageApproved) return null;
+  const approved = inquiry.currentStageApproved;
+
+  return (
+    <div
+      className={[
+        "flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 sm:px-5 print:hidden",
+        approved
+          ? "border-emerald-200 bg-emerald-50"
+          : "border-amber-200 bg-amber-50",
+      ].join(" ")}
+    >
+      <div className="flex min-w-0 items-start gap-3">
+        <span
+          className={[
+            "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+            approved
+              ? "bg-emerald-600 text-white"
+              : "bg-amber-400 text-amber-950",
+          ].join(" ")}
+        >
+          {approved ? (
+            <CheckIcon className="h-4 w-4" />
+          ) : (
+            <ClockIcon className="h-4 w-4" />
+          )}
+        </span>
+        <div>
+          <p className="font-display text-base font-semibold text-slate-900">
+            {approved
+              ? `Approved by ${approver}`
+              : inquiry.canApproveCurrentStage
+                ? "Waiting for your approval"
+                : `Done. Sent to ${approver} for approval`}
+          </p>
+          <p className="text-sm text-slate-700">
+            {approved
+              ? "It can move on to the next step now."
+              : inquiry.canApproveCurrentStage
+                ? "Check the details below, then approve it or ask for changes."
+                : `Nothing more to do here until ${approver} approves it.`}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-start gap-2">
+        {inquiry.canApproveCurrentStage ? (
+          <>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={onApprove}
+              className="btn btn-go"
             >
               <CheckIcon />
-              Approve this step
+              Approve
             </button>
-          ) : null}
-        </div>
-      ) : null}
-    </section>
+            <ReasonAction
+              label="Ask for changes"
+              prompt="What has to be changed?"
+              confirmLabel="Send back for changes"
+              disabled={pending}
+              onConfirm={onReopen}
+              inline
+            />
+          </>
+        ) : inquiry.canWork ? (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => void onReopen("")}
+            className="btn btn-secondary btn-sm"
+          >
+            Change something
+          </button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -293,7 +347,7 @@ export function InquiryExtras({
 }: {
   inquiry: InquiryView;
   pending: boolean;
-  actions: Omit<InquirySideActions, "assign" | "approve">;
+  actions: InquirySideActions;
 }) {
   const [note, setNote] = useState("");
 

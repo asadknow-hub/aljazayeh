@@ -179,7 +179,7 @@ describe("one job from inquiry to payment", () => {
         { customerName: "Gulf Marine LLC", contact: "04 555 0100" },
         { complete: true },
       ),
-      /Fill in before moving on: Inquiry title\./,
+      /Still needed: Inquiry title\./,
     );
     await refused(
       workStep(
@@ -315,7 +315,7 @@ describe("one job from inquiry to payment", () => {
     };
     await refused(
       workStep(people.adam, inquiryId, lpo, { complete: true }),
-      /Fill in before moving on: Supplier/,
+      /Still needed: Supplier/,
     );
 
     const current = await getInquiryForUser(owner, ORG, inquiryId);

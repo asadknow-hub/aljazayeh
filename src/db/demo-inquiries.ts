@@ -8,6 +8,7 @@ import {
   createInquiryForUser,
   getInquiryForUser,
   getInquiryWorkflowMapForUser,
+  requestInquiryApprovalForUser,
   saveInquiryStageForUser,
   saveInquiryWorkflowMapForUser,
 } from "@/lib/inquiries/queries";
@@ -414,6 +415,10 @@ export async function loadDemoInquiries(
       if (last) break;
 
       if (view.steps[index]?.approvalRequired) {
+        await requestInquiryApprovalForUser(handler.userId, orgCode, id, {
+          fields,
+          lineItems: items,
+        });
         await approveInquiryStageForUser(approver.userId, orgCode, id);
       }
       await saveInquiryStageForUser(

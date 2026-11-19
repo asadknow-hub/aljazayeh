@@ -434,14 +434,18 @@ export async function listInquiryTasksForUser(
     if (approvable.length === 0) return tasks;
 
     const waiting = (await loadInquiryList(tx, org, { openOnly: true })).filter(
-      (inquiry) =>
-        approvable.includes(inquiry.currentStage) &&
-        // Approval is asked for once someone is working on the step.
-        inquiry.assignedStaffId !== null,
+      (inquiry) => approvable.includes(inquiry.currentStage),
+    );
+    const records = await loadStageRecords(
+      tx,
+      waiting.map((inquiry) => inquiry.id),
     );
     for (const inquiry of waiting) {
-      if (await hasApproval(tx, inquiry.id, inquiry.currentStage)) continue;
-      tasks.push({ inquiry, reason: "approval" });
+      // Only what has actually been sent for approval is waiting on them.
+      const record = records.get(inquiry.id)?.get(inquiry.currentStage);
+      if (record?.approvalRequestedAt) {
+        tasks.push({ inquiry, reason: "approval" });
+      }
     }
     return tasks;
   });
@@ -647,6 +651,10 @@ async function loadInquiryView(
   const approvalRequired = status === "open" && config.approvalRequired;
   const currentStageApproved =
     approvalRequired && (await hasApproval(tx, row.id, stage));
+  const approvalRequested =
+    approvalRequired &&
+    !currentStageApproved &&
+    Boolean(records.get(stage)?.approvalRequestedAt);
 
   const lineItems = (await loadLineItems(tx, [row.id])).get(row.id) ?? [];
 
@@ -664,10 +672,10 @@ async function loadInquiryView(
     createdByName,
     steps,
     lineItems,
+    approvalRequested,
     currentStageApproved,
     canApproveCurrentStage:
-      approvalRequired &&
-      !currentStageApproved &&
+      approvalRequested &&
       config.approvalRequiredBy !== "" &&
       org.access.departments.includes(config.approvalRequiredBy),
     canClose: status !== "completed" && can.assignInquiry(org.access, ownerOf(row)),
@@ -725,7 +733,10 @@ async function recordEvent(
   });
 }
 
-/** An approval only covers what was approved; changes after it void it. */
+/**
+ * An approval only covers what was approved; a change after it voids it, and
+ * the step has to be sent for approval again.
+ */
 async function clearApproval(
   tx: DbTransaction,
   org: ResolvedOrg,
@@ -743,6 +754,15 @@ async function clearApproval(
       ),
     )
     .returning({ id: inquiryStageApprovals.id });
+  await tx
+    .update(inquiryStageRecords)
+    .set({ approvalRequestedAt: null })
+    .where(
+      and(
+        eq(inquiryStageRecords.inquiryId, inquiryId),
+        eq(inquiryStageRecords.stageKey, stage),
+      ),
+    );
 
   if (cleared.length > 0) {
     await recordEvent(tx, org, userId, inquiryId, {
@@ -767,6 +787,7 @@ async function writeStageRecord(
       | "documentNumber"
       | "documentNumbers"
       | "handledByStaffId"
+      | "approvalRequestedAt"
       | "completedAt"
       | "completedByUserId"
     >
@@ -1072,6 +1093,29 @@ function requireOpen(row: InquiryRow) {
   }
 }
 
+/** Refuse unless everything the step needs has been filled in. */
+async function assertStageComplete(
+  tx: DbTransaction,
+  inquiryId: string,
+  stage: InquiryStageKey,
+  fields: Record<string, string>,
+) {
+  const missing = missingStageFields(stage, fields);
+  if (missing.length > 0) {
+    throw new UserError(
+      `Still needed: ${missing.map((field) => field.label).join(", ")}.`,
+    );
+  }
+  const items = (await loadLineItems(tx, [inquiryId])).get(inquiryId) ?? [];
+  const mode = STAGE_DEFINITIONS[stage].items;
+  if (mode === "priced" && !items.some((item) => Number(item.unitPrice) > 0)) {
+    throw new UserError("Add at least one priced item to the quotation.");
+  }
+  if (mode === "delivery" && items.some((item) => !item.deliveredQuantity)) {
+    throw new UserError("Enter the delivered quantity for every item.");
+  }
+}
+
 /**
  * Save the current step. With `complete`, also finish it and hand the
  * inquiry to the next step, whose department then assigns its own person.
@@ -1101,20 +1145,7 @@ export async function saveInquiryStageForUser(
     }
     if (!options.complete) return reloadInquiryView(tx, org, inquiryId);
 
-    const missing = missingStageFields(stage, fields);
-    if (missing.length > 0) {
-      throw new UserError(
-        `Fill in before moving on: ${missing.map((field) => field.label).join(", ")}.`,
-      );
-    }
-    const items = (await loadLineItems(tx, [inquiryId])).get(inquiryId) ?? [];
-    const mode = STAGE_DEFINITIONS[stage].items;
-    if (mode === "priced" && !items.some((item) => Number(item.unitPrice) > 0)) {
-      throw new UserError("Add at least one priced item to the quotation.");
-    }
-    if (mode === "delivery" && items.some((item) => !item.deliveredQuantity)) {
-      throw new UserError("Enter the delivered quantity for every item.");
-    }
+    await assertStageComplete(tx, inquiryId, stage, fields);
 
     const map = await loadWorkflowMap(tx, org.id);
     if (map[stage].approvalRequired && !(await hasApproval(tx, inquiryId, stage))) {
@@ -1400,20 +1431,11 @@ export async function approveInquiryStageForUser(
     if (await hasApproval(tx, inquiryId, stage)) {
       throw new UserError("This step is already approved.");
     }
-    // Approving an unfinished step would be undone by finishing it.
-    const records = (await loadStageRecords(tx, [inquiryId], stage)).get(
-      inquiryId,
-    );
-    const missing = missingStageFields(
-      stage,
-      stage === "inquiry"
-        ? inquiryStepFields(existing, records?.get(stage))
-        : (records?.get(stage)?.fields ?? {}),
-    );
-    if (missing.length > 0) {
-      throw new UserError(
-        `This step is not ready to approve. Still needed: ${missing.map((field) => field.label).join(", ")}.`,
-      );
+    const record = (await loadStageRecords(tx, [inquiryId], stage))
+      .get(inquiryId)
+      ?.get(stage);
+    if (!record?.approvalRequestedAt) {
+      throw new UserError("This step has not been sent for approval yet.");
     }
 
     await tx.insert(inquiryStageApprovals).values({
@@ -1423,10 +1445,89 @@ export async function approveInquiryStageForUser(
       requiredBy: config.approvalRequiredBy,
       approvedByUserId: userId,
     });
+    await writeStageRecord(tx, org, inquiryId, stage, {
+      approvalRequestedAt: null,
+    });
     await recordEvent(tx, org, userId, inquiryId, {
       from: stage,
       to: stage,
       note: `Approved by ${approver}`,
+    });
+
+    return reloadInquiryView(tx, org, inquiryId);
+  });
+}
+
+/**
+ * Save the current step and send it for approval. It has to be complete:
+ * the approver approves what will move on, not a draft.
+ */
+export async function requestInquiryApprovalForUser(
+  userId: string,
+  orgCode: string,
+  inquiryId: string,
+  input: InquiryStageInput,
+): Promise<InquiryView> {
+  return withTenantContext(userId, async (tx) => {
+    const org = await requireOrg(tx, userId, orgCode);
+    const existing = await requireWorkableInquiry(
+      tx,
+      org,
+      inquiryId,
+      "Assign someone before working on this step.",
+    );
+    const stage = stageOf(existing);
+    const config = (await loadWorkflowMap(tx, org.id))[stage];
+    if (!config.approvalRequired || config.approvalRequiredBy === "") {
+      throw new UserError("This step does not require approval.");
+    }
+
+    const fields = await saveStageAnswers(tx, org, existing, stage, input);
+    await assertStageComplete(tx, inquiryId, stage, fields);
+    // Whatever was approved before, this is a new version to approve.
+    await clearApproval(tx, org, userId, inquiryId, stage, "sent again");
+    await writeStageRecord(tx, org, inquiryId, stage, {
+      approvalRequestedAt: new Date(),
+    });
+    await recordEvent(tx, org, userId, inquiryId, {
+      from: stage,
+      to: stage,
+      note: `Sent to ${approvalRoleLabel(config.approvalRequiredBy)} for approval`,
+    });
+
+    return reloadInquiryView(tx, org, inquiryId);
+  });
+}
+
+/**
+ * Take a step back from approval so it can be changed: by the person
+ * handling it, or by the approver who wants something changed first.
+ */
+export async function reopenInquiryStepForUser(
+  userId: string,
+  orgCode: string,
+  inquiryId: string,
+  reason: string,
+): Promise<InquiryView> {
+  return withTenantContext(userId, async (tx) => {
+    const org = await requireOrg(tx, userId, orgCode);
+    const existing = await requireInquiry(tx, org, inquiryId);
+    requireOpen(existing);
+
+    const stage = stageOf(existing);
+    const config = (await loadWorkflowMap(tx, org.id))[stage];
+    const isApprover =
+      config.approvalRequired &&
+      config.approvalRequiredBy !== "" &&
+      org.access.departments.includes(config.approvalRequiredBy);
+    assertCan(isApprover || can.workInquiry(org.access, ownerOf(existing)));
+
+    const why = reason.trim();
+    await clearApproval(tx, org, userId, inquiryId, stage, "opened for changes");
+    await recordEvent(tx, org, userId, inquiryId, {
+      from: stage,
+      to: stage,
+      note: why ? `Changes asked for: ${why}` : "Opened again for changes",
     });
 
     return reloadInquiryView(tx, org, inquiryId);

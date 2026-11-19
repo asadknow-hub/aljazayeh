@@ -659,6 +659,10 @@ export const inquiryStageRecords = pgTable(
       () => staffMembers.id,
       { onDelete: "set null" },
     ),
+    /** When the step was sent for approval; empty until then. */
+    approvalRequestedAt: timestamp("approval_requested_at", {
+      withTimezone: true,
+    }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     completedByUserId: uuid("completed_by_user_id").references(() => users.id, {
       onDelete: "restrict",
