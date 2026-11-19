@@ -118,7 +118,7 @@ The owner creates a company, which bootstraps:
 1. The organization row
 2. The creator as its first staff member: administrator, in Admin and Management
 3. `organization_settings` with the creator as contact
-4. Default inquiry workflow rows (every stage → Admin, approval off)
+4. Default inquiry workflow rows (invoices and the receipt → Accounts, every other step → Admin, approval off)
 5. Default-company preference if the user had none
 
 A second company repeats this independently; nothing is shared between companies.
@@ -272,33 +272,43 @@ Linear activity stream (`staff_activity_logs`) across the company — vacation r
 
 An inquiry is one job, followed from the customer's first request to the
 money being received. The company runs on it: work starts here, and every
-commercial document is a step of it.
+commercial paper is prepared in one of its steps by the department
+responsible for it.
 
-#### The steps
+#### The steps and their papers
 
-| # | Step | What it records | Its number |
+| # | Step | Papers prepared in it | Numbers |
 | --- | --- | --- | --- |
-| 1 | Inquiry | Who is asking and what they need | `AJE/INQ/2026/0001` |
-| 2 | Quotation | Prices, discount, VAT, terms | `AJE/QTN/…` |
-| 3 | LPO In or Out | The customer's LPO (in); our LPO to a supplier (out) | the customer's own |
-| 4 | Proforma Invoice | The advance asked for | `AJE/PI/…` |
-| 5 | Job Card | Supervisor, technicians, instructions | `AJE/JC/…` |
-| 6 | Progress Invoice | How far the work has got | `AJE/PRG/…` |
-| 7 | Delivery Note | Delivered quantity per item, who received | `AJE/DN/…` |
-| 8 | Tax Invoice | The bill | `AJE/INV/…` |
-| 9 | Receipt Voucher | The payment; closes the inquiry | `AJE/RV/…` |
+| 1 | Inquiry | none: the customer's details and the items with quantity and price | `AJE/INQ/2026/0001` |
+| 2 | Quotation | Quotation (Commercial Quotation for an export job), two pages | `AJE/QTN/…` |
+| 3 | LPO In or Out | the customer's LPO is recorded (in); Purchase Order to a supplier when material must be bought (out) | `AJE/PO/…` |
+| 4 | Proforma Invoice | Proforma Invoice | `AJE/PI/…` |
+| 5 | Job Card | Job Card; Certificate of Compliance and Coating Certificate when the job needs them | `AJE/JC/…`, `AJE/COC/…`, `AJE/CC/…` |
+| 6 | Progress Invoice | Progress Invoice | `AJE/PRG/…` |
+| 7 | Delivery Note | Delivery Note | `AJE/DN/…` |
+| 8 | Tax Invoice | Tax Invoice | `AJE/INV/…` |
+| 9 | Commercial Invoice (export jobs only) | Commercial Invoice; Packing List when needed | `AJE/CI/…`, `AJE/PL/…` |
+| 9 / 10 | Receipt Voucher | Receipt Voucher; closes the inquiry | `AJE/RV/…` |
 
-The order is fixed. What each step asks is described in one place,
-`src/lib/inquiries/stage-forms.ts`: its questions, which are required, what
-it does with the job's items, and its document number. Changing a step is a
-change to that file only.
+A local job has nine steps. An export job has the Commercial Invoice as
+step 9 and the Receipt Voucher as step 10.
 
-- A step's document gets its number the first time the step is saved.
-- The items are listed on the Inquiry, priced on the Quotation, ticked off
-  on the Delivery Note and read-only everywhere else, so later steps cannot
-  change what was quoted.
-- The job's value is the priced items less the discount plus VAT, as set on
-  the quotation.
+- Each step shows its paper as it prints, laid out like the company's own
+  form. What the form says is written by hand is typed straight onto the
+  paper (the yellow places); everything else is filled in from the earlier
+  steps: customer details, items, prices, and the numbers of the quotation,
+  LPO, job card and delivery note.
+- A paper gets its number the first time its step is saved with that paper in
+  use. **Print** prints the paper that is on screen and nothing else.
+- Which papers a step has, what is typed on them and what is required is in
+  `src/lib/inquiries/stage-forms.ts`. How each paper looks is in
+  `src/components/inquiries/papers.tsx`.
+- The items are listed with quantity and price on the Inquiry, given units
+  and final prices on the Quotation, and ticked off on the Delivery Note.
+  Other steps only add their own details to an item (a remark, a heat
+  number, an HS code), so the invoice always matches the quote.
+- The company's address, TRN and bank details printed on the papers are
+  entered once under Company Settings.
 
 #### Working a step
 
@@ -306,8 +316,10 @@ change to that file only.
 - Nothing can be done on a step until someone from that department is
   assigned to it.
 - **Save** keeps the step as it is. **Save & Go to Next Step** also finishes
-  it, which needs every required answer, and hands the inquiry to the next
-  step's department **unassigned**. **Discard** drops unsaved changes.
+  it, and hands the inquiry to the next step's department **unassigned**.
+  **Discard** drops unsaved changes.
+- If something required is missing, the step does not move: the missing
+  places are marked in red and the first one is brought into view.
 - **Send back to the previous step** needs a reason. The earlier step goes
   back to the person who handled it, and must be approved again.
 - An inquiry that is not going ahead is **closed as lost** with a reason and
@@ -331,6 +343,7 @@ If Inquiry Settings marks a step as needing approval:
 
 - It cannot move on until Management or Engineering (whichever is named)
   approves it. Whoever must approve can open the inquiry.
+- A step with required answers missing cannot be approved.
 - Changing the step after approval voids the approval; saving it unchanged
   does not.
 
@@ -463,10 +476,11 @@ Env essentials:
 
 ## 12. What is intentionally not done yet
 
-- Printed documents for the inquiry steps (quotation, job card, delivery note, invoices, receipt).
-  Each step records its details and has its number; the printed layouts are not built yet.
-- Customers as records (TRN, address, credit limit) shared between inquiries.
-- Export jobs are marked, but the commercial invoice and packing list are not built.
+- Customers as records (TRN, address, credit limit) shared between inquiries. Today they are
+  typed on each inquiry, and the credit summary on the tax invoice is typed by Accounts.
+- The proforma invoice, progress invoice and receipt voucher follow the tax invoice's layout
+  until the company's own forms for them are provided.
+- Signatures and the stamp on customer documents are put on by hand after printing.
 - Per-company workflows: the nine steps are the same for every company.
 - Labour card (daily in/out, overtime and the monthly pay summary).
 - Personal Salary / Contract under Account duplicate the HR record and will be replaced by a

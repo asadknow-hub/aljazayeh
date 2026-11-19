@@ -13,9 +13,16 @@ import {
 } from "@/components/inquiries/inquiry-side-panel";
 import { InquiryStepper } from "@/components/inquiries/inquiry-stepper";
 import {
+  fillId,
+  itemFillKey,
+  PaperProvider,
+} from "@/components/inquiries/paper";
+import { StagePaper } from "@/components/inquiries/papers";
+import {
+  hasFormFields,
+  InquiryItems,
   StageAnswers,
   StageFields,
-  StageItems,
 } from "@/components/inquiries/stage-form";
 import { usePageTitle } from "@/components/providers/page-title-provider";
 import { useToast } from "@/components/providers/toast-provider";
@@ -27,7 +34,9 @@ import {
   ClockIcon,
   DocumentIcon,
   LockIcon,
+  PrinterIcon,
 } from "@/components/ui/icons";
+import type { CompanyLetterhead } from "@/lib/company-settings/types";
 import type { ActionResult } from "@/lib/actions/result";
 import { unwrap } from "@/lib/actions/result";
 import {
@@ -51,9 +60,13 @@ import {
   type InquiryWorkflowDepartmentKey,
 } from "@/lib/inquiries/stages";
 import {
+  documentsInUse,
   formatMoney,
   inquiryTotals,
+  mainDocument,
+  missingStageFields,
   STAGE_DEFINITIONS,
+  STEP_FORM,
 } from "@/lib/inquiries/stage-forms";
 import type {
   AssignableStaff,
@@ -65,6 +78,8 @@ type InquiryDetailClientProps = {
   orgCode: string;
   initialInquiry: InquiryView;
   backHref: string;
+  /** The company's own details, printed on its papers. */
+  company: CompanyLetterhead;
   myStaffId: string;
   /** People who can be given work, per department the viewer may assign in. */
   assignable: Partial<Record<InquiryWorkflowDepartmentKey, AssignableStaff[]>>;
@@ -92,9 +107,9 @@ function canEdit(inquiry: InquiryView): boolean {
 }
 
 /**
- * What the form of the current step starts with: what is saved, plus the
- * values a step offers the first time it is opened (today's date, the job's
- * total, everything delivered in full).
+ * What the current step starts with: what is saved, plus the values a step
+ * offers the first time it is opened (today's date, the job's total, the
+ * customer's name, everything delivered in full).
  */
 function draftOf(inquiry: InquiryView): InquiryStageInput {
   const step = inquiry.steps.find((item) => item.key === inquiry.currentStage);
@@ -112,12 +127,19 @@ function draftOf(inquiry: InquiryView): InquiryStageInput {
             ? inquiry.totals.total > 0
               ? inquiry.totals.total.toFixed(2)
               : ""
-            : field.prefill;
+            : field.prefill === "neededBy"
+              ? inquiry.deliveryExpectedOn
+              : field.prefill === "customerName"
+                ? inquiry.customerName
+                : field.prefill === "customerAddress"
+                  ? (inquiry.steps[0]?.fields.customerAddress ?? "")
+                  : field.prefill;
     }
   }
 
   return {
     fields,
+    tables: step?.tables ?? {},
     lineItems: inquiry.lineItems.map((item) => ({
       ...item,
       deliveredQuantity:
@@ -128,10 +150,42 @@ function draftOf(inquiry: InquiryView): InquiryStageInput {
   };
 }
 
+/**
+ * What still has to be written before the current step can be completed, as
+ * the keys of the places to write it. The server checks the same things.
+ */
+function missingFrom(
+  stage: InquiryStageKey,
+  draft: InquiryStageInput,
+): { key: string; on: string }[] {
+  const missing = missingStageFields(stage, draft.fields).map((field) => ({
+    key: field.key,
+    on: field.on,
+  }));
+  const mode = STAGE_DEFINITIONS[stage].items;
+  const paper = mainDocument(stage)?.key ?? STEP_FORM;
+
+  if (
+    mode === "priced" &&
+    !draft.lineItems.some((item) => Number(item.unitPrice) > 0)
+  ) {
+    missing.push({ key: itemFillKey(0, "unitPrice"), on: paper });
+  }
+  if (mode === "delivery") {
+    draft.lineItems.forEach((item, index) => {
+      if (!item.deliveredQuantity) {
+        missing.push({ key: itemFillKey(index, "deliveredQuantity"), on: paper });
+      }
+    });
+  }
+  return missing;
+}
+
 export function InquiryDetailClient({
   orgCode,
   initialInquiry,
   backHref,
+  company,
   myStaffId,
   assignable,
 }: InquiryDetailClientProps) {
@@ -145,6 +199,10 @@ export function InquiryDetailClient({
   );
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  /** Which of the step's papers is on screen. */
+  const [openDocument, setOpenDocument] = useState<string | null>(null);
+  /** Places that have to be filled in before the step can be completed. */
+  const [invalid, setInvalid] = useState<ReadonlySet<string>>(new Set());
 
   usePageTitle(inquiry.number || inquiry.customerName);
 
@@ -155,6 +213,7 @@ export function InquiryDetailClient({
     setSaved(nextDraft);
     setDraft(nextDraft);
     setViewing(next.currentStage);
+    setInvalid(new Set());
   }
 
   // A newer copy from the server replaces what is on screen. A copy that
@@ -202,19 +261,69 @@ export function InquiryDetailClient({
     )?.label ?? "";
   const waitingForApproval =
     currentStep.approvalRequired && !inquiry.currentStageApproved;
-  // Prices typed on the quotation show in the totals straight away.
+
+  // The step on screen shows what is typed; other steps show what is saved.
+  const shown: InquiryStageInput = viewingCurrent
+    ? draft
+    : {
+        fields: viewedStep.fields,
+        tables: viewedStep.tables,
+        lineItems: inquiry.lineItems,
+      };
+  // Prices typed on the inquiry or the quotation show in the totals at once.
+  const quotationAnswers =
+    viewedStep.key === "quotation"
+      ? shown.fields
+      : inquiry.steps.find((step) => step.key === "quotation")?.fields;
   const totals =
-    editable && definition.items === "priced"
-      ? inquiryTotals(draft.lineItems, draft.fields)
+    editable && (definition.items === "entry" || definition.items === "priced")
+      ? inquiryTotals(draft.lineItems, quotationAnswers)
       : inquiry.totals;
 
+  const papers = documentsInUse(viewedStep.key, shown.fields);
+  const paper = papers.find((doc) => doc.key === openDocument) ?? papers[0];
+
   async function save(complete: boolean) {
+    if (complete) {
+      // Show what is missing right where it has to be written.
+      const missing = missingFrom(inquiry.currentStage, draft);
+      if (missing.length > 0) {
+        const first = missing[0]!;
+        setInvalid(new Set(missing.map((item) => item.key)));
+        setViewing(inquiry.currentStage);
+        if (first.on !== STEP_FORM) setOpenDocument(first.on);
+        // Jump to the first one once it is on screen.
+        window.setTimeout(() => {
+          const place = document.getElementById(fillId(first.key));
+          place?.scrollIntoView({ block: "center", behavior: "smooth" });
+          place?.focus({ preventScroll: true });
+        }, 60);
+        setError(
+          missing.length === 1
+            ? "One thing is still needed before this can move on. It is marked in red."
+            : `${missing.length} things are still needed before this can move on. They are marked in red.`,
+        );
+        return;
+      }
+    }
     const updated = await run(() =>
       saveInquiryStageAction(orgCode, inquiry.id, draft, complete),
     );
     if (!updated) return;
     if (!complete) {
       showToast("Saved");
+      // A step that needs approval has to be complete to be approved.
+      const missing = updated.steps.find(
+        (step) => step.key === updated.currentStage,
+      )?.approvalRequired
+        ? missingFrom(updated.currentStage, draftOf(updated))
+        : [];
+      if (missing.length > 0) {
+        setInvalid(new Set(missing.map((item) => item.key)));
+        setError(
+          `Saved, but it cannot be approved yet: ${missing.length === 1 ? "one thing is" : `${missing.length} things are`} still needed, marked in red.`,
+        );
+      }
     } else if (updated.status === "completed") {
       showToast("Inquiry completed");
     } else {
@@ -261,28 +370,39 @@ export function InquiryDetailClient({
     },
   };
 
+  // Every paper prepared so far, with its number.
   const references = inquiry.steps.flatMap((step) => {
     if (step.state === "locked") return [];
-    const number =
-      step.key === "lpo_in_or_out"
-        ? (step.fields.customerLpoNumber ?? "")
-        : step.documentNumber;
-    return number && step.key !== "inquiry"
-      ? [{ key: step.key, label: STAGE_DEFINITIONS[step.key].documentLabel, number }]
-      : [];
+    const list = documentsInUse(step.key, step.fields).flatMap((doc) => {
+      const number =
+        doc.key === mainDocument(step.key)?.key
+          ? step.documentNumber
+          : (step.documentNumbers[doc.key] ?? "");
+      return number ? [{ key: doc.key, label: doc.title, number }] : [];
+    });
+    return step.key === "lpo_in_or_out" && step.fields.customerLpoNumber
+      ? [
+          {
+            key: "customer_lpo",
+            label: "Customer LPO",
+            number: step.fields.customerLpoNumber,
+          },
+          ...list,
+        ]
+      : list;
   });
 
   return (
-    <main className="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6">
+    <main className="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6 print:block print:p-0">
       <Link
         href={backHref}
-        className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-slate-600 transition-colors hover:text-primary"
+        className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-slate-600 transition-colors hover:text-primary print:hidden"
       >
         <ArrowLeftIcon />
         Back to inquiries
       </Link>
 
-      <header className="card flex flex-col gap-3 p-4 sm:p-5">
+      <header className="card flex flex-col gap-3 p-4 sm:p-5 print:hidden">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -348,8 +468,8 @@ export function InquiryDetailClient({
         ) : null}
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:items-start">
-        <div className="w-full shrink-0 lg:w-64">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:items-start print:block">
+        <div className="w-full shrink-0 lg:w-64 print:hidden">
           <InquiryStepper
             steps={inquiry.steps}
             viewing={viewedStep.key}
@@ -365,7 +485,7 @@ export function InquiryDetailClient({
           }}
           className="card min-w-0 flex-1"
         >
-          <div className="border-b border-slate-200 px-4 py-4 sm:px-5">
+          <div className="border-b border-slate-200 px-4 py-4 sm:px-5 print:hidden">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
                 Step {viewedStep.number} of {inquiry.steps.length}
@@ -384,7 +504,7 @@ export function InquiryDetailClient({
           </div>
 
           {viewedStep.state === "done" ? (
-            <p className="flex items-center gap-2 border-b border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900 sm:px-5">
+            <p className="flex items-center gap-2 border-b border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900 sm:px-5 print:hidden">
               <CheckIcon className="h-4 w-4 text-emerald-600" />
               Done
               {viewedStep.completedByName
@@ -396,7 +516,7 @@ export function InquiryDetailClient({
             </p>
           ) : null}
           {viewingCurrent && inquiry.status === "open" && !editable ? (
-            <p className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 sm:px-5">
+            <p className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 sm:px-5 print:hidden">
               <LockIcon className="h-4 w-4 text-amber-600" />
               {inquiry.canWork
                 ? "Assign someone on the right to start working on this step."
@@ -404,33 +524,111 @@ export function InquiryDetailClient({
             </p>
           ) : null}
 
-          <div className="flex flex-col gap-6 px-4 py-5 sm:px-5">
-            {editable ? (
-              <StageFields
-                stage={viewedStep.key}
-                values={draft.fields}
-                disabled={pending}
-                onChange={(fields) => setDraft({ ...draft, fields })}
-              />
-            ) : (
-              <StageAnswers
-                stage={viewedStep.key}
-                values={viewingCurrent ? draft.fields : viewedStep.fields}
-              />
-            )}
-            <StageItems
-              mode={definition.items}
-              items={draft.lineItems}
-              totals={totals}
-              disabled={!editable || pending}
-              onChange={(lineItems) => setDraft({ ...draft, lineItems })}
-            />
+          <div className="flex flex-col gap-6 px-4 py-5 sm:px-5 print:p-0">
+            {hasFormFields(viewedStep.key) ? (
+              <div className="print:hidden">
+                {editable ? (
+                  <StageFields
+                    stage={viewedStep.key}
+                    values={draft.fields}
+                    disabled={pending}
+                    invalid={invalid}
+                    onChange={(fields) => setDraft({ ...draft, fields })}
+                  />
+                ) : (
+                  <StageAnswers stage={viewedStep.key} values={shown.fields} />
+                )}
+              </div>
+            ) : null}
+
+            {definition.items === "entry" ? (
+              <div className="print:hidden">
+                <InquiryItems
+                  items={shown.lineItems}
+                  disabled={!editable || pending}
+                  invalid={invalid}
+                  onChange={(lineItems) => setDraft({ ...draft, lineItems })}
+                />
+              </div>
+            ) : null}
+
+            {paper ? (
+              <div>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2 print:hidden">
+                  <div className="flex flex-wrap gap-1 rounded-lg bg-slate-200/70 p-1">
+                    {papers.map((doc) => (
+                      <button
+                        key={doc.key}
+                        type="button"
+                        aria-pressed={doc.key === paper.key}
+                        onClick={() => setOpenDocument(doc.key)}
+                        className={[
+                          "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                          doc.key === paper.key
+                            ? "bg-white text-slate-900 shadow-sm"
+                            : "text-slate-600 hover:text-slate-900",
+                        ].join(" ")}
+                      >
+                        <DocumentIcon className="h-3.5 w-3.5" />
+                        {doc.title}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={editable && dirty}
+                    title={
+                      editable && dirty
+                        ? "Save first, so the printout matches what is saved"
+                        : undefined
+                    }
+                    onClick={() => window.print()}
+                    className="btn btn-secondary btn-sm"
+                  >
+                    <PrinterIcon />
+                    Print {paper.title}
+                  </button>
+                </div>
+                {editable ? (
+                  <p className="mb-2 text-xs text-slate-500 print:hidden">
+                    Type in the yellow places. Everything else is filled in from
+                    the earlier steps.
+                  </p>
+                ) : null}
+                <PaperProvider
+                  state={{
+                    company,
+                    inquiry,
+                    stage: viewedStep.key,
+                    editable: editable && !pending,
+                    values: shown.fields,
+                    setValue: (key, value) =>
+                      setDraft({
+                        ...draft,
+                        fields: { ...draft.fields, [key]: value },
+                      }),
+                    items: shown.lineItems,
+                    setItems: (lineItems) => setDraft({ ...draft, lineItems }),
+                    tables: shown.tables ?? {},
+                    setTable: (name, rows) =>
+                      setDraft({
+                        ...draft,
+                        tables: { ...draft.tables, [name]: rows },
+                      }),
+                    totals,
+                    invalid,
+                  }}
+                >
+                  <StagePaper document={paper.key} />
+                </PaperProvider>
+              </div>
+            ) : null}
           </div>
 
           {error ? (
             <p
               role="alert"
-              className="flex items-start gap-2 border-t border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 sm:px-5"
+              className="flex items-start gap-2 border-t border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 sm:px-5 print:hidden"
             >
               <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
               {error}
@@ -438,7 +636,7 @@ export function InquiryDetailClient({
           ) : null}
 
           {editable ? (
-            <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-4 sm:px-5">
+            <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-4 sm:px-5 print:hidden">
               {waitingForApproval ? (
                 <p className="text-sm text-amber-800">
                   This step needs approval by {approver} before it can move on.

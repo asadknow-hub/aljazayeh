@@ -13,6 +13,36 @@ export type CompanySettingsInput = {
   nameArabic: string;
   /** Printed under the monthly attendance sheet, one note per line. */
   attendanceSheetNotes: string;
+  /** Printed on quotations, invoices and the other customer documents. */
+  address: string;
+  addressArabic: string;
+  poBox: string;
+  trn: string;
+  bankName: string;
+  bankAccountName: string;
+  bankAccountNumber: string;
+  bankIban: string;
+  bankSwift: string;
+  bankBranch: string;
+};
+
+/** What a customer document prints about the company itself. */
+export type CompanyLetterhead = {
+  name: string;
+  nameArabic: string;
+  logoImage: string | null;
+  telephone: string;
+  email: string;
+  address: string;
+  addressArabic: string;
+  poBox: string;
+  trn: string;
+  bankName: string;
+  bankAccountName: string;
+  bankAccountNumber: string;
+  bankIban: string;
+  bankSwift: string;
+  bankBranch: string;
 };
 
 export type CompanySettingsView = CompanySettingsInput & {

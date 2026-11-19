@@ -14,6 +14,7 @@ import { saveInquiryWorkflowMapAction } from "@/lib/inquiries/actions";
 import {
   INQUIRY_APPROVAL_ROLES,
   INQUIRY_STAGES,
+  isExportOnlyStage,
   INQUIRY_WORKFLOW_DEPARTMENTS,
   type InquiryApprovalRoleKey,
   type InquiryStageKey,
@@ -42,6 +43,16 @@ const EDITABLE_KEYS: FieldKey[] = [
   "adminEmail",
   "nameArabic",
   "attendanceSheetNotes",
+  "address",
+  "addressArabic",
+  "poBox",
+  "trn",
+  "bankName",
+  "bankAccountName",
+  "bankAccountNumber",
+  "bankIban",
+  "bankSwift",
+  "bankBranch",
 ];
 
 function settingsEqual(
@@ -234,6 +245,16 @@ export function CompanySettingsClient({
           adminEmail: form.adminEmail,
           nameArabic: form.nameArabic,
           attendanceSheetNotes: form.attendanceSheetNotes,
+          address: form.address,
+          addressArabic: form.addressArabic,
+          poBox: form.poBox,
+          trn: form.trn,
+          bankName: form.bankName,
+          bankAccountName: form.bankAccountName,
+          bankAccountNumber: form.bankAccountNumber,
+          bankIban: form.bankIban,
+          bankSwift: form.bankSwift,
+          bankBranch: form.bankBranch,
         }));
         setForm(next);
         setSaved(next);
@@ -439,6 +460,120 @@ export function CompanySettingsClient({
                     />
                   </label>
                 </div>
+
+                <div className="border-t border-slate-200 px-4 py-3 sm:px-5">
+                  <h3 className="font-display text-sm font-semibold text-slate-900">
+                    Customer documents
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Printed at the top of quotations, job cards, delivery notes
+                    and invoices, together with the telephone number and email
+                    above. The bank details print on quotations and invoices.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 px-4 py-4 sm:grid-cols-2 sm:px-5">
+                  <label className="flex flex-col gap-1.5">
+                    <span className="field-label">Address</span>
+                    <input
+                      value={form.address}
+                      onChange={(event) =>
+                        updateField("address", event.target.value)
+                      }
+                      className="field"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="field-label">P.O. Box line</span>
+                    <input
+                      value={form.poBox}
+                      onChange={(event) =>
+                        updateField("poBox", event.target.value)
+                      }
+                      className="field"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="field-label">Address in Arabic</span>
+                    <input dir="rtl"
+                      value={form.addressArabic}
+                      onChange={(event) =>
+                        updateField("addressArabic", event.target.value)
+                      }
+                      className="field"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="field-label">Company TRN</span>
+                    <input
+                      value={form.trn}
+                      onChange={(event) =>
+                        updateField("trn", event.target.value)
+                      }
+                      className="field"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="field-label">Bank name</span>
+                    <input
+                      value={form.bankName}
+                      onChange={(event) =>
+                        updateField("bankName", event.target.value)
+                      }
+                      className="field"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="field-label">Account name</span>
+                    <input
+                      value={form.bankAccountName}
+                      onChange={(event) =>
+                        updateField("bankAccountName", event.target.value)
+                      }
+                      className="field"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="field-label">Account number</span>
+                    <input
+                      value={form.bankAccountNumber}
+                      onChange={(event) =>
+                        updateField("bankAccountNumber", event.target.value)
+                      }
+                      className="field"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="field-label">IBAN</span>
+                    <input
+                      value={form.bankIban}
+                      onChange={(event) =>
+                        updateField("bankIban", event.target.value)
+                      }
+                      className="field"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="field-label">SWIFT code</span>
+                    <input
+                      value={form.bankSwift}
+                      onChange={(event) =>
+                        updateField("bankSwift", event.target.value)
+                      }
+                      className="field"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="field-label">Branch</span>
+                    <input
+                      value={form.bankBranch}
+                      onChange={(event) =>
+                        updateField("bankBranch", event.target.value)
+                      }
+                      className="field"
+                    />
+                  </label>
+                </div>
               </>
             ) : section === "signatories" ? (
               <SignatoriesSection
@@ -506,6 +641,11 @@ export function CompanySettingsClient({
                             </td>
                             <td className="border border-[#b4b4b4] px-3 py-2.5 align-middle font-medium text-slate-900">
                               {stage.label}
+                              {isExportOnlyStage(stage.key) ? (
+                                <span className="ml-1.5 text-xs font-normal text-slate-500">
+                                  export jobs only
+                                </span>
+                              ) : null}
                             </td>
                             <td className="border border-[#b4b4b4] p-0 align-middle">
                               <select

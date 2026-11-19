@@ -23,7 +23,7 @@ import {
   INQUIRY_APPROVAL_ROLES,
   INQUIRY_STAGES,
   INQUIRY_WORKFLOW_DEPARTMENTS,
-  inquiryStageIndex,
+  stagesForJob,
   inquiryStageLabel,
   isInquiryApprovalRoleKey,
   isInquiryStageKey,
@@ -33,8 +33,10 @@ import {
   type InquiryWorkflowMap,
 } from "@/lib/inquiries/stages";
 import {
-  INQUIRY_HEADER_FIELDS,
+  documentsInUse,
   inquiryTotals,
+  mainDocument,
+  missingStageFields,
   STAGE_DEFINITIONS,
 } from "@/lib/inquiries/stage-forms";
 import type {
@@ -50,10 +52,10 @@ import type {
   InquiryView,
 } from "@/lib/inquiries/types";
 import {
-  missingStageFields,
   normalizeInquiryWorkflowMap,
   normalizeLineItems,
   normalizeStageFields,
+  normalizeStageTables,
 } from "@/lib/inquiries/validate";
 import { appDateValue } from "@/lib/datetime/format";
 import { nextDocumentNumber } from "@/lib/documents/numbering";
@@ -192,6 +194,7 @@ function toLineItemView(
       row.deliveredQuantity === null
         ? ""
         : String(Number(row.deliveredQuantity)),
+    details: row.details,
   };
 }
 
@@ -255,6 +258,16 @@ async function loadDisplayNames(
   }
   return names;
 }
+
+/** Inquiry-step answers that are columns of the inquiry itself. */
+const INQUIRY_HEADER_FIELDS = new Set([
+  "customerName",
+  "contact",
+  "title",
+  "jobType",
+  "deliveryExpectedOn",
+  "details",
+]);
 
 /**
  * The answers of the Inquiry step. The ones every list and document needs
@@ -535,8 +548,17 @@ async function loadInquiryView(
   ]);
   const createdByName = names.get(row.createdByUserId) ?? "";
 
-  const currentIndex = inquiryStageIndex(stage);
-  const steps: InquiryStepView[] = INQUIRY_STAGES.map((item, index) => {
+  const [assigned] = row.assignedStaffId
+    ? await tx
+        .select({ fullName: staffMembers.fullName })
+        .from(staffMembers)
+        .where(eq(staffMembers.id, row.assignedStaffId))
+        .limit(1)
+    : [];
+
+  const stages = stagesForJob(row.jobType);
+  const currentIndex = stages.findIndex((item) => item.key === stage);
+  const steps: InquiryStepView[] = stages.map((item, index) => {
     const record = records.get(item.key);
     const state =
       status === "completed" || index < currentIndex
@@ -544,6 +566,7 @@ async function loadInquiryView(
         : index === currentIndex
           ? "current"
           : "locked";
+    const reached = state !== "locked";
     return {
       key: item.key,
       number: index + 1,
@@ -554,13 +577,20 @@ async function loadInquiryView(
         item.key === "inquiry"
           ? row.inquiryNumber
           : (record?.documentNumber ?? ""),
+      documentNumbers: record?.documentNumbers ?? {},
       // A step that has not been reached shows nothing yet.
-      fields:
-        state === "locked"
-          ? {}
-          : item.key === "inquiry"
-            ? inquiryStepFields(row, record)
-            : (record?.fields ?? {}),
+      fields: !reached
+        ? {}
+        : item.key === "inquiry"
+          ? inquiryStepFields(row, record)
+          : (record?.fields ?? {}),
+      tables: reached ? (record?.tables ?? {}) : {},
+      preparedByName:
+        state === "done" && record?.completedByUserId
+          ? (names.get(record.completedByUserId) ?? null)
+          : state === "current"
+            ? (assigned?.fullName ?? null)
+            : null,
       completedAt:
         state === "done" ? (record?.completedAt?.toISOString() ?? null) : null,
       completedByName:
@@ -617,13 +647,6 @@ async function loadInquiryView(
   const currentStageApproved =
     approvalRequired && (await hasApproval(tx, row.id, stage));
 
-  const [assigned] = row.assignedStaffId
-    ? await tx
-        .select({ fullName: staffMembers.fullName })
-        .from(staffMembers)
-        .where(eq(staffMembers.id, row.assignedStaffId))
-        .limit(1)
-    : [];
   const lineItems = (await loadLineItems(tx, [row.id])).get(row.id) ?? [];
 
   return {
@@ -739,7 +762,9 @@ async function writeStageRecord(
     Pick<
       StageRecordRow,
       | "fields"
+      | "tables"
       | "documentNumber"
+      | "documentNumbers"
       | "handledByStaffId"
       | "completedAt"
       | "completedByUserId"
@@ -756,9 +781,10 @@ async function writeStageRecord(
 }
 
 /**
- * Save the job's items the way the step allows: the Inquiry step lists what
- * is wanted, the Quotation step also prices it, and the Delivery Note step
- * only records what was delivered. Other steps do not change items.
+ * Save the job's items the way the step allows: the Inquiry lists them with
+ * quantity and price, the Quotation adds units, and the Delivery Note
+ * records what was delivered. Every step may also write its own details
+ * against an item (a remark, a heat number); nothing else is changed.
  */
 async function saveLineItems(
   tx: DbTransaction,
@@ -766,34 +792,45 @@ async function saveLineItems(
   stage: InquiryStageKey,
   items: InquiryLineItemInput[],
 ) {
-  const mode = STAGE_DEFINITIONS[stage].items;
-  if (mode === "summary" || mode === "none") return;
-
+  const { items: mode, itemDetails } = STAGE_DEFINITIONS[stage];
   const existing = await tx
     .select()
     .from(inquiryLineItems)
     .where(eq(inquiryLineItems.inquiryId, inquiryId));
-  const existingIds = new Set(existing.map((row) => row.id));
+  const byId = new Map(existing.map((row) => [row.id, row]));
   const now = new Date();
 
-  if (mode === "delivery") {
+  /** The item's details with this step's own ones replaced. */
+  const mergedDetails = (
+    current: Record<string, string>,
+    item: InquiryLineItemInput,
+  ) => ({
+    ...current,
+    ...Object.fromEntries(
+      itemDetails.map((key) => [key, item.details[key] ?? ""]),
+    ),
+  });
+
+  if (mode === "delivery" || mode === "fixed") {
     for (const item of items) {
-      if (!item.id || !existingIds.has(item.id)) continue;
+      const row = item.id ? byId.get(item.id) : undefined;
+      if (!row) continue;
       await tx
         .update(inquiryLineItems)
         .set({
-          deliveredQuantity: item.deliveredQuantity || null,
+          ...(mode === "delivery"
+            ? { deliveredQuantity: item.deliveredQuantity || null }
+            : {}),
+          details: mergedDetails(row.details, item),
           updatedAt: now,
         })
-        .where(eq(inquiryLineItems.id, item.id));
+        .where(eq(inquiryLineItems.id, row.id));
     }
     return;
   }
 
   const kept = new Set(
-    items.flatMap((item) =>
-      item.id && existingIds.has(item.id) ? [item.id] : [],
-    ),
+    items.flatMap((item) => (item.id && byId.has(item.id) ? [item.id] : [])),
   );
   const removed = existing.filter((row) => !kept.has(row.id));
   if (removed.length > 0) {
@@ -809,10 +846,10 @@ async function saveLineItems(
     const values = {
       description: item.description,
       quantity: item.quantity,
-      unit: item.unit,
+      unitPrice: item.unitPrice,
       sortOrder: index,
-      // Prices belong to the quotation; the Inquiry step leaves them alone.
-      ...(mode === "priced" ? { unitPrice: item.unitPrice } : {}),
+      // Units are written on the quotation; the Inquiry leaves them alone.
+      ...(mode === "priced" ? { unit: item.unit } : {}),
     };
     if (item.id && kept.has(item.id)) {
       await tx
@@ -840,13 +877,15 @@ async function saveStageAnswers(
     if (!fields.customerName) {
       throw new UserError("Enter the customer's name.");
     }
+    // A job is local unless it is said to be for export.
+    fields.jobType = fields.jobType || "local";
     await tx
       .update(inquiries)
       .set({
         customerName: fields.customerName,
         contact: fields.contact ?? "",
         title: fields.title ?? "",
-        jobType: fields.jobType || "local",
+        jobType: fields.jobType,
         deliveryExpectedOn: fields.deliveryExpectedOn ?? "",
         notes: fields.details ?? "",
         updatedAt: new Date(),
@@ -859,9 +898,13 @@ async function saveStageAnswers(
       .where(eq(inquiries.id, row.id));
   }
 
-  // The step's document gets its number the first time the step is saved.
+  // Each document of the step gets its number the first time the step is
+  // saved with that document in use.
   const [record] = await tx
-    .select({ documentNumber: inquiryStageRecords.documentNumber })
+    .select({
+      documentNumber: inquiryStageRecords.documentNumber,
+      documentNumbers: inquiryStageRecords.documentNumbers,
+    })
     .from(inquiryStageRecords)
     .where(
       and(
@@ -870,20 +913,26 @@ async function saveStageAnswers(
       ),
     )
     .limit(1);
-  const counterKey = STAGE_DEFINITIONS[stage].counterKey;
-  const needsNumber =
-    stage !== "inquiry" && counterKey !== null && !record?.documentNumber;
+  const main = mainDocument(stage);
+  const documentNumbers = { ...(record?.documentNumbers ?? {}) };
+  for (const doc of documentsInUse(stage, fields)) {
+    if (doc.key === main?.key || documentNumbers[doc.key]) continue;
+    documentNumbers[doc.key] = await nextDocumentNumber(tx, org, doc.counterKey);
+  }
 
-  const header = new Set<string>(INQUIRY_HEADER_FIELDS);
   await writeStageRecord(tx, org, row.id, stage, {
     fields:
       stage === "inquiry"
         ? Object.fromEntries(
-            Object.entries(fields).filter(([key]) => !header.has(key)),
+            Object.entries(fields).filter(
+              ([key]) => !INQUIRY_HEADER_FIELDS.has(key),
+            ),
           )
         : fields,
-    ...(needsNumber
-      ? { documentNumber: await nextDocumentNumber(tx, org, counterKey) }
+    tables: normalizeStageTables(stage, input.tables),
+    documentNumbers,
+    ...(main && !record?.documentNumber
+      ? { documentNumber: await nextDocumentNumber(tx, org, main.counterKey) }
       : {}),
   });
   await saveLineItems(tx, row.id, stage, items);
@@ -908,6 +957,7 @@ async function approvedContent(
   const items = (await loadLineItems(tx, [inquiryId])).get(inquiryId) ?? [];
   return JSON.stringify([
     row && stage === "inquiry" ? inquiryStepFields(row, record) : record?.fields,
+    record?.tables,
     items,
   ]);
 }
@@ -1040,11 +1090,13 @@ export async function saveInquiryStageForUser(
 
     const missing = missingStageFields(stage, fields);
     if (missing.length > 0) {
-      throw new UserError(`Fill in before moving on: ${missing.join(", ")}.`);
+      throw new UserError(
+        `Fill in before moving on: ${missing.map((field) => field.label).join(", ")}.`,
+      );
     }
     const items = (await loadLineItems(tx, [inquiryId])).get(inquiryId) ?? [];
     const mode = STAGE_DEFINITIONS[stage].items;
-    if (mode === "priced" && items.length === 0) {
+    if (mode === "priced" && !items.some((item) => Number(item.unitPrice) > 0)) {
       throw new UserError("Add at least one priced item to the quotation.");
     }
     if (mode === "delivery" && items.some((item) => !item.deliveredQuantity)) {
@@ -1064,7 +1116,7 @@ export async function saveInquiryStageForUser(
       completedByUserId: userId,
     });
 
-    const next = adjacentInquiryStages(stage).next;
+    const next = adjacentInquiryStages(stage, existing.jobType).next;
     if (next) {
       await enterStage(tx, org, userId, existing, next, map);
     } else {
@@ -1157,7 +1209,7 @@ export async function sendInquiryBackForUser(
       "Assign someone before sending this back.",
     );
     const stage = stageOf(existing);
-    const previous = adjacentInquiryStages(stage).previous;
+    const previous = adjacentInquiryStages(stage, existing.jobType).previous;
     if (!previous) {
       throw new UserError("This is the first step.");
     }
@@ -1325,6 +1377,21 @@ export async function approveInquiryStageForUser(
     }
     if (await hasApproval(tx, inquiryId, stage)) {
       throw new UserError("This step is already approved.");
+    }
+    // Approving an unfinished step would be undone by finishing it.
+    const records = (await loadStageRecords(tx, [inquiryId], stage)).get(
+      inquiryId,
+    );
+    const missing = missingStageFields(
+      stage,
+      stage === "inquiry"
+        ? inquiryStepFields(existing, records?.get(stage))
+        : (records?.get(stage)?.fields ?? {}),
+    );
+    if (missing.length > 0) {
+      throw new UserError(
+        `This step is not ready to approve. Still needed: ${missing.map((field) => field.label).join(", ")}.`,
+      );
     }
 
     await tx.insert(inquiryStageApprovals).values({

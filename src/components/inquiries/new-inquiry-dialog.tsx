@@ -1,11 +1,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import {
-  emptyLineItem,
-  StageFields,
-  StageItems,
-} from "@/components/inquiries/stage-form";
+import { emptyLineItem } from "@/components/inquiries/paper";
+import { InquiryItems, StageFields } from "@/components/inquiries/stage-form";
 import { AlertIcon, CloseIcon } from "@/components/ui/icons";
 import { unwrap } from "@/lib/actions/result";
 import { createInquiryAction } from "@/lib/inquiries/actions";
@@ -62,7 +59,7 @@ export function NewInquiryDialog({
             </h3>
             <p className="mt-0.5 text-sm text-slate-600">
               Only the customer&apos;s name is needed to start. The rest can be
-              filled in on the inquiry.
+              filled in on the inquiry before it moves to the quotation.
             </p>
           </div>
           <button
@@ -82,8 +79,7 @@ export function NewInquiryDialog({
             disabled={pending}
             onChange={(fields) => setForm({ ...form, fields })}
           />
-          <StageItems
-            mode="scope"
+          <InquiryItems
             items={form.lineItems}
             disabled={pending}
             onChange={(lineItems) => setForm({ ...form, lineItems })}

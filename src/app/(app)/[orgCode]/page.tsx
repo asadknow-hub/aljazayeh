@@ -5,10 +5,7 @@ import { formatLeavePeriod } from "@/lib/datetime/format";
 import { FORM_DEFINITIONS, formatAmount } from "@/lib/forms/definitions";
 import { listFormsAwaitingMySignature } from "@/lib/forms/queries";
 import { listInquiryTasksForUser } from "@/lib/inquiries/queries";
-import {
-  inquiryStageIndex,
-  inquiryStageLabel,
-} from "@/lib/inquiries/stages";
+import { inquiryStageLabel, stageNumber } from "@/lib/inquiries/stages";
 import { loadOrgPage } from "@/lib/org/page";
 import { listVacationsAwaitingMySignature } from "@/lib/vacation/queries";
 
@@ -30,7 +27,7 @@ export default async function CompanyPage({
     ...inquiries.map(({ inquiry, reason }) => ({
       href: `/${org.code}/${inquiry.owningDepartmentKey}/inquiries/${inquiry.id}`,
       title: `${inquiry.number} · ${inquiry.title || inquiry.customerName}`,
-      detail: `Step ${inquiryStageIndex(inquiry.currentStage) + 1} · ${inquiryStageLabel(inquiry.currentStage)} · ${
+      detail: `Step ${stageNumber(inquiry.currentStage, inquiry.jobType)} · ${inquiryStageLabel(inquiry.currentStage)} · ${
         reason === "assigned" ? "assigned to you" : "waiting for your approval"
       }`,
       action: reason === "assigned" ? "Open" : "Open and approve",

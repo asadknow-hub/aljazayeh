@@ -32,7 +32,7 @@ import {
   createStaffLoginForUser,
 } from "@/lib/staff/queries";
 import { createVacationRequestForUser } from "@/lib/vacation/queries";
-import { loadDemoInquiries } from "@/db/demo-inquiries";
+import { alignDemoWorkflow, loadDemoInquiries } from "@/db/demo-inquiries";
 
 /**
  * Loads a demo company to look around in and to show people: staff with
@@ -94,9 +94,31 @@ async function main() {
   } else {
     await loadCompany(owner.id);
   }
-  // Added after the first version of the demo, so loaded on its own.
+  // Added after the first version of the demo, so loaded on their own.
+  await fillLetterhead(owner.id);
+  await alignDemoWorkflow(owner.id, ORG);
   await loadDemoInquiries(admin, owner.id, ORG);
   await admin.end();
+}
+
+/**
+ * The company details printed on customer documents, as on the company's
+ * own letterhead. Only filled in where nothing has been entered yet; the
+ * bank account is left for the company to enter itself.
+ */
+async function fillLetterhead(ownerId: string) {
+  const settings = await getCompanySettingsForUser(ownerId, ORG);
+  if (!settings || settings.address) return;
+
+  await saveCompanySettingsForUser(ownerId, ORG, {
+    ...settings,
+    telephoneNumber: settings.telephoneNumber || "04 885 5025, 04 885 7885",
+    email: settings.email || "Sales@aljazayeh.com",
+    address: "Jebel Ali Industrial Area - 3",
+    addressArabic: "منطقة جبل علي الصناعية - ٣، ص.ب: ٤٩٤٩٠، دبي",
+    poBox: "P.O. Box: 49490, Dubai, U.A.E.",
+    bankAccountName: settings.bankAccountName || "AL JAZEYAH ENGINEERING LLC",
+  });
 }
 
 async function loadCompany(ownerId: string) {

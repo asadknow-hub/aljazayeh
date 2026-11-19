@@ -13,6 +13,7 @@ import {
 } from "@/lib/inquiries/queries";
 import {
   INQUIRY_STAGES,
+  stagesForJob,
   type InquiryStageKey,
   type InquiryWorkflowDepartmentKey,
 } from "@/lib/inquiries/stages";
@@ -28,10 +29,11 @@ const STEP_DEPARTMENTS: Record<InquiryStageKey, InquiryWorkflowDepartmentKey> =
     quotation: "admin",
     lpo_in_or_out: "admin",
     proforma_invoice: "accounts",
-    job_card: "engineering",
+    job_card: "admin",
     progress_invoice: "accounts",
     delivery_note: "admin",
     tax_invoice: "accounts",
+    commercial_invoice: "admin",
     receipt_voucher: "accounts",
   };
 
@@ -39,6 +41,9 @@ type DemoInquiry = {
   customer: string;
   contactPerson: string;
   phone: string;
+  email: string;
+  trn: string;
+  address: string;
   title: string;
   jobType?: "export";
   /** Days from today the customer needs it by. */
@@ -56,6 +61,9 @@ const DEMO_INQUIRIES: DemoInquiry[] = [
     customer: "Gulf Marine Services LLC",
     contactPerson: "Mr. Anwar",
     phone: "04 555 0142",
+    email: "anwar@gulfmarine.example",
+    trn: "100234567800003",
+    address: "Warehouse 12, Al Quoz Industrial 3, Dubai",
     title: "SS handrail for jetty walkway",
     neededIn: 21,
     items: [["SS 316 handrail, 42 mm dia", "36", "m", "0"]],
@@ -66,6 +74,9 @@ const DEMO_INQUIRIES: DemoInquiry[] = [
     customer: "Barton Engineering",
     contactPerson: "Mr. Nazmul",
     phone: "050 555 0177",
+    email: "nazmul@barton.example",
+    trn: "100345678900003",
+    address: "Office 4, Ras Al Khor Industrial 2, Dubai",
     title: "GI pipe supports, 40 nos",
     neededIn: 14,
     items: [
@@ -78,6 +89,9 @@ const DEMO_INQUIRIES: DemoInquiry[] = [
     customer: "Al Noor Contracting",
     contactPerson: "Eng. Samir",
     phone: "06 555 0119",
+    email: "samir@alnoor.example",
+    trn: "100456789000003",
+    address: "Industrial Area 11, Sharjah",
     title: "MS staircase with railing",
     neededIn: 30,
     items: [
@@ -91,6 +105,9 @@ const DEMO_INQUIRIES: DemoInquiry[] = [
     customer: "Emirates Steel Trading",
     contactPerson: "Mr. Joseph",
     phone: "04 555 0163",
+    email: "joseph@emiratessteel.example",
+    trn: "100567890100003",
+    address: "Plot 88, Jebel Ali Free Zone, Dubai",
     title: "Machining of flanges, 6 inch",
     neededIn: 10,
     items: [['Flange 6" facing and drilling', "24", "Nos", "140"]],
@@ -100,6 +117,9 @@ const DEMO_INQUIRIES: DemoInquiry[] = [
     customer: "Delta Marine FZE",
     contactPerson: "Capt. Imran",
     phone: "050 555 0131",
+    email: "imran@deltamarine.example",
+    trn: "100678901200003",
+    address: "Quay 3, Hamriyah Free Zone, Sharjah",
     title: "Aluminium gangway repair",
     jobType: "export",
     neededIn: 5,
@@ -113,6 +133,9 @@ const DEMO_INQUIRIES: DemoInquiry[] = [
     customer: "Sharjah Cement Works",
     contactPerson: "Mr. Prakash",
     phone: "06 555 0188",
+    email: "prakash@sharjahcement.example",
+    trn: "100789012300003",
+    address: "Al Dhaid Road, Sharjah",
     title: "Feed hopper fabrication",
     neededIn: -4,
     items: [["MS feed hopper 2 m³, primed", "2", "Nos", "7250"]],
@@ -122,15 +145,37 @@ const DEMO_INQUIRIES: DemoInquiry[] = [
     customer: "Oasis Interiors",
     contactPerson: "Ms. Reem",
     phone: "04 555 0155",
+    email: "reem@oasisinteriors.example",
+    trn: "100890123400003",
+    address: "Showroom 7, Umm Ramool, Dubai",
     title: "Decorative SS screens",
     neededIn: -20,
     items: [["SS mirror-finish screen 1.2 × 2.4 m", "6", "Nos", "2150"]],
     reach: "done",
   },
   {
+    customer: "Muscat Steel Works LLC",
+    contactPerson: "Mr. Salim Al Harthy",
+    phone: "+968 2455 0170",
+    email: "salim@muscatsteel.example",
+    trn: "",
+    address: "Rusayl Industrial Estate, Muscat, Oman",
+    title: "Galvanised pipe spools for export",
+    jobType: "export",
+    neededIn: 12,
+    items: [
+      ['GI pipe spool 4", flanged both ends', "18", "Nos", "640"],
+      ["Export crating", "2", "Nos", "450"],
+    ],
+    reach: "commercial_invoice",
+  },
+  {
     customer: "Mr. Faisal (walk-in)",
     contactPerson: "",
     phone: "055 555 0104",
+    email: "",
+    trn: "",
+    address: "",
     title: "Sliding gate repair",
     neededIn: 7,
     items: [["Sliding gate track and roller repair", "1", "Job", "0"]],
@@ -155,23 +200,28 @@ function stepAnswers(
     case "proforma_invoice":
       return {
         proformaDate: day,
+        paymentTerms: "50% advance",
         advancePercent: "50",
-        advanceAmount: (total / 2).toFixed(2),
-        advanceReceived: "yes",
       };
     case "job_card":
       return {
-        startDate: day,
+        expectedDelivery: addDays(day, 10),
+        technician1: "Robel",
+        technician2: "Hasan",
         supervisor: "Hakeem",
-        technicians: "Robel, Hasan, Salim",
-        instructions: "As per approved drawing. Check dimensions before welding.",
       };
     case "progress_invoice":
       return { invoiceDate: day, progressPercent: "50" };
     case "delivery_note":
-      return { deliveryDate: day, receivedBy: "Site storekeeper" };
+      return { deliveryDate: day };
     case "tax_invoice":
-      return { invoiceDate: day, paymentTerms: "30 days" };
+      return {
+        invoiceDate: day,
+        paymentTerms: "30 Days Credit",
+        dueDate: addDays(day, 30),
+      };
+    case "commercial_invoice":
+      return { ciDate: day, ciPaymentTerms: "30 Days Credit" };
     case "receipt_voucher":
       return {
         receiptDate: day,
@@ -181,6 +231,27 @@ function stepAnswers(
     default:
       return {};
   }
+}
+
+/**
+ * The first version of the demo gave the Job Card to Engineering. The
+ * company's own job card says Admin prepares it, so a demo company still on
+ * that first arrangement is put right.
+ */
+export async function alignDemoWorkflow(ownerId: string, orgCode: string) {
+  const map = await getInquiryWorkflowMapForUser(ownerId, orgCode);
+  if (!map || map.job_card.departmentKey !== "engineering") return;
+
+  const firstVersion = INQUIRY_STAGES.every(
+    (stage) =>
+      stage.key === "job_card" ||
+      stage.key === "commercial_invoice" ||
+      map[stage.key].departmentKey === STEP_DEPARTMENTS[stage.key],
+  );
+  if (!firstVersion) return;
+
+  map.job_card = { ...map.job_card, departmentKey: "admin" };
+  await saveInquiryWorkflowMapForUser(ownerId, orgCode, map);
 }
 
 /**
@@ -221,13 +292,12 @@ export async function loadDemoInquiries(
     return;
   }
 
-  // Set who handles each step, unless the company has already chosen.
+  // Quotations need Management's approval in the demo, unless the company
+  // has already set up approvals of its own.
   const map = await getInquiryWorkflowMapForUser(ownerId, orgCode);
   if (!map) return;
   const untouched = INQUIRY_STAGES.every(
-    (stage) =>
-      map[stage.key].departmentKey === "admin" &&
-      !map[stage.key].approvalRequired,
+    (stage) => !map[stage.key].approvalRequired,
   );
   if (untouched) {
     for (const stage of INQUIRY_STAGES) {
@@ -251,12 +321,16 @@ export async function loadDemoInquiries(
         unit,
         unitPrice,
         deliveredQuantity: "",
+        details: {},
       }),
     );
     const inquiryFields = {
       customerName: demo.customer,
       contactPerson: demo.contactPerson,
       contact: demo.phone,
+      email: demo.email,
+      customerTrn: demo.trn,
+      customerAddress: demo.address,
       title: demo.title,
       jobType: demo.jobType ?? "local",
       receivedVia: "phone",
@@ -292,12 +366,13 @@ export async function loadDemoInquiries(
     inquiryFields: Record<string, string>,
   ) {
     if (!handlers.admin || !approver) return;
+    const stages = stagesForJob(demo.jobType ?? "local");
     const stopAt =
       demo.reach === "done"
-        ? INQUIRY_STAGES.length
-        : INQUIRY_STAGES.findIndex((stage) => stage.key === demo.reach);
+        ? stages.length
+        : stages.findIndex((stage) => stage.key === demo.reach);
 
-    for (const [index, stage] of INQUIRY_STAGES.entries()) {
+    for (const [index, stage] of stages.entries()) {
       const last = index === stopAt;
       if (index > stopAt || (last && demo.unassigned)) break;
 
@@ -313,11 +388,12 @@ export async function loadDemoInquiries(
             ? {
                 quotationDate: today,
                 validUntil: addDays(today, 30),
-                attention: demo.contactPerson,
-                subject: demo.title,
                 vatPercent: "5",
-                paymentTerms: "50% advance, balance on delivery",
-                deliveryPeriod: "2 weeks from LPO",
+                termMaterial: "As per approved drawing and customer specification",
+                termDelivery: "Ex-works, Jebel Ali Industrial Area 3",
+                termLeadTime: "2 weeks from LPO",
+                termPayment: "50% advance, balance on delivery",
+                termValidity: "30 days",
               }
             : stepAnswers(stage.key, today, view.totals.total);
       const items = view.lineItems.map((line, lineIndex) => ({

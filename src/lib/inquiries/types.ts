@@ -18,12 +18,18 @@ export type InquiryLineItemInput = {
   unit: string;
   unitPrice: string;
   deliveredQuantity: string;
+  /** What the documents add to the item: remarks, heat no., origin, … */
+  details: Record<string, string>;
 };
+
+/** The lists a step keeps of its own, e.g. the lines of a purchase order. */
+export type StageTables = Record<string, Record<string, string>[]>;
 
 /** What a person typed into one step: its answers and the job's items. */
 export type InquiryStageInput = {
   fields: Record<string, string>;
   lineItems: InquiryLineItemInput[];
+  tables?: StageTables;
 };
 
 export type InquiryLineItemView = Required<InquiryLineItemInput>;
@@ -80,9 +86,14 @@ export type InquiryStepView = {
   label: string;
   departmentKey: InquiryWorkflowDepartmentKey;
   state: InquiryStepState;
-  /** This step's own document number, once it has one. */
+  /** The number of the step's main document, once it has one. */
   documentNumber: string;
+  /** Numbers of the step's optional documents, by document key. */
+  documentNumbers: Record<string, string>;
   fields: Record<string, string>;
+  tables: StageTables;
+  /** Who prepared the step: its handler, or whoever completed it. */
+  preparedByName: string | null;
   completedAt: string | null;
   completedByName: string | null;
   approvalRequired: boolean;

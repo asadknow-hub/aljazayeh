@@ -7,10 +7,33 @@ export const INQUIRY_STAGES = [
   { key: "progress_invoice", label: "Progress Invoice" },
   { key: "delivery_note", label: "Delivery Note" },
   { key: "tax_invoice", label: "Tax Invoice" },
+  { key: "commercial_invoice", label: "Commercial Invoice" },
   { key: "receipt_voucher", label: "Receipt Voucher" },
 ] as const;
 
 export type InquiryStageKey = (typeof INQUIRY_STAGES)[number]["key"];
+
+/** Steps that only jobs shipped abroad go through. */
+const EXPORT_ONLY_STAGES: readonly InquiryStageKey[] = ["commercial_invoice"];
+
+export function isExportOnlyStage(key: InquiryStageKey): boolean {
+  return EXPORT_ONLY_STAGES.includes(key);
+}
+
+/**
+ * The steps one job goes through, in order. A local job has nine; an export
+ * job has the Commercial Invoice as step 9 and the Receipt Voucher as 10.
+ */
+export function stagesForJob(jobType: string) {
+  return INQUIRY_STAGES.filter(
+    (stage) => jobType === "export" || !isExportOnlyStage(stage.key),
+  );
+}
+
+/** A step's number within its job: 1 for the first step. */
+export function stageNumber(key: InquiryStageKey, jobType: string): number {
+  return stagesForJob(jobType).findIndex((stage) => stage.key === key) + 1;
+}
 
 export const INQUIRY_WORKFLOW_DEPARTMENTS = [
   { key: "sales", label: "Sales" },
@@ -69,21 +92,19 @@ export function inquiryStageLabel(key: string): string {
   return INQUIRY_STAGES.find((stage) => stage.key === key)?.label ?? key;
 }
 
-export function inquiryStageIndex(key: InquiryStageKey): number {
-  return INQUIRY_STAGES.findIndex((stage) => stage.key === key);
-}
-
-export function adjacentInquiryStages(current: InquiryStageKey): {
+export function adjacentInquiryStages(
+  current: InquiryStageKey,
+  jobType: string,
+): {
   previous: InquiryStageKey | null;
   next: InquiryStageKey | null;
 } {
-  const index = inquiryStageIndex(current);
+  const stages = stagesForJob(jobType);
+  const index = stages.findIndex((stage) => stage.key === current);
   return {
-    previous: index > 0 ? INQUIRY_STAGES[index - 1]!.key : null,
+    previous: index > 0 ? stages[index - 1]!.key : null,
     next:
-      index >= 0 && index < INQUIRY_STAGES.length - 1
-        ? INQUIRY_STAGES[index + 1]!.key
-        : null,
+      index >= 0 && index < stages.length - 1 ? stages[index + 1]!.key : null,
   };
 }
 
@@ -94,12 +115,26 @@ export function departmentForStage(
   return map[stage]?.departmentKey ?? "admin";
 }
 
+/**
+ * Who prepares each step unless the company chooses otherwise: Accounts for
+ * the invoices and the receipt, Admin for everything else, as written on the
+ * company's own forms.
+ */
+const ACCOUNTS_STAGES: readonly InquiryStageKey[] = [
+  "proforma_invoice",
+  "progress_invoice",
+  "tax_invoice",
+  "receipt_voucher",
+];
+
 export function defaultInquiryWorkflowMap(): InquiryWorkflowMap {
   return Object.fromEntries(
     INQUIRY_STAGES.map((stage) => [
       stage.key,
       {
-        departmentKey: "admin" as const,
+        departmentKey: ACCOUNTS_STAGES.includes(stage.key)
+          ? ("accounts" as const)
+          : ("admin" as const),
         approvalRequired: false,
         approvalRequiredBy: "" as const,
       },

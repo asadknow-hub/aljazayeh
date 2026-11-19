@@ -193,6 +193,17 @@ export const organizationSettings = pgTable("organization_settings", {
   logoImage: text("logo_image"),
   /** Printed under the monthly attendance sheet, one note per line. */
   attendanceSheetNotes: text("attendance_sheet_notes").notNull().default(""),
+  /** Printed on quotations, invoices and the other customer documents. */
+  address: text("address").notNull().default(""),
+  addressArabic: text("address_arabic").notNull().default(""),
+  poBox: text("po_box").notNull().default(""),
+  trn: text("trn").notNull().default(""),
+  bankName: text("bank_name").notNull().default(""),
+  bankAccountName: text("bank_account_name").notNull().default(""),
+  bankAccountNumber: text("bank_account_number").notNull().default(""),
+  bankIban: text("bank_iban").notNull().default(""),
+  bankSwift: text("bank_swift").notNull().default(""),
+  bankBranch: text("bank_branch").notNull().default(""),
   ...timestamps,
 }, () => [
   allowSelect("organization_settings_member_select", isOrgMember()),
@@ -629,8 +640,18 @@ export const inquiryStageRecords = pgTable(
       .references(() => inquiries.id, { onDelete: "cascade" }),
     stageKey: text("stage_key").notNull(),
     documentNumber: text("document_number").notNull().default(""),
+    /** Numbers of the step's optional documents, by document key. */
+    documentNumbers: jsonb("document_numbers")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
     fields: jsonb("fields")
       .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
+    /** Lists a step keeps of its own, e.g. the lines of a purchase order. */
+    tables: jsonb("tables")
+      .$type<Record<string, Record<string, string>[]>>()
       .notNull()
       .default({}),
     /** The person who was handling the step, so it returns to them. */
@@ -708,6 +729,11 @@ export const inquiryLineItems = pgTable(
       precision: 14,
       scale: 2,
     }),
+    /** What the documents add to an item: remarks, heat no., origin, … */
+    details: jsonb("details")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
     sortOrder: integer("sort_order").notNull().default(0),
     ...timestamps,
   },

@@ -15,8 +15,9 @@ import { formatFriendlyDate } from "@/lib/datetime/format";
 import { assignInquiryAction } from "@/lib/inquiries/actions";
 import {
   INQUIRY_STAGES,
-  inquiryStageIndex,
   inquiryStageLabel,
+  isExportOnlyStage,
+  stageNumber,
   type InquiryStageKey,
   type InquiryWorkflowDepartmentKey,
 } from "@/lib/inquiries/stages";
@@ -150,8 +151,8 @@ export function InquiriesListPanel({
       </div>
 
       {/* How many open inquiries sit at each step; click one to see them. */}
-      <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-9">
-        {INQUIRY_STAGES.map((item, index) => {
+      <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-10">
+        {INQUIRY_STAGES.map((item) => {
           const count = countByStage.get(item.key) ?? 0;
           const active = status === "open" && stage === item.key;
           return (
@@ -169,7 +170,9 @@ export function InquiriesListPanel({
               ].join(" ")}
             >
               <span className="block text-[11px] leading-tight font-medium text-slate-500">
-                {index + 1}. {item.label}
+                {isExportOnlyStage(item.key)
+                  ? `${item.label} (export)`
+                  : `${stageNumber(item.key, "local")}. ${item.label}`}
               </span>
               <span
                 className={[
@@ -274,7 +277,7 @@ export function InquiriesListPanel({
                       {item.status === "open" ? (
                         <>
                           <span className="block font-medium text-slate-900">
-                            {inquiryStageIndex(item.currentStage) + 1}.{" "}
+                            {stageNumber(item.currentStage, item.jobType)}.{" "}
                             {inquiryStageLabel(item.currentStage)}
                           </span>
                           <span className="mt-1 flex flex-wrap items-center gap-1.5">
