@@ -57,6 +57,13 @@
       "when": 1795041041283,
       "tag": "0007_inquiry_steps",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795067568993,
+      "tag": "0008_inquiry_papers",
+      "breakpoints": true
     }
   ]
 }

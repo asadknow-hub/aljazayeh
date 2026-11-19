@@ -1,58 +1,73 @@
 "use client";
 
-import { Fragment } from "react";
+import type { ReactNode } from "react";
 import { PlusIcon, TrashIcon } from "@/components/ui/icons";
 import { formatFormDate } from "@/lib/datetime/format";
 import type { InquiryStageKey } from "@/lib/inquiries/stages";
 import {
   formatMoney,
   STAGE_DEFINITIONS,
+  STEP_FORM,
   stageFieldDisplay,
-  type InquiryTotals,
   type StageField,
-  type StageItemsMode,
 } from "@/lib/inquiries/stage-forms";
-import type { InquiryLineItemInput } from "@/lib/inquiries/types";
+import type { InquiryLineItemInput, StageTables } from "@/lib/inquiries/types";
 
-/** Fields in the order they are asked, with a heading where a part starts. */
-function groupedFields(stage: InquiryStageKey) {
-  let lastGroup: string | undefined;
-  return STAGE_DEFINITIONS[stage].fields.map((field) => {
-    const heading = field.group !== lastGroup ? field.group : undefined;
-    lastGroup = field.group;
-    return { field, heading };
-  });
+/** The id of the place where something is typed, so it can be focused. */
+export const fillId = (key: string) => `fill-${key}`;
+export const itemFillKey = (index: number, field: string) =>
+  `item-${index}-${field}`;
+
+export function emptyLineItem(): InquiryLineItemInput {
+  return {
+    description: "",
+    quantity: "1",
+    unit: "Nos",
+    unitPrice: "",
+    deliveredQuantity: "",
+    details: {},
+  };
 }
 
-function GroupHeading({ children }: { children: string }) {
-  return (
-    <h4 className="mt-2 border-b border-slate-200 pb-1.5 text-xs font-semibold tracking-wide text-slate-500 uppercase sm:col-span-2">
-      {children}
-    </h4>
-  );
+/** The questions asked in one place: the step's own form, or one of its papers. */
+function fieldsOn(stage: InquiryStageKey, place: string): StageField[] {
+  return STAGE_DEFINITIONS[stage].fields.filter((field) => field.on === place);
 }
+
+export function hasFields(stage: InquiryStageKey, place: string): boolean {
+  return fieldsOn(stage, place).length > 0;
+}
+
+const SHORT_TYPES = new Set(["date", "time", "amount", "number"]);
 
 function FieldInput({
   field,
   value,
   onChange,
   disabled,
+  invalid,
+  fullWidth,
 }: {
   field: StageField;
   value: string;
   onChange: (value: string) => void;
   disabled: boolean;
+  invalid: boolean;
+  fullWidth: boolean;
 }) {
-  const id = `stage-field-${field.key}`;
+  const id = fillId(field.key);
+  const span = fullWidth ? "col-span-2" : "col-span-2 sm:col-span-1";
 
   if (field.type === "yesno") {
     return (
       <label
         htmlFor={id}
         className={[
-          "flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800",
+          "col-span-2 flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm font-medium",
+          value === "yes"
+            ? "border-blue-300 bg-primary-soft text-slate-900"
+            : "border-slate-200 bg-slate-50 text-slate-800",
           disabled ? "cursor-not-allowed opacity-70" : "cursor-pointer",
-          field.wide ? "sm:col-span-2" : "",
         ].join(" ")}
       >
         <input
@@ -73,16 +88,12 @@ function FieldInput({
     value,
     disabled,
     "aria-required": field.required,
+    "aria-invalid": invalid || undefined,
     className: "field w-full",
   };
 
   return (
-    <div
-      className={[
-        "flex flex-col gap-1.5",
-        field.wide ? "sm:col-span-2" : "",
-      ].join(" ")}
-    >
+    <div className={`flex flex-col gap-1.5 ${span}`}>
       <label htmlFor={id} className="field-label">
         {field.label}
         {field.required ? (
@@ -109,7 +120,13 @@ function FieldInput({
       ) : (
         <input
           {...shared}
-          type={field.type === "date" ? "date" : "text"}
+          type={
+            field.type === "date"
+              ? "date"
+              : field.type === "time"
+                ? "time"
+                : "text"
+          }
           inputMode={
             field.type === "amount" || field.type === "number"
               ? "decimal"
@@ -118,40 +135,55 @@ function FieldInput({
           onChange={(event) => onChange(event.target.value)}
         />
       )}
+      {invalid ? (
+        <p className="text-xs font-medium text-red-700">This is needed.</p>
+      ) : null}
     </div>
   );
 }
 
-/** The questions of one step, for filling in. */
+/**
+ * The questions of one place, for filling in. In the narrow column beside a
+ * paper only short answers (dates, numbers) sit two to a row.
+ */
 export function StageFields({
   stage,
+  place = STEP_FORM,
   values,
   onChange,
   disabled = false,
+  invalid,
+  narrow = false,
 }: {
   stage: InquiryStageKey;
+  place?: string;
   values: Record<string, string>;
   onChange: (values: Record<string, string>) => void;
   disabled?: boolean;
+  /** Questions that still have to be answered, shown in red. */
+  invalid?: ReadonlySet<string>;
+  narrow?: boolean;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
-      {groupedFields(stage).map(({ field, heading }) => (
-        <Fragment key={field.key}>
-          {heading ? <GroupHeading>{heading}</GroupHeading> : null}
-          <FieldInput
-            field={field}
-            value={values[field.key] ?? ""}
-            disabled={disabled}
-            onChange={(value) => onChange({ ...values, [field.key]: value })}
-          />
-        </Fragment>
+    <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
+      {fieldsOn(stage, place).map((field) => (
+        <FieldInput
+          key={field.key}
+          field={field}
+          value={values[field.key] ?? ""}
+          disabled={disabled}
+          invalid={Boolean(invalid?.has(field.key)) && !values[field.key]}
+          fullWidth={
+            Boolean(field.wide) || (narrow && !SHORT_TYPES.has(field.type))
+          }
+          onChange={(value) => onChange({ ...values, [field.key]: value })}
+        />
       ))}
     </div>
   );
 }
 
-/** The answers of one step, for reading. */
+/** The step's own answers, for reading. */
 export function StageAnswers({
   stage,
   values,
@@ -161,7 +193,7 @@ export function StageAnswers({
 }) {
   return (
     <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-      {groupedFields(stage).map(({ field, heading }) => {
+      {fieldsOn(stage, STEP_FORM).map((field) => {
         const value = values[field.key] ?? "";
         const shown =
           field.type === "date" && value
@@ -170,60 +202,36 @@ export function StageAnswers({
               ? `AED ${formatMoney(Number(value))}`
               : stageFieldDisplay(field, value);
         return (
-          <Fragment key={field.key}>
-            {heading ? <GroupHeading>{heading}</GroupHeading> : null}
-            <div className={field.wide ? "sm:col-span-2" : ""}>
-              <dt className="field-label">{field.label}</dt>
-              <dd className="mt-0.5 text-sm whitespace-pre-wrap text-slate-900">
-                {value || field.type === "yesno" ? shown : "—"}
-              </dd>
-            </div>
-          </Fragment>
+          <div key={field.key} className={field.wide ? "sm:col-span-2" : ""}>
+            <dt className="field-label">{field.label}</dt>
+            <dd className="mt-0.5 text-sm whitespace-pre-wrap text-slate-900">
+              {value || field.type === "yesno" ? shown : "—"}
+            </dd>
+          </div>
         );
       })}
     </dl>
   );
 }
 
-export function emptyLineItem(): InquiryLineItemInput {
-  return {
-    description: "",
-    quantity: "1",
-    unit: "Nos",
-    unitPrice: "",
-    deliveredQuantity: "",
-  };
-}
-
 const lineAmount = (item: InquiryLineItemInput) =>
   (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
 
 /**
- * The job's items, shown the way the step uses them: listed on the Inquiry,
- * priced on the Quotation, ticked off on the Delivery Note, and read-only
- * everywhere else.
+ * What the customer is asking for, as taken down on the Inquiry: each item
+ * with its quantity and price. The quotation is prepared from this list.
  */
-export function StageItems({
-  mode,
+export function InquiryItems({
   items,
   onChange,
   disabled = false,
-  totals,
 }: {
-  mode: StageItemsMode;
   items: InquiryLineItemInput[];
   onChange?: (items: InquiryLineItemInput[]) => void;
   disabled?: boolean;
-  totals?: InquiryTotals;
 }) {
-  if (mode === "none") return totals ? <TotalsBox totals={totals} /> : null;
-
   const editable = !disabled && Boolean(onChange);
-  const listEditable = editable && (mode === "scope" || mode === "priced");
-  const showPrices = mode === "priced" || mode === "summary";
-  const showDelivered =
-    mode === "delivery" ||
-    (mode === "summary" && items.some((item) => item.deliveredQuantity));
+  const total = items.reduce((sum, item) => sum + lineAmount(item), 0);
 
   function update(index: number, patch: Partial<InquiryLineItemInput>) {
     onChange?.(
@@ -238,14 +246,8 @@ export function StageItems({
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <h4 className="text-sm font-semibold text-slate-800">
-          {mode === "scope"
-            ? "What is needed"
-            : mode === "delivery"
-              ? "Items delivered"
-              : "Items"}
-        </h4>
-        {listEditable ? (
+        <h4 className="text-sm font-semibold text-slate-800">Items</h4>
+        {editable ? (
           <button
             type="button"
             onClick={() => onChange?.([...items, emptyLineItem()])}
@@ -258,170 +260,411 @@ export function StageItems({
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-slate-200">
-        <table className="w-full min-w-[34rem] text-sm">
+        <table className="w-full min-w-[32rem] text-sm">
           <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
             <tr>
               <th className="w-8 px-2 py-2">#</th>
               <th className="px-2 py-2">Description</th>
-              <th className="w-20 px-2 py-2">
-                {mode === "delivery" ? "Ordered" : "Qty"}
-              </th>
-              <th className="w-20 px-2 py-2">Unit</th>
-              {showPrices ? (
-                <>
-                  <th className="w-28 px-2 py-2">Unit price</th>
-                  <th className="w-28 px-2 py-2 text-right">Amount</th>
-                </>
-              ) : null}
-              {showDelivered ? (
-                <th className="w-24 px-2 py-2">Delivered</th>
-              ) : null}
-              {listEditable ? <th className="w-9 px-2 py-2" /> : null}
+              <th className="w-24 px-2 py-2">Qty</th>
+              <th className="w-32 px-2 py-2">Price (AED)</th>
+              <th className="w-28 px-2 py-2 text-right">Amount</th>
+              {editable ? <th className="w-9 px-2 py-2" /> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {items.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-4 text-sm text-slate-500">
+                <td colSpan={6} className="px-3 py-4 text-sm text-slate-500">
                   No items yet.
                 </td>
               </tr>
             ) : (
-              items.map((item, index) => {
-                const short =
-                  item.deliveredQuantity !== "" &&
-                  Number(item.deliveredQuantity) < Number(item.quantity);
-                return (
-                  <tr key={item.id ?? `new-${index}`}>
-                    <td className={`${cell} pt-3 text-slate-500`}>
-                      {index + 1}
-                    </td>
-                    <td className={cell}>
-                      <input
-                        aria-label={`Item ${index + 1} description`}
-                        className={input}
-                        disabled={!listEditable}
-                        value={item.description}
-                        onChange={(event) =>
-                          update(index, { description: event.target.value })
+              items.map((item, index) => (
+                <tr key={item.id ?? `new-${index}`}>
+                  <td className={`${cell} pt-3 text-slate-500`}>{index + 1}</td>
+                  <td className={cell}>
+                    <input
+                      aria-label={`Item ${index + 1} description`}
+                      className={input}
+                      disabled={!editable}
+                      value={item.description}
+                      onChange={(event) =>
+                        update(index, { description: event.target.value })
+                      }
+                    />
+                  </td>
+                  <td className={cell}>
+                    <input
+                      aria-label={`Item ${index + 1} quantity`}
+                      inputMode="decimal"
+                      className={input}
+                      disabled={!editable}
+                      value={item.quantity}
+                      onChange={(event) =>
+                        update(index, { quantity: event.target.value })
+                      }
+                    />
+                  </td>
+                  <td className={cell}>
+                    <input
+                      aria-label={`Item ${index + 1} price`}
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      className={input}
+                      disabled={!editable}
+                      value={item.unitPrice}
+                      onChange={(event) =>
+                        update(index, { unitPrice: event.target.value })
+                      }
+                    />
+                  </td>
+                  <td
+                    className={`${cell} pt-3 text-right tabular-nums text-slate-900`}
+                  >
+                    {formatMoney(lineAmount(item))}
+                  </td>
+                  {editable ? (
+                    <td className={`${cell} pt-2`}>
+                      <button
+                        type="button"
+                        aria-label={`Remove item ${index + 1}`}
+                        onClick={() =>
+                          onChange?.(items.filter((_, i) => i !== index))
                         }
-                      />
+                        className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                      >
+                        <TrashIcon />
+                      </button>
                     </td>
-                    <td className={cell}>
-                      <input
-                        aria-label={`Item ${index + 1} quantity`}
-                        inputMode="decimal"
-                        className={input}
-                        disabled={!listEditable}
-                        value={item.quantity}
-                        onChange={(event) =>
-                          update(index, { quantity: event.target.value })
-                        }
-                      />
-                    </td>
-                    <td className={cell}>
-                      <input
-                        aria-label={`Item ${index + 1} unit`}
-                        className={input}
-                        disabled={!listEditable}
-                        value={item.unit}
-                        onChange={(event) =>
-                          update(index, { unit: event.target.value })
-                        }
-                      />
-                    </td>
-                    {showPrices ? (
-                      <>
-                        <td className={cell}>
-                          <input
-                            aria-label={`Item ${index + 1} unit price`}
-                            inputMode="decimal"
-                            placeholder="0.00"
-                            className={input}
-                            disabled={!editable || mode !== "priced"}
-                            value={item.unitPrice}
-                            onChange={(event) =>
-                              update(index, { unitPrice: event.target.value })
-                            }
-                          />
-                        </td>
-                        <td
-                          className={`${cell} pt-3 text-right tabular-nums text-slate-900`}
-                        >
-                          {formatMoney(lineAmount(item))}
-                        </td>
-                      </>
-                    ) : null}
-                    {showDelivered ? (
-                      <td className={cell}>
-                        <input
-                          aria-label={`Item ${index + 1} delivered quantity`}
-                          inputMode="decimal"
-                          className={[
-                            input,
-                            short ? "!border-amber-400 !bg-amber-50" : "",
-                          ].join(" ")}
-                          disabled={!editable || mode !== "delivery"}
-                          value={item.deliveredQuantity}
-                          onChange={(event) =>
-                            update(index, {
-                              deliveredQuantity: event.target.value,
-                            })
-                          }
-                        />
-                      </td>
-                    ) : null}
-                    {listEditable ? (
-                      <td className={`${cell} pt-2`}>
-                        <button
-                          type="button"
-                          aria-label={`Remove item ${index + 1}`}
-                          onClick={() =>
-                            onChange?.(items.filter((_, i) => i !== index))
-                          }
-                          className="cursor-pointer rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
-                        >
-                          <TrashIcon />
-                        </button>
-                      </td>
-                    ) : null}
-                  </tr>
-                );
-              })
+                  ) : null}
+                </tr>
+              ))
             )}
           </tbody>
+          {items.length > 0 ? (
+            <tfoot>
+              <tr className="border-t border-slate-200 bg-slate-50 font-semibold text-slate-900">
+                <td colSpan={4} className="px-2 py-2 text-right">
+                  Total before VAT (AED)
+                </td>
+                <td className="px-2 py-2 text-right tabular-nums">
+                  {formatMoney(total)}
+                </td>
+                {editable ? <td /> : null}
+              </tr>
+            </tfoot>
+          ) : null}
         </table>
       </div>
-
-      {showPrices && totals ? <TotalsBox totals={totals} /> : null}
     </div>
   );
 }
 
-function TotalsBox({ totals }: { totals: InquiryTotals }) {
-  const row = "flex items-center justify-between gap-6 py-1";
+/* --------------------- the form beside a paper: its lists -------------------- */
+
+/** A small labelled box in the column beside a paper. */
+function SmallInput({
+  id,
+  label,
+  row,
+  value,
+  onChange,
+  disabled,
+  invalid = false,
+  numeric = false,
+  className = "",
+}: {
+  id?: string;
+  label: string;
+  /** Which row it belongs to, read out with the label: "Item 2". */
+  row: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  invalid?: boolean;
+  numeric?: boolean;
+  className?: string;
+}) {
   return (
-    <div className="mt-3 ml-auto w-full max-w-xs rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm tabular-nums">
-      <div className={row}>
-        <span className="text-slate-600">Subtotal</span>
-        <span>{formatMoney(totals.subtotal)}</span>
+    <label className={`flex min-w-0 flex-col gap-1 ${className}`}>
+      <span className="field-label">{label}</span>
+      <input
+        id={id}
+        aria-label={`${row} ${label.toLowerCase()}`}
+        value={value}
+        disabled={disabled}
+        aria-invalid={invalid || undefined}
+        inputMode={numeric ? "decimal" : undefined}
+        onChange={(event) => onChange(event.target.value)}
+        className="field w-full !px-2 !py-1.5"
+      />
+    </label>
+  );
+}
+
+function RowCard({
+  title,
+  onRemove,
+  children,
+}: {
+  title: string;
+  onRemove?: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <p className="text-sm font-semibold text-slate-800">{title}</p>
+        {onRemove ? (
+          <button
+            type="button"
+            aria-label={`Remove ${title}`}
+            onClick={onRemove}
+            className="rounded-md p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+          >
+            <TrashIcon />
+          </button>
+        ) : null}
       </div>
-      {totals.discount > 0 ? (
-        <div className={row}>
-          <span className="text-slate-600">Discount</span>
-          <span>− {formatMoney(totals.discount)}</span>
+      <div className="grid grid-cols-6 gap-2">{children}</div>
+    </div>
+  );
+}
+
+function AddButton({
+  children,
+  onClick,
+}: {
+  children: string;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" onClick={onClick} className="btn btn-secondary btn-sm">
+      <PlusIcon className="h-3.5 w-3.5" />
+      {children}
+    </button>
+  );
+}
+
+/**
+ * The job's items as far as the paper on screen is concerned: the whole list
+ * on the quotation, the delivered quantities on the delivery note, and on any
+ * paper the details it writes against each item (a remark, a heat number).
+ */
+export function ItemsEditor({
+  stage,
+  document,
+  items,
+  onChange,
+  disabled,
+  invalid,
+}: {
+  stage: InquiryStageKey;
+  document: string;
+  items: InquiryLineItemInput[];
+  onChange: (items: InquiryLineItemInput[]) => void;
+  disabled: boolean;
+  invalid: ReadonlySet<string>;
+}) {
+  const definition = STAGE_DEFINITIONS[stage];
+  const details = definition.itemDetails.filter((detail) =>
+    detail.on.includes(document),
+  );
+  const listOpen = definition.items === "priced";
+  const delivery = definition.items === "delivery";
+  if (!listOpen && !delivery && details.length === 0) return null;
+
+  const update = (index: number, patch: Partial<InquiryLineItemInput>) =>
+    onChange(items.map((item, i) => (i === index ? { ...item, ...patch } : item)));
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <h4 className="text-sm font-semibold text-slate-800">Items</h4>
+      {items.length === 0 ? (
+        <p className="text-sm text-slate-500">No items yet.</p>
+      ) : null}
+      {items.map((item, index) => (
+        <RowCard
+          key={item.id ?? `new-${index}`}
+          title={
+            listOpen
+              ? `Item ${index + 1}`
+              : `${index + 1}. ${item.description} · ${item.quantity} ${item.unit}`
+          }
+          onRemove={
+            listOpen && !disabled
+              ? () => onChange(items.filter((_, i) => i !== index))
+              : undefined
+          }
+        >
+          {listOpen ? (
+            <>
+              <SmallInput
+                row={`Item ${index + 1}`}
+                label="Description"
+                value={item.description}
+                disabled={disabled}
+                className="col-span-6"
+                onChange={(description) => update(index, { description })}
+              />
+              <SmallInput
+                row={`Item ${index + 1}`}
+                label="Unit"
+                value={item.unit}
+                disabled={disabled}
+                className="col-span-2"
+                onChange={(unit) => update(index, { unit })}
+              />
+              <SmallInput
+                row={`Item ${index + 1}`}
+                label="Qty"
+                value={item.quantity}
+                disabled={disabled}
+                numeric
+                className="col-span-2"
+                onChange={(quantity) => update(index, { quantity })}
+              />
+              <SmallInput
+                row={`Item ${index + 1}`}
+                id={fillId(itemFillKey(index, "unitPrice"))}
+                label="Unit price"
+                value={item.unitPrice}
+                disabled={disabled}
+                numeric
+                invalid={
+                  invalid.has(itemFillKey(index, "unitPrice")) &&
+                  !Number(item.unitPrice)
+                }
+                className="col-span-2"
+                onChange={(unitPrice) => update(index, { unitPrice })}
+              />
+            </>
+          ) : null}
+          {delivery ? (
+            <SmallInput
+                row={`Item ${index + 1}`}
+              id={fillId(itemFillKey(index, "deliveredQuantity"))}
+              label="Delivered qty"
+              value={item.deliveredQuantity}
+              disabled={disabled}
+              numeric
+              invalid={
+                invalid.has(itemFillKey(index, "deliveredQuantity")) &&
+                !item.deliveredQuantity
+              }
+              className="col-span-2"
+              onChange={(deliveredQuantity) =>
+                update(index, { deliveredQuantity })
+              }
+            />
+          ) : null}
+          {details.map((detail) => (
+            <SmallInput
+                row={`Item ${index + 1}`}
+              key={detail.key}
+              label={detail.label}
+              value={item.details[detail.key] ?? ""}
+              disabled={disabled}
+              className={
+                details.length + (delivery ? 1 : 0) === 1
+                  ? "col-span-6"
+                  : delivery
+                    ? "col-span-4"
+                    : "col-span-3"
+              }
+              onChange={(value) =>
+                update(index, {
+                  details: { ...item.details, [detail.key]: value },
+                })
+              }
+            />
+          ))}
+        </RowCard>
+      ))}
+      {listOpen && !disabled ? (
+        <div>
+          <AddButton onClick={() => onChange([...items, emptyLineItem()])}>
+            Add item
+          </AddButton>
         </div>
       ) : null}
-      <div className={row}>
-        <span className="text-slate-600">VAT {totals.vatPercent}%</span>
-        <span>{formatMoney(totals.vat)}</span>
-      </div>
-      <div
-        className={`${row} mt-1 border-t border-slate-300 pt-2 font-semibold text-slate-900`}
-      >
-        <span>Total (AED)</span>
-        <span>{formatMoney(totals.total)}</span>
-      </div>
     </div>
+  );
+}
+
+/** The lists a paper keeps of its own: purchase order lines, packages. */
+export function TablesEditor({
+  stage,
+  document,
+  tables,
+  onChange,
+  disabled,
+}: {
+  stage: InquiryStageKey;
+  document: string;
+  tables: StageTables;
+  onChange: (name: string, rows: Record<string, string>[]) => void;
+  disabled: boolean;
+}) {
+  const lists = Object.entries(STAGE_DEFINITIONS[stage].tables).filter(
+    ([, table]) => table.on === document,
+  );
+  if (lists.length === 0) return null;
+
+  return (
+    <>
+      {lists.map(([name, table]) => {
+        const rows = tables[name] ?? [];
+        return (
+          <div key={name} className="flex flex-col gap-2.5">
+            <h4 className="text-sm font-semibold text-slate-800">
+              {table.title}
+            </h4>
+            {rows.map((row, index) => (
+              <RowCard
+                key={index}
+                title={`${table.rowLabel} ${index + 1}`}
+                onRemove={
+                  disabled
+                    ? undefined
+                    : () =>
+                        onChange(
+                          name,
+                          rows.filter((_, i) => i !== index),
+                        )
+                }
+              >
+                {table.columns.map((column, columnIndex) => (
+                  <SmallInput
+                    row={`${table.rowLabel} ${index + 1}`}
+                    key={column.key}
+                    label={column.label}
+                    value={row[column.key] ?? ""}
+                    disabled={disabled}
+                    numeric={column.numeric}
+                    className={columnIndex === 0 ? "col-span-6" : "col-span-3"}
+                    onChange={(value) =>
+                      onChange(
+                        name,
+                        rows.map((item, i) =>
+                          i === index ? { ...item, [column.key]: value } : item,
+                        ),
+                      )
+                    }
+                  />
+                ))}
+              </RowCard>
+            ))}
+            {disabled ? null : (
+              <div>
+                <AddButton onClick={() => onChange(name, [...rows, {}])}>
+                  {`Add ${table.rowLabel.toLowerCase()}`}
+                </AddButton>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </>
   );
 }

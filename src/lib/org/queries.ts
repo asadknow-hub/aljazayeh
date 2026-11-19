@@ -11,7 +11,10 @@ import {
   users,
 } from "@/db/schema";
 import { UserError } from "@/lib/errors";
-import { INQUIRY_STAGES } from "@/lib/inquiries/stages";
+import {
+  defaultInquiryWorkflowMap,
+  INQUIRY_STAGES,
+} from "@/lib/inquiries/stages";
 import { assertValidOrgCode } from "@/lib/org/code";
 import { resolveOrg } from "@/lib/org/resolve";
 
@@ -147,11 +150,12 @@ export async function createOrganizationForUser(
       adminEmail: creator?.email.trim() ?? "",
     });
 
+    const workflow = defaultInquiryWorkflowMap();
     await tx.insert(inquiryWorkflowSettings).values(
       INQUIRY_STAGES.map((stage) => ({
         organizationId,
         stageKey: stage.key,
-        departmentKey: "admin",
+        departmentKey: workflow[stage.key].departmentKey,
       })),
     );
 

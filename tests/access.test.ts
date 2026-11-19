@@ -197,6 +197,16 @@ describe("who can do what", () => {
     adminEmail: "",
     nameArabic: "",
     attendanceSheetNotes: "",
+    address: "",
+    addressArabic: "",
+    poBox: "",
+    trn: "",
+    bankName: "",
+    bankAccountName: "",
+    bankAccountNumber: "",
+    bankIban: "",
+    bankSwift: "",
+    bankBranch: "",
   };
   const salary = {
     salaryAmount: "1",
@@ -435,6 +445,11 @@ describe("inquiry pipeline", () => {
       approveInquiryStageForUser(people.sara.userId, ORG, inquiryId),
       /Only Management/,
     );
+    // An unfinished step cannot be approved either.
+    await refused(
+      approveInquiryStageForUser(people.mona.userId, ORG, inquiryId),
+      /not ready to approve. Still needed: Inquiry title, Contact/,
+    );
     // The refused attempt saved nothing, so the step is still as it was.
     const view = await getInquiryForUser(people.sara.userId, ORG, inquiryId);
     assert.equal(view?.title, "");
@@ -476,6 +491,7 @@ describe("inquiry pipeline", () => {
           unit: "m",
           unitPrice: "",
           deliveredQuantity: "",
+          details: {},
         },
       ]),
       { complete: false },

@@ -7,7 +7,10 @@ import {
   type InquiryWorkflowStageConfig,
 } from "@/lib/inquiries/stages";
 import { STAGE_DEFINITIONS } from "@/lib/inquiries/stage-forms";
-import type { InquiryLineItemInput } from "@/lib/inquiries/types";
+import type {
+  InquiryLineItemInput,
+  StageTables,
+} from "@/lib/inquiries/types";
 import { UserError } from "@/lib/errors";
 
 const MAX_TEXT_LENGTH = 4000;
@@ -47,6 +50,12 @@ export function normalizeStageFields(
         }
         fields[field.key] = value;
         break;
+      case "time":
+        if (!/^\d{2}:\d{2}$/.test(value)) {
+          throw new UserError(`${field.label} is not a valid time.`);
+        }
+        fields[field.key] = value;
+        break;
       case "amount":
         fields[field.key] = numberOrThrow(value, field.label).toFixed(2);
         break;
@@ -70,16 +79,6 @@ export function normalizeStageFields(
   return fields;
 }
 
-/** The questions of a step that must be answered before it is completed. */
-export function missingStageFields(
-  stage: InquiryStageKey,
-  fields: Record<string, string>,
-): string[] {
-  return STAGE_DEFINITIONS[stage].fields
-    .filter((field) => field.required && !fields[field.key])
-    .map((field) => field.label);
-}
-
 export function normalizeLineItems(
   items: InquiryLineItemInput[],
 ): InquiryLineItemInput[] {
@@ -91,6 +90,12 @@ export function normalizeLineItems(
       unit: String(item.unit ?? "").trim(),
       unitPrice: String(item.unitPrice ?? "").trim(),
       deliveredQuantity: String(item.deliveredQuantity ?? "").trim(),
+      details: Object.fromEntries(
+        Object.entries(item.details ?? {}).map(([key, value]) => [
+          key,
+          String(value ?? "").trim().slice(0, MAX_TEXT_LENGTH),
+        ]),
+      ),
     }))
     // A row left completely blank was never meant to be an item.
     .filter((item) => item.id || item.description || Number(item.unitPrice))
@@ -107,8 +112,43 @@ export function normalizeLineItems(
         deliveredQuantity: item.deliveredQuantity
           ? numberOrThrow(item.deliveredQuantity, "Delivered quantity").toFixed(2)
           : "",
+        details: item.details,
       };
     });
+}
+
+/**
+ * Tidy the lists a step keeps of its own. Only the lists and columns the
+ * step defines are kept, and rows left completely blank are dropped.
+ */
+export function normalizeStageTables(
+  stage: InquiryStageKey,
+  raw: StageTables | undefined,
+): StageTables {
+  const tables: StageTables = {};
+
+  for (const [name, table] of Object.entries(STAGE_DEFINITIONS[stage].tables)) {
+    tables[name] = (raw?.[name] ?? [])
+      .map((row) =>
+        Object.fromEntries(
+          table.columns.map((column) => {
+            const value = String(row?.[column.key] ?? "").trim();
+            if (value.length > MAX_TEXT_LENGTH) {
+              throw new UserError(`${column.label} is too long.`);
+            }
+            return [
+              column.key,
+              column.numeric && value
+                ? numberOrThrow(value, column.label).toFixed(2)
+                : value,
+            ];
+          }),
+        ),
+      )
+      .filter((row) => Object.values(row).some(Boolean));
+  }
+
+  return tables;
 }
 
 export function normalizeInquiryWorkflowMap(

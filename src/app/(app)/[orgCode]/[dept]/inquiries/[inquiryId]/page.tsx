@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { InquiryDetailClient } from "@/components/inquiries/inquiry-detail-client";
+import { getCompanyLetterheadForUser } from "@/lib/company-settings/queries";
 import {
   getInquiryForUser,
   listAssignableStaffForUser,
@@ -20,17 +21,19 @@ export default async function DepartmentInquiryPage({
   const { session, org } = await loadOrgPage(orgCode);
 
   // Returns nothing for inquiries this person is not allowed to see.
-  const [inquiry, assignable] = await Promise.all([
+  const [inquiry, assignable, company] = await Promise.all([
     getInquiryForUser(session.userId, org.code, inquiryId),
     listAssignableStaffForUser(session.userId, org.code),
+    getCompanyLetterheadForUser(session.userId, org.code),
   ]);
-  if (!inquiry) notFound();
+  if (!inquiry || !company) notFound();
 
   return (
     <InquiryDetailClient
       orgCode={org.code}
       initialInquiry={inquiry}
       backHref={`/${org.code}/${dept}?section=inquiries`}
+      company={company}
       myStaffId={org.access.staffId}
       assignable={assignable}
     />

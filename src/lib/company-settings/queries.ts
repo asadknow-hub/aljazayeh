@@ -6,6 +6,7 @@ import { organizationSettings, organizations } from "@/db/schema";
 import { assertCan, can } from "@/lib/access/access";
 import {
   MAX_LOGO_LENGTH,
+  type CompanyLetterhead,
   type CompanySettingsInput,
   type CompanySettingsView,
 } from "@/lib/company-settings/types";
@@ -43,6 +44,54 @@ export async function getCompanySettingsForUser(
       nameArabic: settings?.nameArabic ?? "",
       logoImage: settings?.logoImage ?? null,
       attendanceSheetNotes: settings?.attendanceSheetNotes ?? "",
+      address: settings?.address ?? "",
+      addressArabic: settings?.addressArabic ?? "",
+      poBox: settings?.poBox ?? "",
+      trn: settings?.trn ?? "",
+      bankName: settings?.bankName ?? "",
+      bankAccountName: settings?.bankAccountName ?? "",
+      bankAccountNumber: settings?.bankAccountNumber ?? "",
+      bankIban: settings?.bankIban ?? "",
+      bankSwift: settings?.bankSwift ?? "",
+      bankBranch: settings?.bankBranch ?? "",
+    };
+  });
+}
+
+/**
+ * The company's own details as printed on customer documents. Anyone in the
+ * company may read them: they are on every paper that leaves the office.
+ */
+export async function getCompanyLetterheadForUser(
+  userId: string,
+  orgCode: string,
+): Promise<CompanyLetterhead | null> {
+  return withTenantContext(userId, async (tx) => {
+    const org = await resolveOrg(tx, userId, orgCode);
+    if (!org) return null;
+
+    const [settings] = await tx
+      .select()
+      .from(organizationSettings)
+      .where(eq(organizationSettings.organizationId, org.id))
+      .limit(1);
+
+    return {
+      name: org.name,
+      nameArabic: settings?.nameArabic ?? "",
+      logoImage: settings?.logoImage ?? null,
+      telephone: settings?.telephoneNumber ?? "",
+      email: settings?.email ?? "",
+      address: settings?.address ?? "",
+      addressArabic: settings?.addressArabic ?? "",
+      poBox: settings?.poBox ?? "",
+      trn: settings?.trn ?? "",
+      bankName: settings?.bankName ?? "",
+      bankAccountName: settings?.bankAccountName ?? "",
+      bankAccountNumber: settings?.bankAccountNumber ?? "",
+      bankIban: settings?.bankIban ?? "",
+      bankSwift: settings?.bankSwift ?? "",
+      bankBranch: settings?.bankBranch ?? "",
     };
   });
 }
