@@ -6,9 +6,10 @@ import { documentCounters } from "@/db/schema";
 import { appDateValue } from "@/lib/datetime/format";
 
 /**
- * The next running number for a kind of document, e.g. "AJE/FN/2026/0007".
+ * The next running number for a kind of document, e.g. "FN/2026/0007".
  * Numbers restart each year and are never reused; two people saving at the
- * same moment get different numbers.
+ * same moment get different numbers. The company is not part of the number:
+ * every paper already carries the company's name at the top.
  *
  * `counterKey` says which count it is and never changes. `code` is what is
  * written in the number; a company may choose its own, and the count carries
@@ -16,7 +17,7 @@ import { appDateValue } from "@/lib/datetime/format";
  */
 export async function nextDocumentNumber(
   tx: DbTransaction,
-  org: { id: string; code: string },
+  org: { id: string },
   counterKey: string,
   code: string = counterKey,
 ): Promise<string> {
@@ -35,5 +36,5 @@ export async function nextDocumentNumber(
     .returning({ lastNumber: documentCounters.lastNumber });
 
   const number = String(counter!.lastNumber).padStart(4, "0");
-  return `${org.code.toUpperCase()}/${code}/${year}/${number}`;
+  return `${code}/${year}/${number}`;
 }

@@ -5,6 +5,7 @@ import { useState, type FormEvent } from "react";
 import {
   countLabel,
   Fact,
+  LetterheadReminder,
   StepFacts,
   whenPrepared,
 } from "@/components/company-docs/where-used";
@@ -285,10 +286,13 @@ export function CompanyDocEditor({
   initialDetail,
   company,
   today,
+  canManageCompany,
 }: {
   orgCode: string;
   initialDetail: CompanyDocDetail;
   company: CompanyLetterhead;
+  /** The signed-in person may enter the company's logo and details. */
+  canManageCompany: boolean;
   /** The day the page was opened, for the sample job's dates. */
   today: string;
 }) {
@@ -323,7 +327,6 @@ export function CompanyDocEditor({
   };
   const templates = { ...detail.templates, [doc.stage]: stepTemplate };
   const sample = sampleInquiry({
-    orgCode,
     today,
     jobType: exportJob ? "export" : "local",
     templates,
@@ -529,7 +532,7 @@ export function CompanyDocEditor({
                   <span className="text-xs text-slate-500">
                     New numbers look like{" "}
                     <span className="font-mono text-slate-700">
-                      {orgCode.toUpperCase()}/{code}/{today.slice(0, 4)}/0001
+                      {code}/{today.slice(0, 4)}/0001
                     </span>
                     . Numbers already given keep their code, and the count
                     carries on.
@@ -687,6 +690,13 @@ export function CompanyDocEditor({
           </div>
         ) : null}
       </div>
+      {doc.kind === "paper" ? (
+        <LetterheadReminder
+          orgCode={orgCode}
+          company={company}
+          canSet={canManageCompany}
+        />
+      ) : null}
       {doc.kind === "paper" ? (
         <PaperProvider
           state={{

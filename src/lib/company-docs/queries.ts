@@ -59,8 +59,8 @@ import { requireOrg, resolveOrg, type ResolvedOrg } from "@/lib/org/resolve";
 import { loadSignoffState } from "@/lib/signoffs/queries";
 
 /** What a document's numbers look like this year. */
-function numberExample(org: ResolvedOrg, code: string): string {
-  return `${org.code.toUpperCase()}/${code}/${appDateValue().slice(0, 4)}/0001`;
+function numberExample(code: string): string {
+  return `${code}/${appDateValue().slice(0, 4)}/0001`;
 }
 
 function placeOf(stage: InquiryStageKey, jobType: string): number | null {
@@ -152,7 +152,7 @@ function toRow(
     kind: entry.kind,
     onlyWhen: entry.onlyWhen,
     numberExample: entry.counterKey
-      ? numberExample(org, numberCode(entry.counterKey, live?.settings))
+      ? numberExample(numberCode(entry.counterKey, live?.settings))
       : null,
     used,
     version: live?.version ?? 0,
@@ -205,7 +205,7 @@ async function loadSignedForms(
         label: step.label,
         name: step.expectedName,
       })),
-      numberExample: form ? numberExample(org, form.counterKey) : null,
+      numberExample: form ? numberExample(form.counterKey) : null,
       raised: counts.reduce((total, row) => total + row.forms, 0),
       waiting: counts
         .filter((row) => row.status === "pending")

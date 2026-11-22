@@ -265,7 +265,7 @@ Five more of the company's paper forms use the same sign-off mechanism as leave 
 Each is raised and followed on the same kind of screen as a leave request: fields on the left,
 the form filling in on the right, **Send for Approval** (`/{code}/forms/new/{type}`), then the
 approval panel beside the form (`/{code}/forms/{id}`). Each gets a running reference number per
-year (`AJE/FN/2026/0001`) when it is sent, appears under My Tasks for whoever signs next, and
+year (`FN/2026/0001`) when it is sent, appears under My Tasks for whoever signs next, and
 prints like its paper version. Forms about an
 employee leave a box for that employee to sign on the printed copy.
 
@@ -290,16 +290,16 @@ responsible for it.
 
 | # | Step | Papers prepared in it | Numbers |
 | --- | --- | --- | --- |
-| 1 | Inquiry | none: the customer's details and the items with quantity and price | `AJE/INQ/2026/0001` |
-| 2 | Quotation | Quotation (Commercial Quotation for an export job), two pages | `AJE/QTN/…` |
-| 3 | LPO | chosen first, from a dropdown: the **customer's LPO** (their file is uploaded, with its number and date) or **our own LPO** (prepared here on the company's Purchase Order form) | `AJE/LPO/…` |
-| 4 | Proforma Invoice | Proforma Invoice | `AJE/PI/…` |
-| 5 | Job Card | Job Card; Certificate of Compliance and Coating Certificate when the job needs them | `AJE/JC/…`, `AJE/COC/…`, `AJE/CC/…` |
-| 6 | Progress Invoice | Progress Invoice | `AJE/PRG/…` |
-| 7 | Delivery Note | Delivery Note | `AJE/DN/…` |
-| 8 | Tax Invoice | Tax Invoice | `AJE/INV/…` |
-| 9 | Commercial Invoice (export jobs only) | Commercial Invoice; Packing List when needed | `AJE/CI/…`, `AJE/PL/…` |
-| 9 / 10 | Receipt Voucher | Receipt Voucher; closes the inquiry | `AJE/RV/…` |
+| 1 | Inquiry | none: the customer's details and the items with quantity and price | `INQ/2026/0001` |
+| 2 | Quotation | Quotation (Commercial Quotation for an export job), two pages | `QTN/…` |
+| 3 | LPO | chosen first, from a dropdown: the **customer's LPO** (their file is uploaded, with its number and date) or **our own LPO** (prepared here on the company's Purchase Order form) | `LPO/…` |
+| 4 | Proforma Invoice | Proforma Invoice | `PI/…` |
+| 5 | Job Card | Job Card; Certificate of Compliance and Coating Certificate when the job needs them | `JC/…`, `COC/…`, `CC/…` |
+| 6 | Progress Invoice | Progress Invoice | `PRG/…` |
+| 7 | Delivery Note | Delivery Note | `DN/…` |
+| 8 | Tax Invoice | Tax Invoice | `INV/…` |
+| 9 | Commercial Invoice (export jobs only) | Commercial Invoice; Packing List when needed | `CI/…`, `PL/…` |
+| 9 / 10 | Receipt Voucher | Receipt Voucher; closes the inquiry | `RV/…` |
 
 A local job has nine steps. An export job has the Commercial Invoice as
 step 9 and the Receipt Voucher as step 10.
@@ -310,6 +310,11 @@ step 9 and the Receipt Voucher as step 10.
   says is written by hand is asked for; everything else comes from the
   earlier steps: customer details, items, prices, and the numbers of the
   quotation, LPO, job card and delivery note.
+- Numbers read `QTN/2026/0001`: the paper's code, the year, a running count
+  that restarts each year. The company is not in the number; its name and
+  logo are already at the top of every paper. Each company has its own
+  logo, address and contact details, entered once under Company Settings,
+  and Company Docs says so when they are missing.
 - A step gets its number the moment the job reaches it, shown beside the
   step's name, in the step list, and as a pill at the top of the inquiry
   together with the numbers of all the other steps reached so far.
@@ -404,7 +409,7 @@ Management can change:
   in before the step moves on, and what it starts as. A detail that is
   switched off is no longer asked; its line is left out of the paper, or its
   box stays empty where the form is a table.
-- **The code in its numbers** (`QTN` in `AJE/QTN/2026/0001`).
+- **The code in its numbers** (`QTN` in `QTN/2026/0001`).
 
 The rules that keep this safe:
 

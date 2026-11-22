@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fact } from "@/components/company-docs/where-used";
+import { Fact, LetterheadReminder } from "@/components/company-docs/where-used";
 import { DocumentSplit } from "@/components/documents/document-split";
 import { ApprovalFormSheet } from "@/components/forms/approval-form-sheet";
 import { LeaveForm } from "@/components/leave/leave-form";
@@ -33,14 +33,14 @@ export function SignedFormDoc({
   form,
   company,
   today,
-  canSetSignatories,
+  canManageCompany,
 }: {
   orgCode: string;
   form: SignedFormRow;
   company: CompanyLetterhead;
   /** The day the page was opened, for the sample's dates. */
   today: string;
-  canSetSignatories: boolean;
+  canManageCompany: boolean;
 }) {
   usePageTitle(form.name);
 
@@ -176,7 +176,7 @@ export function SignedFormDoc({
                 ))}
               </ol>
               <p className="mt-3 text-xs text-slate-500">
-                {canSetSignatories ? (
+                {canManageCompany ? (
                   <>
                     Who holds each position is set under{" "}
                     <Link
@@ -204,6 +204,11 @@ export function SignedFormDoc({
         <span className="font-medium text-slate-900">Sample.</span> This is how
         it comes out before anyone has signed.
       </p>
+      <LetterheadReminder
+        orgCode={orgCode}
+        company={company}
+        canSet={canManageCompany}
+      />
       {sample ? (
         <ApprovalFormSheet form={sample} />
       ) : (

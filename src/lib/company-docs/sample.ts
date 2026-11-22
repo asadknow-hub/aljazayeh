@@ -190,16 +190,15 @@ function answerOf(
  * at: the answers are set so that this paper is one the job needs.
  */
 export function sampleInquiry(options: {
-  orgCode: string;
   today: string;
   jobType: "local" | "export";
   templates: Templates;
   show: { stage: InquiryStageKey; document: string };
 }): InquiryView {
-  const { orgCode, today, jobType, templates, show } = options;
+  const { today, jobType, templates, show } = options;
   const year = today.slice(0, 4);
   const number = (counterKey: string, template: StepTemplate, owner: string) =>
-    `${orgCode.toUpperCase()}/${numberCode(counterKey, template[owner])}/${year}/0042`;
+    `${numberCode(counterKey, template[owner])}/${year}/0042`;
   const total = inquiryTotals(ITEMS, {
     discount: ANSWERS.discount!,
     vatPercent: "5",
