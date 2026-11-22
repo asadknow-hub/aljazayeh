@@ -7,6 +7,12 @@
  * per step, which documents it has, what is written on them by hand, and what
  * must be there before the job can move on. The layout of each paper is in
  * src/components/inquiries/papers.tsx.
+ *
+ * What is written here is how the system is built. A company can change the
+ * wording of a paper, which details are asked and required, their starting
+ * values and the code in its numbers under Company Docs; those changes are
+ * kept as a `StepTemplate` and applied on top by the functions at the end of
+ * this file.
  */
 import type { InquiryStageKey } from "@/lib/inquiries/stages";
 
@@ -35,6 +41,12 @@ export type StageField = {
   on: string;
   /** Must be filled in before the step can be completed. */
   required?: boolean;
+  /**
+   * The system itself reads this answer (which papers a job needs, how its
+   * total is worked out), so a company cannot switch it off or make it
+   * optional.
+   */
+  locked?: boolean;
   /** Asked only when another answer of the step has this value. */
   showWhen?: Condition;
   options?: readonly { value: string; label: string }[];
@@ -59,9 +71,25 @@ export type StageField = {
  */
 type StageItemsMode = "entry" | "priced" | "delivery" | "fixed";
 
-type StageDocument = {
+/** A piece of fixed wording on a paper that a company can make its own. */
+export type PaperText = {
+  key: string;
+  /** What it is, for the person changing it. */
+  label: string;
+  /** The built-in wording. `{company}` stands for the company's name. */
+  value: string;
+  /**
+   * title: the paper's heading, never empty. line: a few words.
+   * paragraph: running text. list: one point per line.
+   */
+  kind: "title" | "line" | "paragraph" | "list";
+};
+
+export type StageDocument = {
   key: string;
   title: string;
+  /** The fixed wording of the paper that can be changed. */
+  texts?: readonly PaperText[];
   /**
    * Short code in the document's number, e.g. AJE/QTN/2026/0001. A document
    * without one carries the number of its step.
@@ -95,6 +123,8 @@ type StageDefinition = {
   documents: StageDocument[];
   /** Code of the step's own number, for a step without a main paper. */
   counterKey?: string;
+  /** What the details the step asks for outside its papers are called. */
+  formTitle?: string;
   fields: StageField[];
   items: StageItemsMode;
   itemDetails: readonly ItemDetail[];
@@ -109,11 +139,198 @@ const JOB_TYPES = [
 
 const DEFAULT_VAT_PERCENT = "5";
 
+/* ------------------------- wording on the papers -------------------------- */
+
+const title = (value: string): PaperText => ({
+  key: "title",
+  label: "Title of the paper",
+  value,
+  kind: "title",
+});
+
+const ISSUED_BY_TEXTS: PaperText[] = [
+  {
+    key: "department",
+    label: "Department that issues it",
+    value: "Quality Control (QC)",
+    kind: "line",
+  },
+];
+
+const QUOTATION_TEXTS: PaperText[] = [
+  title("Quotation"),
+  {
+    key: "titleExport",
+    label: "Title for an export job",
+    value: "Commercial Quotation",
+    kind: "title",
+  },
+  {
+    key: "greeting",
+    label: "Greeting",
+    value: "Dear Valued Client,",
+    kind: "line",
+  },
+  {
+    key: "intro",
+    label: "Opening lines",
+    value:
+      "Thank you for reaching out to us. We are pleased to offer our official commercial quotation for your metal fabrication requirements as detailed below.",
+    kind: "paragraph",
+  },
+  {
+    key: "itemsHeading",
+    label: "Heading over the items",
+    value: "BOQ & Fabrication Price Breakdown",
+    kind: "line",
+  },
+  {
+    key: "termsHeading",
+    label: "Heading over the terms",
+    value: "Terms & Conditions",
+    kind: "line",
+  },
+  {
+    key: "signature",
+    label: "Under the signature line",
+    value: "Authorized Signature & Stamp",
+    kind: "line",
+  },
+];
+
+/** The tax invoice, and the proforma and progress invoices on the same form. */
+function invoiceTexts(name: string): PaperText[] {
+  return [
+    title(name),
+    {
+      key: "terms",
+      label: "Terms & Conditions",
+      value: [
+        "Payment must be cleared on or before the due date.",
+        "Late payments may incur a charge of 1.5% per month.",
+        "Goods/Services delivered are deemed accepted.",
+        "Title of goods remains with issuer until full payment.",
+        "Cheques payable to '{company}'.",
+      ].join("\n"),
+      kind: "list",
+    },
+  ];
+}
+
+const COMPLIANCE_TEXTS: PaperText[] = [
+  title("Certificate of Compliance"),
+  {
+    key: "statement",
+    label: "What the certificate confirms",
+    value:
+      "We hereby confirm and certify that the material/components listed below have been fully machined and processed in our workshop. The materials strictly comply with the Customer Purchase Order requirements, ASME/ASTM material standards, and original manufacturer's technical specifications.",
+    kind: "paragraph",
+  },
+  ...ISSUED_BY_TEXTS,
+  {
+    key: "stamp",
+    label: "Inside the signature box",
+    value: "OFFICIAL QA/QC STAMP & SIGNATURE",
+    kind: "line",
+  },
+];
+
+const COATING_TEXTS: PaperText[] = [
+  title("Coating Certificate"),
+  {
+    key: "subtitle",
+    label: "Line under the title",
+    value:
+      "Inspection And Testing For Compliance With ASTM B 633 Standard Specification",
+    kind: "line",
+  },
+  {
+    key: "processHeading",
+    label: "Heading over the process details",
+    value: "Process & Process Parameters (Electro Galvanizing)",
+    kind: "line",
+  },
+  {
+    key: "appearanceCriteria",
+    label: "Appearance: what is acceptable",
+    value:
+      "Smooth, continuous coating, free from gross surface imperfections, blisters or bare spots.",
+    kind: "paragraph",
+  },
+  {
+    key: "adhesionCriteria",
+    label: "Adhesion test: what is acceptable",
+    value:
+      "Coating does not lift off or flake off when pried with a stout knife (ASTM B571).",
+    kind: "paragraph",
+  },
+  {
+    key: "statement",
+    label: "Certification statement",
+    value:
+      "This is to certify that the above-mentioned items have been processed, inspected, and tested in accordance with ASTM B 633 specifications and customer order requirements. The results are fully compliant with all applicable technical parameters.",
+    kind: "paragraph",
+  },
+  ...ISSUED_BY_TEXTS,
+  {
+    key: "stamp",
+    label: "Inside the signature box",
+    value: "OFFICIAL STAMP & SIGNATURE",
+    kind: "line",
+  },
+];
+
+const DELIVERY_NOTE_TEXTS: PaperText[] = [
+  title("Delivery Note"),
+  {
+    key: "itemsHeading",
+    label: "Heading over the items",
+    value: "Delivery Item Details / Scope of Work Delivered",
+    kind: "line",
+  },
+  {
+    key: "termsHeading",
+    label: "Heading over the terms",
+    value: "Receipt & Acknowledgement Terms:",
+    kind: "line",
+  },
+  {
+    key: "terms",
+    label: "Receipt terms",
+    value: [
+      "Received the above-mentioned goods/services in good condition and as per specification.",
+      "Any discrepancy or damage must be reported within 24 hours of delivery in writing.",
+      "This Delivery Note serves as official proof of receipt of items mentioned above.",
+    ].join("\n"),
+    kind: "list",
+  },
+];
+
+const PACKING_LIST_TEXTS: PaperText[] = [
+  title("Packing List"),
+  {
+    key: "instructionsHeading",
+    label: "Heading over the instructions",
+    value: "Packing & Logistics Instructions",
+    kind: "line",
+  },
+  {
+    key: "instructions",
+    label: "Packing instructions (the words before a colon print in bold)",
+    value: [
+      "Packaging Standard: All wooden packaging complies with ISPM-15 heat-treated/fumigated standards for international export.",
+      "Shipping Marks: Packages are clearly marked with Consignee Name, Destination Port, Gross/Net Weight, and Package Number.",
+    ].join("\n"),
+    kind: "list",
+  },
+];
+
 export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
   inquiry: {
     purpose:
       "Record who is asking and what they need. These details fill in every paper that follows.",
     documents: [],
+    formTitle: "Inquiry details",
     items: "entry",
     itemDetails: [],
     tables: {},
@@ -124,6 +341,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         type: "text",
         on: STEP_FORM,
         required: true,
+        locked: true,
         wide: true,
       },
       {
@@ -132,6 +350,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         type: "text",
         on: STEP_FORM,
         required: true,
+        locked: true,
       },
       {
         key: "contactPerson",
@@ -166,6 +385,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         on: STEP_FORM,
         options: JOB_TYPES,
         required: true,
+        locked: true,
         prefill: "local",
       },
       {
@@ -201,7 +421,14 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
   quotation: {
     purpose:
       "Prepare the quotation for the customer. Its prices carry through to the job card, delivery note and invoices.",
-    documents: [{ key: "quotation", title: "Quotation", counterKey: "QTN" }],
+    documents: [
+      {
+        key: "quotation",
+        title: "Quotation",
+        counterKey: "QTN",
+        texts: QUOTATION_TEXTS,
+      },
+    ],
     items: "priced",
     itemDetails: [],
     tables: {},
@@ -222,6 +449,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         type: "number",
         on: "quotation",
         required: true,
+        locked: true,
         prefill: DEFAULT_VAT_PERCENT,
       },
       {
@@ -266,9 +494,19 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         key: "purchase_order",
         title: "Our LPO",
         enabledWhen: { field: "lpoType", value: "own" },
+        texts: [
+          title("Purchase Order"),
+          {
+            key: "signatory",
+            label: "Under the company's name, where it is signed",
+            value: "Authority Signatory",
+            kind: "line",
+          },
+        ],
       },
     ],
     counterKey: "LPO",
+    formTitle: "LPO choice and the customer's LPO",
     items: "fixed",
     itemDetails: [],
     tables: {
@@ -290,6 +528,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         type: "choice",
         on: STEP_FORM,
         required: true,
+        locked: true,
         wide: true,
         options: [
           { value: "customer", label: "Customer's LPO: they sent it to us" },
@@ -408,7 +647,12 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
     purpose:
       "Ask for the advance payment before work starts. Leave the advance empty if this job has none.",
     documents: [
-      { key: "proforma_invoice", title: "Proforma Invoice", counterKey: "PI" },
+      {
+        key: "proforma_invoice",
+        title: "Proforma Invoice",
+        counterKey: "PI",
+        texts: invoiceTexts("Proforma Invoice"),
+      },
     ],
     items: "fixed",
     itemDetails: [],
@@ -448,20 +692,42 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
     purpose:
       "Hand the job to the workshop. The compliance and coating certificates are prepared here when the job needs them.",
     documents: [
-      { key: "job_card", title: "Job Card", counterKey: "JC" },
+      {
+        key: "job_card",
+        title: "Job Card",
+        counterKey: "JC",
+        texts: [
+          title("Job Card"),
+          {
+            key: "scopeHeading",
+            label: "Heading over the list of work",
+            value: "Scope of Work & Instructions",
+            kind: "line",
+          },
+          {
+            key: "logHeading",
+            label: "Heading over the time log",
+            value: "Time Log & Technician Remarks",
+            kind: "line",
+          },
+        ],
+      },
       {
         key: "compliance_certificate",
         title: "Certificate of Compliance",
         counterKey: "COC",
         enabledWhen: { field: "complianceCertificate", value: "yes" },
+        texts: COMPLIANCE_TEXTS,
       },
       {
         key: "coating_certificate",
         title: "Coating Certificate",
         counterKey: "CC",
         enabledWhen: { field: "coatingCertificate", value: "yes" },
+        texts: COATING_TEXTS,
       },
     ],
+    formTitle: "Which certificates the job needs",
     items: "fixed",
     itemDetails: [
       { key: "jobRemark", label: "Remark", on: ["job_card"] },
@@ -484,12 +750,14 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         label: "This job needs a Certificate of Compliance",
         type: "yesno",
         on: STEP_FORM,
+        locked: true,
       },
       {
         key: "coatingCertificate",
         label: "This job needs a Coating Certificate",
         type: "yesno",
         on: STEP_FORM,
+        locked: true,
       },
       {
         key: "expectedDelivery",
@@ -623,7 +891,12 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
     purpose:
       "Bill for the work done so far, when the job is billed in parts. Say how far the work has got.",
     documents: [
-      { key: "progress_invoice", title: "Progress Invoice", counterKey: "PRG" },
+      {
+        key: "progress_invoice",
+        title: "Progress Invoice",
+        counterKey: "PRG",
+        texts: invoiceTexts("Progress Invoice"),
+      },
     ],
     items: "fixed",
     itemDetails: [],
@@ -664,7 +937,12 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
     purpose:
       "Prepare the delivery note that goes with the goods. Write the delivered quantity of each item; the customer signs the printed copy.",
     documents: [
-      { key: "delivery_note", title: "Delivery Note", counterKey: "DN" },
+      {
+        key: "delivery_note",
+        title: "Delivery Note",
+        counterKey: "DN",
+        texts: DELIVERY_NOTE_TEXTS,
+      },
     ],
     items: "delivery",
     itemDetails: [
@@ -693,7 +971,14 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
   tax_invoice: {
     purpose:
       "Bill the customer for the job. The quotation, LPO, delivery note and job card numbers are filled in for you.",
-    documents: [{ key: "tax_invoice", title: "Tax Invoice", counterKey: "INV" }],
+    documents: [
+      {
+        key: "tax_invoice",
+        title: "Tax Invoice",
+        counterKey: "INV",
+        texts: invoiceTexts("Tax Invoice"),
+      },
+    ],
     items: "fixed",
     itemDetails: [],
     tables: {},
@@ -737,14 +1022,25 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         key: "commercial_invoice",
         title: "Commercial Invoice",
         counterKey: "CI",
+        texts: [
+          title("Commercial Invoice"),
+          {
+            key: "stamp",
+            label: "Inside the signature box",
+            value: "OFFICIAL QA/QC STAMP & SIGNATURE",
+            kind: "line",
+          },
+        ],
       },
       {
         key: "packing_list",
         title: "Packing List",
         counterKey: "PL",
         enabledWhen: { field: "packingList", value: "yes" },
+        texts: PACKING_LIST_TEXTS,
       },
     ],
+    formTitle: "Whether a packing list is needed",
     items: "fixed",
     itemDetails: [
       {
@@ -783,6 +1079,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         label: "This shipment needs a Packing List",
         type: "yesno",
         on: STEP_FORM,
+        locked: true,
       },
       {
         key: "ciDate",
@@ -859,7 +1156,12 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
   receipt_voucher: {
     purpose: "Record the customer's payment. This closes the job.",
     documents: [
-      { key: "receipt_voucher", title: "Receipt Voucher", counterKey: "RV" },
+      {
+        key: "receipt_voucher",
+        title: "Receipt Voucher",
+        counterKey: "RV",
+        texts: [title("Receipt Voucher")],
+      },
     ],
     items: "fixed",
     itemDetails: [],
@@ -917,6 +1219,101 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
     ],
   },
 };
+
+/* ------------------------- a company's own version ------------------------ */
+
+/**
+ * What a company changed about one paper, or about the details a step asks
+ * outside its papers. Only what differs from the built-in version is kept,
+ * so a paper nobody touched follows the system as it is improved.
+ */
+export type DocumentSettings = {
+  /** The code in its numbers, in place of the built-in one. */
+  code?: string;
+  /** Its wording, by text key. An empty text leaves that line out. */
+  texts?: Record<string, string>;
+  /** Its details, by field key. */
+  fields?: Record<
+    string,
+    { asked?: boolean; required?: boolean; prefill?: string }
+  >;
+};
+
+/** A step's settings: one entry per paper, and `STEP_FORM` for its own form. */
+export type StepTemplate = Record<string, DocumentSettings>;
+
+/** The code of the inquiry's own number. */
+export const INQUIRY_COUNTER_KEY = "INQ";
+
+/** Starting values the system works out itself; a company cannot type these. */
+const COMPUTED_PREFILLS = new Set([
+  "today",
+  "grandTotal",
+  "neededBy",
+  "customerName",
+  "customerAddress",
+]);
+
+export function isComputedPrefill(prefill: string | undefined): boolean {
+  return prefill !== undefined && COMPUTED_PREFILLS.has(prefill);
+}
+
+/** Whether a company may type its own starting value for a detail. */
+export function canSetPrefill(field: StageField): boolean {
+  return (
+    !isComputedPrefill(field.prefill) &&
+    ["text", "longtext", "number", "amount", "choice"].includes(field.type)
+  );
+}
+
+/**
+ * The details a step asks for, as the company set them up: the ones it
+ * switched off are left out, and required and starting values are its own.
+ */
+export function stageFields(
+  stage: InquiryStageKey,
+  template: StepTemplate = {},
+): StageField[] {
+  return STAGE_DEFINITIONS[stage].fields.flatMap((field) => {
+    const own = template[field.on]?.fields?.[field.key];
+    if (!own) return [field];
+    if (!field.locked && own.asked === false) return [];
+    return [
+      {
+        ...field,
+        required: field.locked ? field.required : (own.required ?? field.required),
+        prefill:
+          own.prefill !== undefined && canSetPrefill(field)
+            ? own.prefill
+            : field.prefill,
+      },
+    ];
+  });
+}
+
+/** A piece of a paper's wording, as the company set it. */
+export function paperText(
+  stage: InquiryStageKey,
+  document: string,
+  key: string,
+  template: StepTemplate = {},
+): string {
+  const own = template[document]?.texts?.[key];
+  if (own !== undefined) return own;
+  return (
+    STAGE_DEFINITIONS[stage].documents
+      .find((doc) => doc.key === document)
+      ?.texts?.find((text) => text.key === key)?.value ?? ""
+  );
+}
+
+/** The code in a number: the company's own, or the built-in one. */
+export function numberCode(
+  counterKey: string,
+  settings: DocumentSettings | undefined,
+): string {
+  return settings?.code || counterKey;
+}
 
 /* -------------------------------- documents ------------------------------- */
 
@@ -980,12 +1377,13 @@ export function lpoReference(
 export function missingStageFields(
   stage: InquiryStageKey,
   fields: Record<string, string>,
+  template: StepTemplate = {},
 ): StageField[] {
   const inUse = new Set([
     STEP_FORM,
     ...documentsInUse(stage, fields).map((doc) => doc.key),
   ]);
-  return STAGE_DEFINITIONS[stage].fields.filter(
+  return stageFields(stage, template).filter(
     (field) =>
       field.required &&
       inUse.has(field.on) &&

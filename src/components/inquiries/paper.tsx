@@ -6,10 +6,12 @@ import { formatFormDate } from "@/lib/datetime/format";
 import type { InquiryStageKey } from "@/lib/inquiries/stages";
 import {
   formatMoney,
-  STAGE_DEFINITIONS,
+  paperText,
   stageFieldDisplay,
+  stageFields,
   type InquiryTotals,
   type StageField,
+  type StepTemplate,
 } from "@/lib/inquiries/stage-forms";
 import type {
   InquiryLineItemInput,
@@ -21,12 +23,14 @@ import type {
  * Everything a paper needs: the company's own details, the inquiry with all
  * its steps, and the step being shown with its answers. While a step is
  * being filled in, the answers are what is typed right now, so the paper is
- * a live preview of what will be printed.
+ * a live preview of what will be printed. `template` is the company's own
+ * version of the step's papers: their wording and which details they carry.
  */
 type PaperState = {
   company: CompanyLetterhead;
   inquiry: InquiryView;
   stage: InquiryStageKey;
+  template: StepTemplate;
   values: Record<string, string>;
   items: InquiryLineItemInput[];
   tables: StageTables;
@@ -80,13 +84,38 @@ export function Fill({
   blank?: string;
 }) {
   const paper = usePaper();
-  const field = STAGE_DEFINITIONS[paper.stage].fields.find(
+  // A detail the company switched off is not written, even if an earlier
+  // answer to it is still on record.
+  const field = stageFields(paper.stage, paper.template).find(
     (item) => item.key === name,
   );
-  const value = paper.values[name] ?? "";
-  if (!field) return null;
-  if (!value && blank) return <Blank className={blank} />;
-  return <span className="whitespace-pre-wrap">{writtenValue(field, value)}</span>;
+  const value = field ? (paper.values[name] ?? "") : "";
+  if (!value) return blank ? <Blank className={blank} /> : null;
+  return (
+    <span className="whitespace-pre-wrap">{writtenValue(field!, value)}</span>
+  );
+}
+
+/**
+ * Whether the step asks for a detail. Where a paper has a line of its own
+ * for a detail, the line is left out when the company switched it off.
+ */
+export function useAsked(): (name: string) => boolean {
+  const paper = usePaper();
+  const asked = new Set(
+    stageFields(paper.stage, paper.template).map((field) => field.key),
+  );
+  return (name) => asked.has(name);
+}
+
+/** The wording of one of the step's papers, as the company set it. */
+export function usePaperTexts(document: string): (key: string) => string {
+  const paper = usePaper();
+  return (key) =>
+    paperText(paper.stage, document, key, paper.template).replaceAll(
+      "{company}",
+      paper.company.name,
+    );
 }
 
 /* ------------------------------ paper pieces ------------------------------ */
@@ -182,6 +211,17 @@ export function Line({
     <p className="leading-[1.7]">
       <span className="font-semibold">{label}</span> {children}
     </p>
+  );
+}
+
+/** "Label: answer" for one of the step's details; left out if it is not asked. */
+export function FieldLine({ label, name }: { label: string; name: string }) {
+  const asked = useAsked();
+  if (!asked(name)) return null;
+  return (
+    <Line label={label}>
+      <Fill name={name} />
+    </Line>
   );
 }
 

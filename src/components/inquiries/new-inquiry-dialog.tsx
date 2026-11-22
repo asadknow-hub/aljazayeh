@@ -9,24 +9,39 @@ import {
 import { AlertIcon, CloseIcon } from "@/components/ui/icons";
 import { unwrap } from "@/lib/actions/result";
 import { createInquiryAction } from "@/lib/inquiries/actions";
+import {
+  isComputedPrefill,
+  stageFields,
+  type StepTemplate,
+} from "@/lib/inquiries/stage-forms";
 import type { InquiryStageInput, InquiryView } from "@/lib/inquiries/types";
 
-const emptyInquiry = (): InquiryStageInput => ({
-  fields: { jobType: "local" },
+/** A new inquiry, with the starting values the company gives its details. */
+const emptyInquiry = (template: StepTemplate): InquiryStageInput => ({
+  fields: Object.fromEntries(
+    stageFields("inquiry", template).flatMap((field) =>
+      field.prefill && !isComputedPrefill(field.prefill)
+        ? [[field.key, field.prefill]]
+        : [],
+    ),
+  ),
   lineItems: [emptyLineItem()],
 });
 
 /** Start a new inquiry by filling in its first step. */
 export function NewInquiryDialog({
   orgCode,
+  template,
   onClose,
   onCreated,
 }: {
   orgCode: string;
+  /** The company's version of the Inquiry step: which details it asks for. */
+  template: StepTemplate;
   onClose: () => void;
   onCreated: (inquiry: InquiryView) => void;
 }) {
-  const [form, setForm] = useState(emptyInquiry);
+  const [form, setForm] = useState(() => emptyInquiry(template));
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -78,6 +93,7 @@ export function NewInquiryDialog({
         <div className="flex flex-col gap-6 overflow-y-auto px-5 py-5">
           <StageFields
             stage="inquiry"
+            template={template}
             values={form.fields}
             disabled={pending}
             onChange={(fields) => setForm({ ...form, fields })}

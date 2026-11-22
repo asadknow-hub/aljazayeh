@@ -39,6 +39,9 @@ export function HeaderBack() {
   return (
     <Link
       href={parent}
+      // Not fetched ahead: a page that names its own list does so just after
+      // it appears, and the address worked out before then may not exist.
+      prefetch={false}
       aria-label="Back"
       title="Back"
       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-header-control text-header-fg transition-colors hover:bg-header-control-hover"

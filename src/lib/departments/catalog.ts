@@ -40,6 +40,12 @@ export const DEPARTMENTS = [
     accent: "#0f766e",
   },
   {
+    key: "company-docs",
+    slug: "company-docs",
+    label: "Company Docs",
+    accent: "#b45309",
+  },
+  {
     key: "all-logs",
     slug: "all-logs",
     label: "All Logs",

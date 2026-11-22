@@ -10,7 +10,9 @@ import {
   STAGE_DEFINITIONS,
   STEP_FORM,
   stageFieldDisplay,
+  stageFields,
   type StageField,
+  type StepTemplate,
 } from "@/lib/inquiries/stage-forms";
 import type { InquiryLineItemInput, StageTables } from "@/lib/inquiries/types";
 
@@ -38,14 +40,20 @@ function fieldsOn(
   stage: InquiryStageKey,
   place: string,
   values: Record<string, string>,
+  template: StepTemplate | undefined,
 ): StageField[] {
-  return STAGE_DEFINITIONS[stage].fields.filter(
+  return stageFields(stage, template).filter(
     (field) => field.on === place && fieldShown(field, values),
   );
 }
 
-export function hasFields(stage: InquiryStageKey, place: string): boolean {
-  return STAGE_DEFINITIONS[stage].fields.some((field) => field.on === place);
+/** Whether a place asks for anything, the way the company set it up. */
+export function hasFields(
+  stage: InquiryStageKey,
+  place: string,
+  template?: StepTemplate,
+): boolean {
+  return stageFields(stage, template).some((field) => field.on === place);
 }
 
 /** What a form needs to take in and show uploaded files. */
@@ -255,11 +263,14 @@ export function StageFields({
   invalid,
   narrow = false,
   files,
+  template,
 }: {
   stage: InquiryStageKey;
   place?: string;
   values: Record<string, string>;
   onChange: (values: Record<string, string>) => void;
+  /** The company's version of the step: which details it asks for. */
+  template?: StepTemplate;
   disabled?: boolean;
   /** Questions that still have to be answered, shown in red. */
   invalid?: ReadonlySet<string>;
@@ -268,7 +279,7 @@ export function StageFields({
 }) {
   return (
     <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
-      {fieldsOn(stage, place, values).map((field) => (
+      {fieldsOn(stage, place, values, template).map((field) => (
         <FieldInput
           key={field.key}
           field={field}
@@ -291,14 +302,16 @@ export function StageAnswers({
   stage,
   values,
   files,
+  template,
 }: {
   stage: InquiryStageKey;
   values: Record<string, string>;
+  template?: StepTemplate;
   files: Pick<FileHandling, "nameOf" | "hrefOf">;
 }) {
   return (
     <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-      {fieldsOn(stage, STEP_FORM, values).map((field) => {
+      {fieldsOn(stage, STEP_FORM, values, template).map((field) => {
         const value = values[field.key] ?? "";
         const shown =
           field.type === "date" && value

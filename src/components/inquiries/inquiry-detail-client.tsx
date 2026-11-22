@@ -71,6 +71,8 @@ import {
   missingStageFields,
   STAGE_DEFINITIONS,
   STEP_FORM,
+  stageFields,
+  type StepTemplate,
 } from "@/lib/inquiries/stage-forms";
 import type {
   AssignableStaff,
@@ -135,7 +137,7 @@ function draftOf(inquiry: InquiryView): InquiryStageInput {
   const fields = { ...(step?.fields ?? {}) };
 
   if (editable) {
-    for (const field of definition.fields) {
+    for (const field of stageFields(inquiry.currentStage, step?.template)) {
       if (fields[field.key] || !field.prefill) continue;
       fields[field.key] =
         field.prefill === "today"
@@ -174,8 +176,9 @@ function draftOf(inquiry: InquiryView): InquiryStageInput {
 function missingFrom(
   stage: InquiryStageKey,
   draft: InquiryStageInput,
+  template: StepTemplate,
 ): { key: string; on: string }[] {
-  const missing = missingStageFields(stage, draft.fields).map((field) => ({
+  const missing = missingStageFields(stage, draft.fields, template).map((field) => ({
     key: field.key,
     on: field.on,
   }));
@@ -378,7 +381,11 @@ export function InquiryDetailClient({
    * are marked in red and the first one is brought into view.
    */
   function complete(purpose: string): boolean {
-    const missing = missingFrom(inquiry.currentStage, draft);
+    const missing = missingFrom(
+      inquiry.currentStage,
+      draft,
+      currentStep.template,
+    );
     if (missing.length === 0) return true;
 
     const first = missing[0]!;
@@ -666,9 +673,10 @@ export function InquiryDetailClient({
                       type; everything else on it comes from the earlier steps.
                     </p>
                   ) : null}
-                  {hasFields(viewedStep.key, STEP_FORM) ? (
+                  {hasFields(viewedStep.key, STEP_FORM, viewedStep.template) ? (
                     <StageFields
                       stage={viewedStep.key}
+                      template={viewedStep.template}
                       values={draft.fields}
                       disabled={pending}
                       invalid={invalid}
@@ -686,13 +694,18 @@ export function InquiryDetailClient({
                   ) : null}
                   {paper ? (
                     <>
-                      {hasFields(viewedStep.key, paper.key) ? (
+                      {hasFields(
+                        viewedStep.key,
+                        paper.key,
+                        viewedStep.template,
+                      ) ? (
                         <div className="flex flex-col gap-3">
                           <h4 className="border-b border-slate-200 pb-1.5 text-xs font-semibold tracking-wide text-slate-500 uppercase">
                             {paper.title}
                           </h4>
                           <StageFields
                             stage={viewedStep.key}
+                            template={viewedStep.template}
                             place={paper.key}
                             values={draft.fields}
                             disabled={pending}
@@ -729,10 +742,11 @@ export function InquiryDetailClient({
                 </div>
               ) : (
                 <>
-                  {hasFields(viewedStep.key, STEP_FORM) ? (
+                  {hasFields(viewedStep.key, STEP_FORM, viewedStep.template) ? (
                     <div className="print:hidden">
                       <StageAnswers
                         stage={viewedStep.key}
+                        template={viewedStep.template}
                         values={shown.fields}
                         files={files}
                       />
@@ -797,6 +811,7 @@ export function InquiryDetailClient({
                       company,
                       inquiry,
                       stage: viewedStep.key,
+                      template: viewedStep.template,
                       values: shown.fields,
                       items: shown.lineItems,
                       tables: shown.tables ?? {},
