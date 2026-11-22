@@ -31,6 +31,12 @@ export const can = {
 
   viewActivityLog: (access: OrgAccess) => isLeadership(access),
 
+  /**
+   * Change a paper under Company Docs: its wording, what it asks for and the
+   * code in its numbers. Everyone in the company may look.
+   */
+  editCompanyDocs: (access: OrgAccess) => isLeadership(access),
+
   /** Visitors log and raising leave requests. */
   useReception: (access: OrgAccess) =>
     isLeadership(access) || inDepartment(access, "reception"),
@@ -69,6 +75,8 @@ export function canOpenTile(access: OrgAccess, key: DepartmentKey): boolean {
       return can.viewActivityLog(access);
     case "company-settings":
       return can.manageCompany(access);
+    case "company-docs":
+      return true;
     default:
       return can.openDepartment(access, key);
   }

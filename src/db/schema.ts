@@ -15,6 +15,10 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type {
+  DocumentSettings,
+  StepTemplate,
+} from "@/lib/inquiries/stage-forms";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -399,6 +403,45 @@ export const documentCounters = pgTable(
 );
 
 /**
+ * A company's own version of a paper of the inquiry process: its wording,
+ * which details are asked and required, and the code in its numbers. What
+ * can be changed, and the built-in version, are in
+ * src/lib/inquiries/stage-forms.ts. Every save adds a row and the newest one
+ * is in force, so there is always a way back to an earlier version.
+ */
+export const documentTemplates = pgTable(
+  "document_templates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** The step and the paper, e.g. "quotation/quotation" or "inquiry/form". */
+    documentKey: text("document_key").notNull(),
+    version: integer("version").notNull(),
+    settings: jsonb("settings").$type<DocumentSettings>().notNull(),
+    /** What this version was, when it was not an ordinary change. */
+    note: text("note").notNull().default(""),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("document_templates_version_uidx").on(
+      table.organizationId,
+      table.documentKey,
+      table.version,
+    ),
+    allowSelect("document_templates_member_select", isOrgMember()),
+    // Administrators and Management; a version is never changed or removed.
+    allowInsert("document_templates_manager_insert", canManageStaff()),
+  ],
+);
+
+/**
  * The company's internal forms that are filled in and then signed off: fine
  * notices, medical amounts, petty cash, material requests, verbal work
  * approvals. What each kind contains is defined in src/lib/forms; the
@@ -659,6 +702,13 @@ export const inquiryStageRecords = pgTable(
       () => staffMembers.id,
       { onDelete: "set null" },
     ),
+    /**
+     * The company's version of the step's papers when it was completed, so a
+     * finished paper keeps the wording it was issued with. Empty while the
+     * step is still open, and for steps finished before papers could be
+     * changed.
+     */
+    template: jsonb("template").$type<StepTemplate>(),
     /** When the step was sent for approval; empty until then. */
     approvalRequestedAt: timestamp("approval_requested_at", {
       withTimezone: true,

@@ -101,6 +101,8 @@ All rules are in [`src/lib/access/access.ts`](src/lib/access/access.ts).
 | --- | --- |
 | Company settings, inquiry settings, signatories, creating logins, making administrators | Company administrator |
 | Staff directory incl. salary and contracts, All Logs | Administrator, Management |
+| Company Docs: looking | Everyone in the company |
+| Company Docs: changing a paper | Administrator, Management |
 | Reception (visitors, raising leave requests) | Administrator, Management, Reception |
 | Signing a leave request | The holder of each signing position, in order |
 | A department workspace (Admin, Sales, Accounts, Engineering) | That department, Administrator, Management |
@@ -143,6 +145,7 @@ After selecting a company, the home screen is **Select Department** with tiles:
 | Sales | `/{code}/sales` | Built (Inquiries) |
 | Engineering Department | `/{code}/engineering` | Built (Inquiries, Material requests) |
 | Admin | `/{code}/admin` | Built (all Inquiries, Verbal work approvals) |
+| Company Docs | `/{code}/company-docs` | Built (every paper, where it is used, changing it) |
 | All Logs | `/{code}/all-logs` | Built |
 | Company Settings | `/{code}/company-settings` | Built |
 
@@ -377,6 +380,57 @@ If Inquiry Settings marks a step as needing approval:
 - `admin` — created from Admin Inquiries
 - `reception_visitor` — created from Reception Visitors (purpose Inquiry)
 
+### 6.8 Company Docs
+
+One place that lists every paper the company prepares and lets it change them
+without a developer.
+
+**The list** (`/{code}/company-docs`) is not written by hand: it is built from
+the step definitions and the signed-form definitions, so a paper added to the
+system appears by itself. For each step of the inquiry process it shows who
+prepares it and who approves it (as set under Company Settings), and for each
+paper: whether every job has it or only some, what its numbers look like, how
+many jobs have it so far, and whether the company has changed it. The signed
+forms are listed with where they are raised and who signs them in what order.
+
+**One paper** (`/{code}/company-docs/steps/{step}/{paper}`): its settings on
+the left, a made-up sample job on the right that shows the paper exactly as it
+will print and follows every change as it is typed. Administrators and
+Management can change:
+
+- **Wording on the paper**: its title, opening lines, terms and conditions,
+  certification statements, headings. An emptied text is left off the paper.
+- **Details staff fill in**: whether each is asked, whether it must be filled
+  in before the step moves on, and what it starts as. A detail that is
+  switched off is no longer asked; its line is left out of the paper, or its
+  box stays empty where the form is a table.
+- **The code in its numbers** (`QTN` in `AJE/QTN/2026/0001`).
+
+The rules that keep this safe:
+
+1. **A finished step keeps its papers.** When a step is completed, the
+   settings in force are stored with it (`inquiry_stage_records.template`).
+   Later changes only reach steps that are still open, and a step sent back
+   follows the current settings again.
+2. **Some details are locked** (`locked` in the step definitions): the ones
+   the system works from, such as the job type, the VAT rate, which LPO it
+   is, and the ticks that say a certificate or packing list is needed.
+3. **Settings never touch what was typed.** Switching a detail off hides it;
+   an answer already given stays on record and comes back if the detail is
+   switched on again.
+4. **Every save is a new version** (`document_templates`, never changed or
+   deleted). "Go back to this" on an earlier version, or on the built-in
+   one, adds a new version with those settings.
+5. **Codes never collide.** A paper cannot take a code another document has
+   or has ever had. When a code changes, numbers already given keep theirs
+   and the count carries on.
+
+Only what differs from the built-in version is stored, so a paper nobody
+touched follows the system as it is improved.
+
+A signed form's page shows where it is raised, who signs it, and a sample of
+it; its wording and questions are built in for now.
+
 ---
 
 ## 7. End-to-end flows
@@ -452,6 +506,7 @@ sessions when a password changes (sessions currently last 12 hours).
 | Reception / leave | `attendance_records`, `visitor_logs`, `vacation_requests` |
 | Sign-offs | `signatory_positions`, `document_signoffs` (append-only) |
 | Signed forms | `approval_forms`, `document_counters` (running numbers) |
+| Company Docs | `document_templates` (a company's versions of each paper, append-only) |
 | Activity | `staff_activity_logs` |
 | Inquiry CRM | `inquiry_workflow_settings`, `inquiries`, `inquiry_stage_records`, `inquiry_line_items`, `inquiry_stage_events`, `inquiry_comments`, `inquiry_stage_approvals` |
 
@@ -468,6 +523,7 @@ SQL access functions: [`drizzle/0000_access_functions.sql`](drizzle/0000_access_
 | Company + Inquiry Settings | `src/lib/company-settings/` |
 | Inquiries: the steps and their rules | `src/lib/inquiries/` |
 | What each inquiry step asks | `src/lib/inquiries/stage-forms.ts` |
+| Company Docs: the list, a company's settings, the sample job | `src/lib/company-docs/` |
 | Look of the screens (buttons, fields, cards, colours) | `src/app/globals.css`, `src/lib/departments/colors.ts` |
 | Visitors | `src/lib/visitors/` |
 | Staff / vacation / activity | `src/lib/staff/`, `src/lib/vacation/`, `src/lib/activity/` |
@@ -507,6 +563,9 @@ Env essentials:
   until the company's own forms for them are provided.
 - Signatures and the stamp on customer documents are put on by hand after printing.
 - Per-company workflows: the nine steps are the same for every company.
+- Company Docs changes wording, details and number codes. It does not move
+  things around on a paper, add new details or columns, or change the signed
+  forms.
 - Labour card (daily in/out, overtime and the monthly pay summary).
 - Personal Salary / Contract under Account duplicate the HR record and will be replaced by a
   read-only view of it.

@@ -21,7 +21,7 @@ import {
   type InquiryStageKey,
   type InquiryWorkflowDepartmentKey,
 } from "@/lib/inquiries/stages";
-import { formatMoney } from "@/lib/inquiries/stage-forms";
+import { formatMoney, type StepTemplate } from "@/lib/inquiries/stage-forms";
 import type {
   AssignableStaff,
   InquiryStatus,
@@ -38,6 +38,8 @@ type InquiriesListPanelProps = {
   allowCreate: boolean;
   myStaffId: string;
   assignable: Partial<Record<InquiryWorkflowDepartmentKey, AssignableStaff[]>>;
+  /** What the company asks for on a new inquiry. */
+  inquiryTemplate: StepTemplate;
 };
 
 type Who = "all" | "mine" | "unassigned";
@@ -62,6 +64,7 @@ export function InquiriesListPanel({
   allowCreate,
   myStaffId,
   assignable,
+  inquiryTemplate,
 }: InquiriesListPanelProps) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -357,6 +360,7 @@ export function InquiriesListPanel({
       {creating ? (
         <NewInquiryDialog
           orgCode={orgCode}
+          template={inquiryTemplate}
           onClose={() => setCreating(false)}
           onCreated={(inquiry) => {
             // Closed first: this list stays alive behind the next page, and

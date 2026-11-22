@@ -9,13 +9,16 @@ import {
   CompanyHeading,
   darkBar,
   darkHead,
+  FieldLine,
   Fill,
   Line,
   PaperSheet,
   PaperTitle,
   Shaded,
   SignatureBox,
+  useAsked,
   usePaper,
+  usePaperTexts,
 } from "@/components/inquiries/paper";
 import type { InquiryStageKey } from "@/lib/inquiries/stages";
 import {
@@ -142,19 +145,23 @@ function TotalsLines({ grandLabel }: { grandLabel: string }) {
 function QuotationPaper() {
   const job = useJob();
   const { items, totals, company, inquiry } = job;
-  const terms: [string, string][] = [
-    ["Material Scope & Standards", "termMaterial"],
-    ["Delivery Scope & Logistics", "termDelivery"],
-    ["Production Lead Time", "termLeadTime"],
-    ["Terms of Payment", "termPayment"],
-    ["Quotation Validity", "termValidity"],
-  ];
+  const t = usePaperTexts("quotation");
+  const asked = useAsked();
+  const terms = (
+    [
+      ["Material Scope & Standards", "termMaterial"],
+      ["Delivery Scope & Logistics", "termDelivery"],
+      ["Production Lead Time", "termLeadTime"],
+      ["Terms of Payment", "termPayment"],
+      ["Quotation Validity", "termValidity"],
+    ] as const
+  ).filter(([, key]) => asked(key));
 
   return (
     <PaperSheet>
       <CompanyHeading />
       <PaperTitle>
-        {inquiry.jobType === "export" ? "Commercial Quotation" : "Quotation"}
+        {t(inquiry.jobType === "export" ? "titleExport" : "title")}
       </PaperTitle>
       <hr className="mb-4 border-slate-500" />
 
@@ -175,24 +182,18 @@ function QuotationPaper() {
           </Line>
           <Line label="Inquiry Channel:">{job.customer.channel}</Line>
           <Line label="Query Ref No:">{job.numbers.inquiry}</Line>
-          <Line label="Quotation Date:">
-            <Fill name="quotationDate" />
-          </Line>
-          <Line label="Valid Until:">
-            <Fill name="validUntil" />
-          </Line>
+          <FieldLine label="Quotation Date:" name="quotationDate" />
+          <FieldLine label="Valid Until:" name="validUntil" />
         </div>
       </Shaded>
 
-      <p className="mt-5 font-bold">Dear Valued Client,</p>
-      <p className="mt-1">
-        Thank you for reaching out to us. We are pleased to offer our official
-        commercial quotation for your metal fabrication requirements as detailed
-        below.
-      </p>
+      {t("greeting") ? <p className="mt-5 font-bold">{t("greeting")}</p> : null}
+      {t("intro") ? (
+        <p className="mt-1 whitespace-pre-line">{t("intro")}</p>
+      ) : null}
 
       <p className="mt-4 mb-1.5 text-[13px] font-bold uppercase">
-        BOQ &amp; Fabrication Price Breakdown
+        {t("itemsHeading")}
       </p>
       <table className="w-full border-collapse">
         <thead>
@@ -240,12 +241,14 @@ function QuotationPaper() {
               {formatMoney(totals.subtotal)}
             </td>
           </tr>
-          <tr>
-            <td className="py-1 pr-4 text-right">Discount :</td>
-            <td className="py-1 text-right">
-              <Fill name="discount" />
-            </td>
-          </tr>
+          {asked("discount") ? (
+            <tr>
+              <td className="py-1 pr-4 text-right">Discount :</td>
+              <td className="py-1 text-right">
+                <Fill name="discount" />
+              </td>
+            </tr>
+          ) : null}
           <tr>
             <td className="py-1 pr-4 text-right">
               VAT @ <Fill name="vatPercent" />% :
@@ -270,17 +273,21 @@ function QuotationPaper() {
           <em>{amountInWords(totals.total)}</em>
         </Line>
 
-        <p className="mt-4 mb-1 text-[13px] font-bold uppercase">
-          Terms &amp; Conditions
-        </p>
-        <ol className="ml-5 list-decimal space-y-1.5">
-          {terms.map(([label, key]) => (
-            <li key={key}>
-              <span className="font-semibold">{label}:</span>{" "}
-              <Fill name={key} />
-            </li>
-          ))}
-        </ol>
+        {terms.length > 0 ? (
+          <>
+            <p className="mt-4 mb-1 text-[13px] font-bold uppercase">
+              {t("termsHeading")}
+            </p>
+            <ol className="ml-5 list-decimal space-y-1.5">
+              {terms.map(([label, key]) => (
+                <li key={key}>
+                  <span className="font-semibold">{label}:</span>{" "}
+                  <Fill name={key} />
+                </li>
+              ))}
+            </ol>
+          </>
+        ) : null}
 
         <Shaded className="mt-6 w-[62%]">
           <BankDetails title="Bank Details for Payment" />
@@ -288,7 +295,7 @@ function QuotationPaper() {
 
         <p className="mt-8 font-bold">For {company.name}</p>
         <div className="mt-14 w-64 border-t border-slate-600 pt-1">
-          Authorized Signature &amp; Stamp
+          {t("signature")}
         </div>
       </div>
     </PaperSheet>
@@ -300,6 +307,7 @@ function QuotationPaper() {
 function PurchaseOrderPaper() {
   const job = useJob();
   const { company } = job;
+  const t = usePaperTexts("purchase_order");
   const rows = job.tables.poLines ?? [];
   const vat = job.totals.vatPercent;
   const lineTotal = (row: Record<string, string>) =>
@@ -331,7 +339,7 @@ function PurchaseOrderPaper() {
         className="mt-4 text-center text-[19px] font-bold uppercase"
         style={{ fontFamily: "inherit" }}
       >
-        Purchase Order
+        {t("title")}
       </h3>
 
       <div className="grid grid-cols-[42%_58%]">
@@ -448,7 +456,7 @@ function PurchaseOrderPaper() {
 
       <div className="mt-24 ml-auto w-72 border-l-2 border-black py-2 pr-1 text-right font-bold">
         <p>For {company.name}</p>
-        <p>Authority Signatory</p>
+        <p>{t("signatory")}</p>
       </div>
     </PaperSheet>
   );
@@ -456,13 +464,8 @@ function PurchaseOrderPaper() {
 
 /* --------------------------------- invoices -------------------------------- */
 
-const INVOICE_TERMS = (company: string) => [
-  "Payment must be cleared on or before the due date.",
-  "Late payments may incur a charge of 1.5% per month.",
-  "Goods/Services delivered are deemed accepted.",
-  "Title of goods remains with issuer until full payment.",
-  `Cheques payable to '${company}'.`,
-];
+/** The points of a list text: one per line. */
+const points = (text: string) => text.split("\n").filter(Boolean);
 
 /** The tax invoice, and the proforma and progress invoices that share its form. */
 function InvoicePaper({
@@ -471,13 +474,10 @@ function InvoicePaper({
   kind: "tax_invoice" | "proforma_invoice" | "progress_invoice";
 }) {
   const job = useJob();
-  const { items, totals, company, values } = job;
-  const title =
-    kind === "tax_invoice"
-      ? "Tax Invoice"
-      : kind === "proforma_invoice"
-        ? "Proforma Invoice"
-        : "Progress Invoice";
+  const { items, totals, values } = job;
+  const t = usePaperTexts(kind);
+  const asked = useAsked();
+  const terms = points(t("terms"));
   const number =
     kind === "tax_invoice"
       ? job.numbers.taxInvoice
@@ -497,7 +497,7 @@ function InvoicePaper({
   return (
     <PaperSheet>
       <CompanyHeading />
-      <PaperTitle>{title}</PaperTitle>
+      <PaperTitle>{t("title")}</PaperTitle>
 
       <Shaded className="grid grid-cols-[1.25fr_1fr_1fr] gap-3">
         <div>
@@ -516,15 +516,9 @@ function InvoicePaper({
           <Line label="Invoice No:">
             {number}
           </Line>
-          <Line label="Invoice Date:">
-            <Fill name={dateField} />
-          </Line>
-          <Line label="Payment Terms:">
-            <Fill name="paymentTerms" />
-          </Line>
-          <Line label="Due Date:">
-            <Fill name="dueDate" />
-          </Line>
+          <FieldLine label="Invoice Date:" name={dateField} />
+          <FieldLine label="Payment Terms:" name="paymentTerms" />
+          <FieldLine label="Due Date:" name="dueDate" />
         </div>
         <div>
           <Line label="Quote Ref No:">{job.numbers.quotation}</Line>
@@ -577,6 +571,7 @@ function InvoicePaper({
       </p>
 
       {kind === "tax_invoice" ? (
+        asked("creditLimit") || asked("previousOutstanding") ? (
         <>
           <p className="mt-4 mb-1 font-bold uppercase">
             Credit &amp; Account Summary
@@ -593,11 +588,23 @@ function InvoicePaper({
             <tbody>
               <tr>
                 <td className="py-1.5">
-                  AED <Fill name="creditLimit" />
+                  {asked("creditLimit") ? (
+                    <>
+                      AED <Fill name="creditLimit" />
+                    </>
+                  ) : (
+                    "—"
+                  )}
                 </td>
                 <td className="py-1.5">AED {formatMoney(totals.total)}</td>
                 <td className="py-1.5">
-                  AED <Fill name="previousOutstanding" />
+                  {asked("previousOutstanding") ? (
+                    <>
+                      AED <Fill name="previousOutstanding" />
+                    </>
+                  ) : (
+                    "—"
+                  )}
                 </td>
                 <td className="py-1.5 font-bold">
                   AED {formatMoney(totals.total + previous)}
@@ -606,29 +613,29 @@ function InvoicePaper({
             </tbody>
           </table>
         </>
+        ) : null
       ) : (
         <Shaded className="mt-4">
           {kind === "proforma_invoice" ? (
             <>
               <p className="mb-1 font-bold uppercase">Advance Payment</p>
-              <Line label="Advance:">
-                <Fill name="advancePercent" /> % of
-                the grand total
-              </Line>
-              <Line label="Advance amount (AED):">
-                <Fill name="advanceAmount" />
-              </Line>
+              {asked("advancePercent") ? (
+                <Line label="Advance:">
+                  <Fill name="advancePercent" /> % of the grand total
+                </Line>
+              ) : null}
+              <FieldLine label="Advance amount (AED):" name="advanceAmount" />
               <Line label="Payable now:">AED {formatMoney(advance)}</Line>
             </>
           ) : (
             <>
               <p className="mb-1 font-bold uppercase">Progress Billing</p>
-              <Line label="Work completed:">
-                <Fill name="progressPercent" /> %
-              </Line>
-              <Line label="Amount billed now (AED):">
-                <Fill name="amount" />
-              </Line>
+              {asked("progressPercent") ? (
+                <Line label="Work completed:">
+                  <Fill name="progressPercent" /> %
+                </Line>
+              ) : null}
+              <FieldLine label="Amount billed now (AED):" name="amount" />
               <Line label="Payable now:">AED {formatMoney(billedNow)}</Line>
             </>
           )}
@@ -637,14 +644,16 @@ function InvoicePaper({
 
       <div className="mt-5 grid grid-cols-2 gap-6">
         <BankDetails title="Bank Payment Details" />
-        <div>
-          <p className="mb-1 font-bold uppercase">Terms &amp; Conditions</p>
-          <ol className="ml-4 list-decimal space-y-0.5">
-            {INVOICE_TERMS(company.name).map((term) => (
-              <li key={term}>{term}</li>
-            ))}
-          </ol>
-        </div>
+        {terms.length > 0 ? (
+          <div>
+            <p className="mb-1 font-bold uppercase">Terms &amp; Conditions</p>
+            <ol className="ml-4 list-decimal space-y-0.5">
+              {terms.map((term) => (
+                <li key={term}>{term}</li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
       </div>
     </PaperSheet>
   );
@@ -655,6 +664,7 @@ function InvoicePaper({
 function JobCardPaper() {
   const job = useJob();
   const { items } = job;
+  const t = usePaperTexts("job_card");
   const label = "bg-[#e6eaf2] px-2 py-2.5 font-bold border border-slate-300 w-[20%]";
   const value = "px-2 py-2.5 border border-slate-300 w-[30%]";
   const person = (title: string, name: string) => (
@@ -679,7 +689,7 @@ function JobCardPaper() {
         className="mt-3 mb-3 text-center text-[26px] font-bold uppercase"
         style={{ fontFamily: "inherit" }}
       >
-        Job Card
+        {t("title")}
       </h3>
 
       <table className="w-full border-collapse">
@@ -709,7 +719,7 @@ function JobCardPaper() {
         </tbody>
       </table>
 
-      <p className={`${darkBar} mt-5`}>Scope of Work &amp; Instructions</p>
+      <p className={`${darkBar} mt-5`}>{t("scopeHeading")}</p>
       <table className="w-full border-collapse">
         <thead>
           <tr className="bg-[#e6eaf2]">
@@ -742,7 +752,7 @@ function JobCardPaper() {
         {person("Workshop Supervisor", "supervisor")}
       </div>
 
-      <p className={`${darkBar} mt-5`}>Time Log &amp; Technician Remarks</p>
+      <p className={`${darkBar} mt-5`}>{t("logHeading")}</p>
       <div className="grid grid-cols-2 border border-slate-300">
         <div className="px-2 py-2 leading-[2]">
           <p className="font-bold">Labor &amp; Time Log:</p>
@@ -773,18 +783,19 @@ function JobCardPaper() {
 
 /* ------------------------------ certificates ------------------------------ */
 
-function IssuedBy({ stamp }: { stamp: string }) {
+function IssuedBy({ document }: { document: string }) {
   const { company } = usePaper();
+  const t = usePaperTexts(document);
   return (
     <Shaded className="mt-6 w-[52%]">
       <p className="font-bold uppercase">Inspected &amp; Issued By:</p>
-      <p>Department : Quality Control (QC)</p>
+      {t("department") ? <p>Department : {t("department")}</p> : null}
       <p>
         Company : <span className="uppercase">{company.name}</span>
       </p>
       <p className="mt-3 font-bold uppercase">Authorized Sign &amp; Stamp:</p>
       <div className="mt-8">
-        <SignatureBox>[ {stamp} ]</SignatureBox>
+        <SignatureBox>{t("stamp") ? `[ ${t("stamp")} ]` : ""}</SignatureBox>
       </div>
     </Shaded>
   );
@@ -793,11 +804,12 @@ function IssuedBy({ stamp }: { stamp: string }) {
 function ComplianceCertificatePaper() {
   const job = useJob();
   const { items } = job;
+  const t = usePaperTexts("compliance_certificate");
 
   return (
     <PaperSheet>
       <CompanyHeading />
-      <PaperTitle underlined>Certificate of Compliance</PaperTitle>
+      <PaperTitle underlined>{t("title")}</PaperTitle>
 
       <Shaded className="grid grid-cols-2 gap-4">
         <div>
@@ -811,19 +823,13 @@ function ComplianceCertificatePaper() {
           <Line label="Certificate No :">
             {job.numbers.compliance}
           </Line>
-          <Line label="Issue Date :">
-            <Fill name="complianceIssueDate" />
-          </Line>
+          <FieldLine label="Issue Date :" name="complianceIssueDate" />
         </div>
       </Shaded>
 
-      <Shaded className="mt-5">
-        We hereby confirm and certify that the material/components listed below
-        have been fully machined and processed in our workshop. The materials
-        strictly comply with the Customer Purchase Order requirements, ASME/ASTM
-        material standards, and original manufacturer&apos;s technical
-        specifications.
-      </Shaded>
+      {t("statement") ? (
+        <Shaded className="mt-5 whitespace-pre-line">{t("statement")}</Shaded>
+      ) : null}
 
       <table className="mt-5 w-full border-collapse">
         <thead>
@@ -859,7 +865,7 @@ function ComplianceCertificatePaper() {
         </tbody>
       </table>
 
-      <IssuedBy stamp="OFFICIAL QA/QC STAMP & SIGNATURE" />
+      <IssuedBy document="compliance_certificate" />
     </PaperSheet>
   );
 }
@@ -867,13 +873,17 @@ function ComplianceCertificatePaper() {
 function CoatingCertificatePaper() {
   const job = useJob();
   const { items } = job;
-  const parameters: [string, string][] = [
-    ["Coating Standard", "coatingStandard"],
-    ["Raw Material Used", "coatingRawMaterial"],
-    ["Passivation Process", "coatingPassivation"],
-    ["Chemical Manufacturer", "coatingChemicalManufacturer"],
-    ["Chemical Control", "coatingChemicalControl"],
-  ];
+  const t = usePaperTexts("coating_certificate");
+  const asked = useAsked();
+  const parameters = (
+    [
+      ["Coating Standard", "coatingStandard"],
+      ["Raw Material Used", "coatingRawMaterial"],
+      ["Passivation Process", "coatingPassivation"],
+      ["Chemical Manufacturer", "coatingChemicalManufacturer"],
+      ["Chemical Control", "coatingChemicalControl"],
+    ] as const
+  ).filter(([, key]) => asked(key));
 
   return (
     <PaperSheet>
@@ -883,12 +893,9 @@ function CoatingCertificatePaper() {
         className="mt-3 text-center text-[19px] font-bold uppercase underline underline-offset-4"
         style={{ fontFamily: "inherit" }}
       >
-        Coating Certificate
+        {t("title")}
       </h3>
-      <p className="mb-3 text-center italic">
-        Inspection And Testing For Compliance With ASTM B 633 Standard
-        Specification
-      </p>
+      <p className="mb-3 text-center italic">{t("subtitle")}</p>
 
       <Shaded className="grid grid-cols-2 gap-4 font-bold">
         <div>
@@ -906,12 +913,14 @@ function CoatingCertificatePaper() {
               {job.numbers.coating}
             </span>
           </p>
-          <p>
-            DATE OF ISSUE :{" "}
-            <span className="font-normal">
-              <Fill name="coatingIssueDate" />
-            </span>
-          </p>
+          {asked("coatingIssueDate") ? (
+            <p>
+              DATE OF ISSUE :{" "}
+              <span className="font-normal">
+                <Fill name="coatingIssueDate" />
+              </span>
+            </p>
+          ) : null}
         </div>
       </Shaded>
 
@@ -941,23 +950,25 @@ function CoatingCertificatePaper() {
         </tbody>
       </table>
 
-      <p className="mt-4 mb-1 font-bold uppercase">
-        Process &amp; Process Parameters (Electro Galvanizing)
-      </p>
-      <table className="w-full border-collapse">
-        <tbody>
-          {parameters.map(([label, key]) => (
-            <tr key={key} className="even:bg-[#eef1f6]">
-              <td className="w-[30%] border-b border-slate-200 px-1.5 py-1 font-bold">
-                {label}
-              </td>
-              <td className="border-b border-slate-200 px-1.5 py-1">
-                <Fill name={key} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {parameters.length > 0 ? (
+        <>
+          <p className="mt-4 mb-1 font-bold uppercase">{t("processHeading")}</p>
+          <table className="w-full border-collapse">
+            <tbody>
+              {parameters.map(([label, key]) => (
+                <tr key={key} className="even:bg-[#eef1f6]">
+                  <td className="w-[30%] border-b border-slate-200 px-1.5 py-1 font-bold">
+                    {label}
+                  </td>
+                  <td className="border-b border-slate-200 px-1.5 py-1">
+                    <Fill name={key} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      ) : null}
 
       <p className="mt-4 mb-1 font-bold uppercase">
         Quality Inspection &amp; Test Results
@@ -973,20 +984,14 @@ function CoatingCertificatePaper() {
         <tbody>
           <tr>
             <td className={`${cell} font-bold`}>1. Appearance</td>
-            <td className={cell}>
-              Smooth, continuous coating, free from gross surface imperfections,
-              blisters or bare spots.
-            </td>
+            <td className={cell}>{t("appearanceCriteria")}</td>
             <td className={`${cell} text-center font-bold`}>
               <Fill name="appearanceResult" />
             </td>
           </tr>
           <tr>
             <td className={`${cell} font-bold`}>2. Adhesion Test</td>
-            <td className={cell}>
-              Coating does not lift off or flake off when pried with a stout
-              knife (ASTM B571).
-            </td>
+            <td className={cell}>{t("adhesionCriteria")}</td>
             <td className={`${cell} text-center font-bold`}>
               <Fill name="adhesionResult" />
             </td>
@@ -1004,17 +1009,14 @@ function CoatingCertificatePaper() {
         </tbody>
       </table>
 
-      <Shaded className="mt-4">
-        <span className="font-bold">CERTIFICATION STATEMENT:</span>{" "}
-        <em>
-          This is to certify that the above-mentioned items have been processed,
-          inspected, and tested in accordance with ASTM B 633 specifications and
-          customer order requirements. The results are fully compliant with all
-          applicable technical parameters.
-        </em>
-      </Shaded>
+      {t("statement") ? (
+        <Shaded className="mt-4">
+          <span className="font-bold">CERTIFICATION STATEMENT:</span>{" "}
+          <em className="whitespace-pre-line">{t("statement")}</em>
+        </Shaded>
+      ) : null}
 
-      <IssuedBy stamp="OFFICIAL STAMP & SIGNATURE" />
+      <IssuedBy document="coating_certificate" />
     </PaperSheet>
   );
 }
@@ -1024,6 +1026,8 @@ function CoatingCertificatePaper() {
 function DeliveryNotePaper() {
   const job = useJob();
   const { items } = job;
+  const t = usePaperTexts("delivery_note");
+  const terms = points(t("terms"));
   const blank = (label: string) => (
     <p className="leading-[2.3]">
       {label} : <Blank className="w-56" />
@@ -1033,7 +1037,7 @@ function DeliveryNotePaper() {
   return (
     <PaperSheet>
       <CompanyHeading />
-      <PaperTitle>Delivery Note</PaperTitle>
+      <PaperTitle>{t("title")}</PaperTitle>
 
       <div className="grid grid-cols-[1.4fr_1fr] gap-4">
         <div className="leading-[1.6]">
@@ -1062,9 +1066,7 @@ function DeliveryNotePaper() {
         </div>
       </div>
 
-      <p className={`${darkBar} mt-4 !text-left`}>
-        Delivery Item Details / Scope of Work Delivered
-      </p>
+      <p className={`${darkBar} mt-4 !text-left`}>{t("itemsHeading")}</p>
       <table className="w-full border-collapse">
         <thead>
           <tr className="bg-[#e6eaf2]">
@@ -1097,21 +1099,16 @@ function DeliveryNotePaper() {
         </tbody>
       </table>
 
-      <Shaded className="mt-1">
-        <p className="font-bold uppercase">Receipt &amp; Acknowledgement Terms:</p>
-        <p>
-          1. Received the above-mentioned goods/services in good condition and as
-          per specification.
-        </p>
-        <p>
-          2. Any discrepancy or damage must be reported within 24 hours of
-          delivery in writing.
-        </p>
-        <p>
-          3. This Delivery Note serves as official proof of receipt of items
-          mentioned above.
-        </p>
-      </Shaded>
+      {terms.length > 0 ? (
+        <Shaded className="mt-1">
+          <p className="font-bold uppercase">{t("termsHeading")}</p>
+          {terms.map((term, index) => (
+            <p key={term}>
+              {index + 1}. {term}
+            </p>
+          ))}
+        </Shaded>
+      ) : null}
 
       <div className="mt-6 grid grid-cols-2 gap-6">
         <div>
@@ -1142,13 +1139,14 @@ function DeliveryNotePaper() {
 function CommercialInvoicePaper() {
   const job = useJob();
   const { items, totals, company } = job;
+  const t = usePaperTexts("commercial_invoice");
   const box = "border border-black px-1.5 py-1";
 
   return (
     <PaperSheet>
       <CompanyHeading />
       <hr className="mt-3 border-slate-700" />
-      <PaperTitle>Commercial Invoice</PaperTitle>
+      <PaperTitle>{t("title")}</PaperTitle>
 
       <div className="leading-[1.6]">
         <p className="font-bold uppercase">Invoice To:</p>
@@ -1272,7 +1270,7 @@ function CommercialInvoicePaper() {
       <Shaded className="mt-4 w-[45%]">
         <p className="font-bold uppercase">For {company.name}</p>
         <div className="mt-6">
-          <SignatureBox>[ OFFICIAL QA/QC STAMP &amp; SIGNATURE ]</SignatureBox>
+          <SignatureBox>{t("stamp") ? `[ ${t("stamp")} ]` : ""}</SignatureBox>
         </div>
       </Shaded>
     </PaperSheet>
@@ -1282,30 +1280,25 @@ function CommercialInvoicePaper() {
 function PackingListPaper() {
   const job = useJob();
   const { items } = job;
+  const t = usePaperTexts("packing_list");
+  const asked = useAsked();
+  const instructions = points(t("instructions"));
   const packages = job.tables.packages ?? [];
 
   return (
     <PaperSheet>
       <CompanyHeading />
-      <PaperTitle>Packing List</PaperTitle>
+      <PaperTitle>{t("title")}</PaperTitle>
 
       <Shaded className="grid grid-cols-2 gap-4 text-[13px]">
         <div>
           <p className="mb-1 font-bold uppercase">Consignee / Ship To Details</p>
           <Line label="Company Name:">{job.customer.name}</Line>
           <Line label="Consignee TRN:">{job.customer.trn}</Line>
-          <Line label="Delivery Site Address:">
-            <Fill name="deliverySiteAddress" />
-          </Line>
-          <Line label="Site Contact Person:">
-            <Fill name="siteContactPerson" />
-          </Line>
-          <Line label="Contact / WhatsApp:">
-            <Fill name="siteContact" />
-          </Line>
-          <Line label="Final Destination:">
-            <Fill name="finalDestination" />
-          </Line>
+          <FieldLine label="Delivery Site Address:" name="deliverySiteAddress" />
+          <FieldLine label="Site Contact Person:" name="siteContactPerson" />
+          <FieldLine label="Contact / WhatsApp:" name="siteContact" />
+          <FieldLine label="Final Destination:" name="finalDestination" />
         </div>
         <div>
           <p className="mb-1 font-bold uppercase">
@@ -1314,20 +1307,12 @@ function PackingListPaper() {
           <Line label="Packing List No:">
             {job.numbers.packingList}
           </Line>
-          <Line label="Dispatch Date:">
-            <Fill name="dispatchDate" />
-          </Line>
+          <FieldLine label="Dispatch Date:" name="dispatchDate" />
           <Line label="LPO Ref No:">{job.numbers.lpo}</Line>
           <Line label="Invoice Ref:">{job.numbers.commercialInvoice}</Line>
-          <Line label="Carrier / Freight Co:">
-            <Fill name="carrier" />
-          </Line>
-          <Line label="Vehicle / Container No:">
-            <Fill name="vehicleNumber" />
-          </Line>
-          <Line label="Port of Loading / Origin:">
-            <Fill name="portOfLoading" />
-          </Line>
+          <FieldLine label="Carrier / Freight Co:" name="carrier" />
+          <FieldLine label="Vehicle / Container No:" name="vehicleNumber" />
+          <FieldLine label="Port of Loading / Origin:" name="portOfLoading" />
         </div>
       </Shaded>
 
@@ -1398,26 +1383,39 @@ function PackingListPaper() {
         </tbody>
       </table>
 
-      <Shaded className="mt-2 text-center font-bold">
-        TOTAL GROSS WEIGHT:{" "}
-        <Fill name="totalGrossWeight" /> KG
-      </Shaded>
+      {asked("totalGrossWeight") ? (
+        <Shaded className="mt-2 text-center font-bold">
+          TOTAL GROSS WEIGHT: <Fill name="totalGrossWeight" /> KG
+        </Shaded>
+      ) : null}
 
-      <p className="mt-5 mb-1 text-[13px] font-bold uppercase">
-        Packing &amp; Logistics Instructions
-      </p>
-      <ol className="ml-5 list-decimal space-y-0.5">
-        <li>
-          <span className="font-bold">Packaging Standard:</span> All wooden
-          packaging complies with ISPM-15 heat-treated/fumigated standards for
-          international export.
-        </li>
-        <li>
-          <span className="font-bold">Shipping Marks:</span> Packages are
-          clearly marked with Consignee Name, Destination Port, Gross/Net
-          Weight, and Package Number.
-        </li>
-      </ol>
+      {instructions.length > 0 ? (
+        <>
+          <p className="mt-5 mb-1 text-[13px] font-bold uppercase">
+            {t("instructionsHeading")}
+          </p>
+          <ol className="ml-5 list-decimal space-y-0.5">
+            {instructions.map((instruction) => {
+              // "Packaging Standard: All wooden…" prints its lead in bold.
+              const colon = instruction.indexOf(":");
+              return (
+                <li key={instruction}>
+                  {colon > 0 ? (
+                    <>
+                      <span className="font-bold">
+                        {instruction.slice(0, colon + 1)}
+                      </span>
+                      {instruction.slice(colon + 1)}
+                    </>
+                  ) : (
+                    instruction
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </>
+      ) : null}
     </PaperSheet>
   );
 }
@@ -1427,21 +1425,21 @@ function PackingListPaper() {
 function ReceiptVoucherPaper() {
   const job = useJob();
   const { totals, values } = job;
+  const t = usePaperTexts("receipt_voucher");
+  const asked = useAsked();
   const received = Number(values.amountReceived) || 0;
 
   return (
     <PaperSheet>
       <CompanyHeading />
-      <PaperTitle>Receipt Voucher</PaperTitle>
+      <PaperTitle>{t("title")}</PaperTitle>
 
       <Shaded className="grid grid-cols-2 gap-4">
         <div>
           <Line label="Voucher No:">
             {job.numbers.receipt}
           </Line>
-          <Line label="Date:">
-            <Fill name="receiptDate" />
-          </Line>
+          <FieldLine label="Date:" name="receiptDate" />
         </div>
         <div>
           <Line label="Tax Invoice No:">{job.numbers.taxInvoice}</Line>
@@ -1450,10 +1448,12 @@ function ReceiptVoucherPaper() {
       </Shaded>
 
       <div className="mt-5 space-y-2.5 text-[13.5px]">
-        <p>
-          <span className="font-bold">Received from:</span>{" "}
-          <Fill name="receivedFrom" />
-        </p>
+        {asked("receivedFrom") ? (
+          <p>
+            <span className="font-bold">Received from:</span>{" "}
+            <Fill name="receivedFrom" />
+          </p>
+        ) : null}
         <p>
           <span className="font-bold">The sum of AED:</span>{" "}
           <Fill name="amountReceived" />
@@ -1462,19 +1462,33 @@ function ReceiptVoucherPaper() {
           <span className="font-bold">Amount in words:</span>{" "}
           <em>{received ? amountInWords(received) : ""}</em>
         </p>
-        <p>
-          <span className="font-bold">Paid by:</span> <Fill name="paymentMethod" />
-          <span className="ml-6 font-bold">Cheque / transfer ref:</span>{" "}
-          <Fill name="reference" />
-        </p>
-        <p>
-          <span className="font-bold">Bank:</span>{" "}
-          <Fill name="bank" />
-        </p>
-        <p>
-          <span className="font-bold">Being payment for:</span>{" "}
-          <Fill name="remarks" />
-        </p>
+        {asked("paymentMethod") || asked("reference") ? (
+          <p className="flex flex-wrap gap-x-6">
+            {asked("paymentMethod") ? (
+              <span>
+                <span className="font-bold">Paid by:</span>{" "}
+                <Fill name="paymentMethod" />
+              </span>
+            ) : null}
+            {asked("reference") ? (
+              <span>
+                <span className="font-bold">Cheque / transfer ref:</span>{" "}
+                <Fill name="reference" />
+              </span>
+            ) : null}
+          </p>
+        ) : null}
+        {asked("bank") ? (
+          <p>
+            <span className="font-bold">Bank:</span> <Fill name="bank" />
+          </p>
+        ) : null}
+        {asked("remarks") ? (
+          <p>
+            <span className="font-bold">Being payment for:</span>{" "}
+            <Fill name="remarks" />
+          </p>
+        ) : null}
       </div>
 
       <table className="mt-6 ml-auto w-[48%] border-collapse tabular-nums">

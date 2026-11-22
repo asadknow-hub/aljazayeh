@@ -178,6 +178,40 @@ export function AllLogsIcon({ accent, className }: IconProps) {
   );
 }
 
+/** A stack of papers, the front one with its lines of writing. */
+export function CompanyDocsIcon({ accent, className }: IconProps) {
+  return (
+    <svg viewBox="0 0 64 64" className={className} aria-hidden>
+      <rect
+        x="20"
+        y="10"
+        width="30"
+        height="40"
+        rx="3"
+        fill={accent}
+        opacity="0.18"
+      />
+      <rect
+        x="14"
+        y="16"
+        width="30"
+        height="40"
+        rx="3"
+        fill="#fff"
+        stroke={accent}
+        strokeWidth="2.5"
+      />
+      <path
+        d="M20 26h18M20 33h18M20 40h11"
+        stroke={accent}
+        strokeWidth="2.5"
+        strokeLinecap="round"
+      />
+      <rect x="20" y="46" width="8" height="4" fill={accent} opacity="0.7" />
+    </svg>
+  );
+}
+
 const ICONS: Record<DepartmentKey, (props: IconProps) => ReactElement> = {
   staff: StaffIcon,
   accounts: AccountsIcon,
@@ -185,6 +219,7 @@ const ICONS: Record<DepartmentKey, (props: IconProps) => ReactElement> = {
   sales: SalesIcon,
   engineering: EngineeringIcon,
   admin: AdminIcon,
+  "company-docs": CompanyDocsIcon,
   "all-logs": AllLogsIcon,
   "company-settings": CompanySettingsIcon,
 };

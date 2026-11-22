@@ -4,7 +4,10 @@ import type {
   InquiryWorkflowDepartmentKey,
   InquiryWorkflowMap,
 } from "@/lib/inquiries/stages";
-import type { InquiryTotals } from "@/lib/inquiries/stage-forms";
+import type {
+  InquiryTotals,
+  StepTemplate,
+} from "@/lib/inquiries/stage-forms";
 
 export type { InquiryWorkflowMap };
 
@@ -92,6 +95,11 @@ export type InquiryStepView = {
   documentNumbers: Record<string, string>;
   fields: Record<string, string>;
   tables: StageTables;
+  /**
+   * The company's version of the step's papers: the one in force for a step
+   * still being worked on, the one it was finished with for a finished step.
+   */
+  template: StepTemplate;
   /** Who prepared the step: its handler, or whoever completed it. */
   preparedByName: string | null;
   completedAt: string | null;

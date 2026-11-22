@@ -34,11 +34,15 @@ import {
 } from "@/lib/inquiries/stages";
 import {
   documentsInUse,
+  INQUIRY_COUNTER_KEY,
   inquiryTotals,
   mainDocument,
   missingStageFields,
+  numberCode,
   STAGE_DEFINITIONS,
   stageCounterKey,
+  STEP_FORM,
+  type StepTemplate,
 } from "@/lib/inquiries/stage-forms";
 import type {
   AssignableStaff,
@@ -59,6 +63,7 @@ import {
   normalizeStageTables,
 } from "@/lib/inquiries/validate";
 import { appDateValue } from "@/lib/datetime/format";
+import { loadStepTemplates } from "@/lib/company-docs/templates";
 import { nextDocumentNumber } from "@/lib/documents/numbering";
 import {
   insertAttachment,
@@ -96,7 +101,7 @@ function approvalRoleLabel(key: string): string {
 
 /* ------------------------------ workflow map ------------------------------ */
 
-async function loadWorkflowMap(
+export async function loadWorkflowMap(
   tx: DbTransaction,
   organizationId: string,
 ): Promise<InquiryWorkflowMap> {
@@ -253,7 +258,7 @@ async function loadStageRecords(
 }
 
 /** Display names for a set of users, one query per distinct user. */
-async function loadDisplayNames(
+export async function loadDisplayNames(
   tx: DbTransaction,
   userIds: (string | null)[],
 ): Promise<Map<string, string>> {
@@ -569,6 +574,7 @@ async function loadInquiryView(
         .limit(1)
     : [];
 
+  const live = await loadStepTemplates(tx, org.id);
   const stages = stagesForJob(row.jobType);
   const currentIndex = stages.findIndex((item) => item.key === stage);
   const steps: InquiryStepView[] = stages.map((item, index) => {
@@ -598,6 +604,9 @@ async function loadInquiryView(
           ? inquiryStepFields(row, record)
           : (record?.fields ?? {}),
       tables: reached ? (record?.tables ?? {}) : {},
+      // A finished step keeps the papers as they were when it was finished.
+      template:
+        state === "done" ? (record?.template ?? {}) : (live[item.key] ?? {}),
       preparedByName:
         state === "done" && record?.completedByUserId
           ? (names.get(record.completedByUserId) ?? null)
@@ -797,6 +806,7 @@ async function writeStageRecord(
       | "documentNumbers"
       | "handledByStaffId"
       | "approvalRequestedAt"
+      | "template"
       | "completedAt"
       | "completedByUserId"
     >
@@ -900,7 +910,16 @@ async function nextStageNumber(
   stage: InquiryStageKey,
 ): Promise<string> {
   const counterKey = stageCounterKey(stage);
-  return counterKey ? nextDocumentNumber(tx, org, counterKey) : "";
+  if (!counterKey) return "";
+  // The code is set on the step's main paper, or on the step itself.
+  const template = (await loadStepTemplates(tx, org.id))[stage];
+  const owner = mainDocument(stage)?.key ?? STEP_FORM;
+  return nextDocumentNumber(
+    tx,
+    org,
+    counterKey,
+    numberCode(counterKey, template?.[owner]),
+  );
 }
 
 /** Save what was typed into one step. Returns the answers as stored. */
@@ -956,12 +975,21 @@ async function saveStageAnswers(
     .limit(1);
   const main = mainDocument(stage);
   const documentNumbers = { ...(record?.documentNumbers ?? {}) };
-  for (const doc of documentsInUse(stage, fields)) {
-    // A paper without a code of its own carries the number of its step.
-    if (doc.key === main?.key || !doc.counterKey || documentNumbers[doc.key]) {
-      continue;
+  // A paper without a code of its own carries the number of its step.
+  const unnumbered = documentsInUse(stage, fields).filter(
+    (doc) =>
+      doc.key !== main?.key && doc.counterKey && !documentNumbers[doc.key],
+  );
+  if (unnumbered.length > 0) {
+    const template = (await loadStepTemplates(tx, org.id))[stage];
+    for (const doc of unnumbered) {
+      documentNumbers[doc.key] = await nextDocumentNumber(
+        tx,
+        org,
+        doc.counterKey!,
+        numberCode(doc.counterKey!, template?.[doc.key]),
+      );
     }
-    documentNumbers[doc.key] = await nextDocumentNumber(tx, org, doc.counterKey);
   }
 
   await writeStageRecord(tx, org, row.id, stage, {
@@ -1028,11 +1056,17 @@ async function insertInquiry(
   },
 ): Promise<InquiryRow> {
   const map = await loadWorkflowMap(tx, org.id);
+  const template = (await loadStepTemplates(tx, org.id)).inquiry;
   const [row] = await tx
     .insert(inquiries)
     .values({
       organizationId: org.id,
-      inquiryNumber: await nextDocumentNumber(tx, org, "INQ"),
+      inquiryNumber: await nextDocumentNumber(
+        tx,
+        org,
+        INQUIRY_COUNTER_KEY,
+        numberCode(INQUIRY_COUNTER_KEY, template?.[STEP_FORM]),
+      ),
       customerName: values.customerName,
       notes: values.notes,
       currentStage: "inquiry",
@@ -1113,14 +1147,19 @@ function requireOpen(row: InquiryRow) {
   }
 }
 
-/** Refuse unless everything the step needs has been filled in. */
+/**
+ * Refuse unless everything the step needs has been filled in. Returns the
+ * company's version of the step's papers that it was checked against.
+ */
 async function assertStageComplete(
   tx: DbTransaction,
+  org: ResolvedOrg,
   inquiryId: string,
   stage: InquiryStageKey,
   fields: Record<string, string>,
-) {
-  const missing = missingStageFields(stage, fields);
+): Promise<StepTemplate> {
+  const template = (await loadStepTemplates(tx, org.id))[stage] ?? {};
+  const missing = missingStageFields(stage, fields, template);
   if (missing.length > 0) {
     throw new UserError(
       `Still needed: ${missing.map((field) => field.label).join(", ")}.`,
@@ -1134,6 +1173,7 @@ async function assertStageComplete(
   if (mode === "delivery" && items.some((item) => !item.deliveredQuantity)) {
     throw new UserError("Enter the delivered quantity for every item.");
   }
+  return template;
 }
 
 /**
@@ -1165,7 +1205,13 @@ export async function saveInquiryStageForUser(
     }
     if (!options.complete) return reloadInquiryView(tx, org, inquiryId);
 
-    await assertStageComplete(tx, inquiryId, stage, fields);
+    const template = await assertStageComplete(
+      tx,
+      org,
+      inquiryId,
+      stage,
+      fields,
+    );
 
     const map = await loadWorkflowMap(tx, org.id);
     if (map[stage].approvalRequired && !(await hasApproval(tx, inquiryId, stage))) {
@@ -1176,6 +1222,9 @@ export async function saveInquiryStageForUser(
 
     await writeStageRecord(tx, org, inquiryId, stage, {
       handledByStaffId: existing.assignedStaffId,
+      // From here on the step's papers stay as they are now, whatever the
+      // company changes about them later.
+      template,
       completedAt: new Date(),
       completedByUserId: userId,
     });
@@ -1290,6 +1339,8 @@ export async function sendInquiryBackForUser(
     // The earlier step is open again, so it must be approved again.
     await clearApproval(tx, org, userId, inquiryId, previous, "sent back");
     await writeStageRecord(tx, org, inquiryId, previous, {
+      // Open again, so it follows the papers as they are set up now.
+      template: null,
       completedAt: null,
       completedByUserId: null,
     });
@@ -1503,7 +1554,7 @@ export async function requestInquiryApprovalForUser(
     }
 
     const fields = await saveStageAnswers(tx, org, existing, stage, input);
-    await assertStageComplete(tx, inquiryId, stage, fields);
+    await assertStageComplete(tx, org, inquiryId, stage, fields);
     // Whatever was approved before, this is a new version to approve.
     await clearApproval(tx, org, userId, inquiryId, stage, "sent again");
     await writeStageRecord(tx, org, inquiryId, stage, {
