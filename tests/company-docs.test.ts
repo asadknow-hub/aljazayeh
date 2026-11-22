@@ -43,7 +43,6 @@ import {
 
 const run = Date.now().toString(36);
 const ORG = `docs-${run}`;
-const PREFIX = ORG.toUpperCase();
 const YEAR = appDateValue().slice(0, 4);
 const admin = postgres(getAdminDatabaseUrl(), { max: 1 });
 
@@ -293,7 +292,7 @@ describe("changing a paper", () => {
     before = await jobAtQuotation("Before Trading");
     assert.equal(
       quotationOf(before).documentNumber,
-      `${PREFIX}/QTN/${YEAR}/0001`,
+      `QTN/${YEAR}/0001`,
     );
     assert.deepEqual(quotationOf(before).template, {});
 
@@ -318,7 +317,7 @@ describe("changing a paper", () => {
     );
     assert.equal(saved.doc.version, 1);
     assert.equal(saved.doc.changedByName, "Mona");
-    assert.equal(saved.doc.numberExample, `${PREFIX}/OFR/${YEAR}/0001`);
+    assert.equal(saved.doc.numberExample, `OFR/${YEAR}/0001`);
     // Only what differs from the built-in version is kept.
     assert.deepEqual(saved.settings, {
       code: "OFR",
@@ -340,7 +339,7 @@ describe("changing a paper", () => {
     const next = await jobAtQuotation("After Trading");
     assert.equal(
       quotationOf(next).documentNumber,
-      `${PREFIX}/OFR/${YEAR}/0002`,
+      `OFR/${YEAR}/0002`,
     );
   });
 
@@ -440,12 +439,12 @@ describe("changing a paper", () => {
       0,
     );
     assert.deepEqual(builtIn.settings, {});
-    assert.equal(builtIn.doc.numberExample, `${PREFIX}/QTN/${YEAR}/0001`);
+    assert.equal(builtIn.doc.numberExample, `QTN/${YEAR}/0001`);
     // The count still carries on under the old code.
     const next = await jobAtQuotation("Later Trading");
     assert.equal(
       quotationOf(next).documentNumber,
-      `${PREFIX}/QTN/${YEAR}/0003`,
+      `QTN/${YEAR}/0003`,
     );
   });
 
@@ -480,7 +479,7 @@ describe("changing a paper", () => {
       fields: { customerName: "Numbered Trading", title: "Gate", contact: "1" },
       lineItems: [],
     });
-    assert.equal(created.number, `${PREFIX}/ENQ/${YEAR}/0004`);
+    assert.equal(created.number, `ENQ/${YEAR}/0004`);
 
     await assignInquiryForUser(owner, ORG, created.id, people.adam.staffId);
     await refused(

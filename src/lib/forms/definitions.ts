@@ -42,7 +42,7 @@ export type FormDefinition = {
   /** Name of the list and of one form, as shown in the app. */
   listLabel: string;
   itemLabel: string;
-  /** Short code in the reference number: AJE/FN/2026/0001. */
+  /** Short code in the reference number: FN/2026/0001. */
   counterKey: string;
   /** Reception, or the department workspace it is raised from. */
   raisedIn: "reception" | InquiryWorkflowDepartmentKey;

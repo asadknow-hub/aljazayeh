@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { CompanyDocEditor } from "@/components/company-docs/company-doc-editor";
+import { can } from "@/lib/access/access";
 import { getCompanyDocForUser } from "@/lib/company-docs/queries";
 import { getCompanyLetterheadForUser } from "@/lib/company-settings/queries";
 import { appDateValue } from "@/lib/datetime/format";
@@ -30,6 +31,7 @@ export default async function CompanyDocPage({
       initialDetail={detail}
       company={company}
       today={appDateValue()}
+      canManageCompany={can.manageCompany(org.access)}
     />
   );
 }

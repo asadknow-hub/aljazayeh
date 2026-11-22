@@ -163,7 +163,7 @@ describe("fine notice", () => {
       },
     });
     formId = first.id;
-    assert.equal(first.referenceNo, `${ORG.toUpperCase()}/FN/${YEAR}/0001`);
+    assert.equal(first.referenceNo, `FN/${YEAR}/0001`);
     assert.equal(first.amount, "50.00");
     assert.equal(first.staffName, "Khairul Islam");
 
@@ -171,7 +171,7 @@ describe("fine notice", () => {
       staffId: welderId,
       fields: { reason: "been late", amount: "25" },
     });
-    assert.equal(second.referenceNo, `${ORG.toUpperCase()}/FN/${YEAR}/0002`);
+    assert.equal(second.referenceNo, `FN/${YEAR}/0002`);
   });
 
   test("it prints as the company's letter with a box for the employee", async () => {
@@ -349,7 +349,7 @@ describe("material request", () => {
       fields: { projectName: "AC GAS", requestDate: "2026-08-03" },
       lines: [{ materialDescription: "AC gas ( Refron )", qty: "1" }],
     });
-    assert.equal(created.referenceNo, `${ORG.toUpperCase()}/MRAF/${YEAR}/0001`);
+    assert.equal(created.referenceNo, `MRAF/${YEAR}/0001`);
     assert.equal(created.amount, null);
     const form = await document(people.fahad, created.id);
     assert.equal(form.signoffs.waitingFor, "Verified by Forman");

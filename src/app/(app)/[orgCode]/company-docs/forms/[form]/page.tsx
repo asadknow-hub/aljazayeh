@@ -31,7 +31,7 @@ export default async function SignedFormDocPage({
       form={row}
       company={company}
       today={appDateValue()}
-      canSetSignatories={can.manageCompany(org.access)}
+      canManageCompany={can.manageCompany(org.access)}
     />
   );
 }

@@ -622,7 +622,7 @@ export const inquiries = pgTable(
     organizationId: uuid("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    /** Running number, e.g. AJE/INQ/2026/0001. */
+    /** Running number, e.g. INQ/2026/0001. */
     inquiryNumber: text("inquiry_number").notNull().default(""),
     title: text("title").notNull().default(""),
     customerName: text("customer_name").notNull(),

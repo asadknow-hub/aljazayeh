@@ -158,7 +158,7 @@ describe("one job from inquiry to payment", () => {
       lineItems: [item("SS handrail", "12")],
     });
     inquiryId = created.id;
-    assert.equal(created.number, `${ORG.toUpperCase()}/INQ/${YEAR}/0001`);
+    assert.equal(created.number, `INQ/${YEAR}/0001`);
     assert.equal(created.status, "open");
     assert.equal(created.steps.length, stagesForJob("local").length);
     assert.deepEqual(
@@ -170,7 +170,7 @@ describe("one job from inquiry to payment", () => {
       fields: { customerName: "Second Customer" },
       lineItems: [],
     });
-    assert.equal(second.number, `${ORG.toUpperCase()}/INQ/${YEAR}/0002`);
+    assert.equal(second.number, `INQ/${YEAR}/0002`);
   });
 
   test("a step cannot be completed with its required answers missing", async () => {
@@ -214,7 +214,7 @@ describe("one job from inquiry to payment", () => {
     // The next step has its number as soon as the job reaches it.
     assert.equal(
       moved.steps[1]?.documentNumber,
-      `${ORG.toUpperCase()}/QTN/${YEAR}/0001`,
+      `QTN/${YEAR}/0001`,
     );
     assert.equal(moved.steps[2]?.documentNumber, "");
   });
@@ -258,7 +258,7 @@ describe("one job from inquiry to payment", () => {
     });
     assert.equal(
       quoted.steps[1]?.documentNumber,
-      `${ORG.toUpperCase()}/QTN/${YEAR}/0001`,
+      `QTN/${YEAR}/0001`,
     );
     assert.equal(quoted.lineItems[1]?.unit, "Nos");
     assert.equal(quoted.currentStage, "lpo");
@@ -306,7 +306,7 @@ describe("one job from inquiry to payment", () => {
     assert.equal(again.totals.total, 12390);
     assert.equal(
       again.steps[1]?.documentNumber,
-      `${ORG.toUpperCase()}/QTN/${YEAR}/0001`,
+      `QTN/${YEAR}/0001`,
       "the quotation keeps its number",
     );
     assert.equal(again.assignedStaffId, people.adam.staffId);
@@ -341,7 +341,7 @@ describe("one job from inquiry to payment", () => {
     );
     const step = ordered.steps[2];
     assert.equal(step?.label, "LPO");
-    assert.equal(step?.documentNumber, `${ORG.toUpperCase()}/LPO/${YEAR}/0001`);
+    assert.equal(step?.documentNumber, `LPO/${YEAR}/0001`);
     assert.deepEqual(step?.documentNumbers, {});
     // Blank rows are dropped and only the form's own columns are kept.
     assert.deepEqual(step?.tables.poLines, [
@@ -381,10 +381,10 @@ describe("one job from inquiry to payment", () => {
     );
     assert.equal(
       jobCard.steps[4]?.documentNumber,
-      `${ORG.toUpperCase()}/JC/${YEAR}/0001`,
+      `JC/${YEAR}/0001`,
     );
     assert.deepEqual(jobCard.steps[4]?.documentNumbers, {
-      compliance_certificate: `${ORG.toUpperCase()}/COC/${YEAR}/0001`,
+      compliance_certificate: `COC/${YEAR}/0001`,
     });
     assert.equal(jobCard.lineItems[0]?.description, "SS handrail");
     assert.deepEqual(jobCard.lineItems[0]?.details, {
@@ -448,7 +448,7 @@ describe("one job from inquiry to payment", () => {
     assert.equal(paid.status, "completed");
     assert.ok(paid.steps.every((step) => step.state === "done"));
     assert.deepEqual(
-      paid.steps.map((step) => step.documentNumber.split("/")[1] ?? ""),
+      paid.steps.map((step) => step.documentNumber.split("/")[0] ?? ""),
       ["INQ", "QTN", "LPO", "PI", "JC", "PRG", "DN", "INV", "RV"],
     );
     assert.equal(paid.canWork, false);
@@ -575,8 +575,8 @@ describe("a job shipped abroad", () => {
         })),
       },
     );
-    assert.match(shipped.steps[8]?.documentNumber ?? "", /\/CI\//);
-    assert.match(shipped.steps[8]?.documentNumbers.packing_list ?? "", /\/PL\//);
+    assert.match(shipped.steps[8]?.documentNumber ?? "", /^CI\//);
+    assert.match(shipped.steps[8]?.documentNumbers.packing_list ?? "", /^PL\//);
     assert.equal(shipped.lineItems[0]?.details.hsCode, "7306");
     assert.equal(shipped.currentStage, "receipt_voucher");
   });

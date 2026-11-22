@@ -91,7 +91,7 @@ export type StageDocument = {
   /** The fixed wording of the paper that can be changed. */
   texts?: readonly PaperText[];
   /**
-   * Short code in the document's number, e.g. AJE/QTN/2026/0001. A document
+   * Short code in the document's number, e.g. QTN/2026/0001. A document
    * without one carries the number of its step.
    */
   counterKey?: string;

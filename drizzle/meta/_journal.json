@@ -85,6 +85,13 @@
       "when": 1795357842490,
       "tag": "0011_company_docs",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1795375104106,
+      "tag": "0012_numbers_without_company",
+      "breakpoints": true
     }
   ]
 }
