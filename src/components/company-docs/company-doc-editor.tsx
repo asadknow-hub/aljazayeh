@@ -37,7 +37,9 @@ import {
 import type { CompanyLetterhead } from "@/lib/company-settings/types";
 import { formatFriendlyDateTime } from "@/lib/datetime/format";
 import {
+  BANK_FIELD,
   canSetPrefill,
+  stageFields,
   STEP_FORM,
   type DocumentSettings,
   type StageField,
@@ -708,6 +710,11 @@ export function CompanyDocEditor({
             items: sample.lineItems,
             tables: sampleStep.tables,
             totals: sample.totals,
+            bank: stageFields(doc.stage, stepTemplate).some(
+              (field) => field.key === BANK_FIELD,
+            )
+              ? detail.sampleBank
+              : null,
           }}
         >
           <StagePaper document={doc.document} />

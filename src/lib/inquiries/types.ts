@@ -1,3 +1,4 @@
+import type { BankAccount, BankDetails } from "@/lib/banks/types";
 import type {
   InquiryStageKey,
   InquiryWorkflowDepartmentKey,
@@ -99,6 +100,20 @@ export type InquiryStepView = {
    * still being worked on, the one it was finished with for a finished step.
    */
   template: StepTemplate;
+  /**
+   * The person the step is given to. Every step has its own: who handled a
+   * finished step, who is handling the current one, and for a step still to
+   * come, who it has been planned for.
+   */
+  handlerStaffId: string | null;
+  handlerName: string | null;
+  /** The signed-in person may say who will handle this step when it comes. */
+  canPlan: boolean;
+  /**
+   * The bank account the step's paper was saved with, as it was then. A
+   * finished paper keeps it even if the account is later changed or removed.
+   */
+  bank: BankDetails | null;
   /** Who prepared the step: its handler, or whoever completed it. */
   preparedByName: string | null;
   completedAt: string | null;
@@ -116,6 +131,8 @@ export type InquiryView = InquirySummary & {
   createdByName: string;
   steps: InquiryStepView[];
   lineItems: InquiryLineItemView[];
+  /** The company's bank accounts a paper can choose from, default first. */
+  bankAccounts: BankAccount[];
   /** Files uploaded on the inquiry, such as the customer's LPO. */
   attachments: { id: string; fileName: string; contentType: string }[];
   /** The current step has been sent for approval and not yet answered. */

@@ -48,12 +48,6 @@ export async function getCompanySettingsForUser(
       addressArabic: settings?.addressArabic ?? "",
       poBox: settings?.poBox ?? "",
       trn: settings?.trn ?? "",
-      bankName: settings?.bankName ?? "",
-      bankAccountName: settings?.bankAccountName ?? "",
-      bankAccountNumber: settings?.bankAccountNumber ?? "",
-      bankIban: settings?.bankIban ?? "",
-      bankSwift: settings?.bankSwift ?? "",
-      bankBranch: settings?.bankBranch ?? "",
     };
   });
 }
@@ -86,12 +80,6 @@ export async function getCompanyLetterheadForUser(
       addressArabic: settings?.addressArabic ?? "",
       poBox: settings?.poBox ?? "",
       trn: settings?.trn ?? "",
-      bankName: settings?.bankName ?? "",
-      bankAccountName: settings?.bankAccountName ?? "",
-      bankAccountNumber: settings?.bankAccountNumber ?? "",
-      bankIban: settings?.bankIban ?? "",
-      bankSwift: settings?.bankSwift ?? "",
-      bankBranch: settings?.bankBranch ?? "",
     };
   });
 }

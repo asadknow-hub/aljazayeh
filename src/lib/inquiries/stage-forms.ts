@@ -25,7 +25,9 @@ type StageFieldType =
   | "number"
   | "choice"
   | "yesno"
-  | "file";
+  | "file"
+  /** One of the company's bank accounts, kept under Accounts. */
+  | "bank";
 
 /** "Only when this answer of the step has this value." */
 type Condition = { field: string; value: string };
@@ -61,6 +63,20 @@ export type StageField = {
     | "customerAddress"
     | string;
 };
+
+/** The answer that says which bank account a paper prints. */
+export const BANK_FIELD = "bankAccount";
+
+/** "Which of our bank accounts is printed on this paper?" */
+function bankField(on: string): StageField {
+  return {
+    key: BANK_FIELD,
+    label: "Bank account to print",
+    type: "bank",
+    on,
+    wide: true,
+  };
+}
 
 /**
  * How a step treats the job's items:
@@ -483,6 +499,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         type: "text",
         on: "quotation",
       },
+      bankField("quotation"),
     ],
   },
 
@@ -685,6 +702,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         type: "amount",
         on: "proforma_invoice",
       },
+      bankField("proforma_invoice"),
     ],
   },
 
@@ -889,7 +907,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
 
   progress_invoice: {
     purpose:
-      "Bill for the work done so far, when the job is billed in parts. Say how far the work has got.",
+      "Bill for the work done so far, when the job is billed in parts. Say how far the work has got and what has been done.",
     documents: [
       {
         key: "progress_invoice",
@@ -930,6 +948,14 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         type: "amount",
         on: "progress_invoice",
       },
+      {
+        key: "workDetails",
+        label: "Details of the work done so far",
+        type: "longtext",
+        on: "progress_invoice",
+        wide: true,
+      },
+      bankField("progress_invoice"),
     ],
   },
 
@@ -1011,6 +1037,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         type: "amount",
         on: "tax_invoice",
       },
+      bankField("tax_invoice"),
     ],
   },
 
@@ -1150,6 +1177,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         type: "number",
         on: "packing_list",
       },
+      bankField("commercial_invoice"),
     ],
   },
 

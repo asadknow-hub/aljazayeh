@@ -20,6 +20,7 @@ import {
   getInquiryWorkflowMapForUser,
   listInquiriesForUser,
   listInquiryTasksForUser,
+  planInquiryStepForUser,
   reopenInquiryForUser,
   saveInquiryStageForUser,
   saveInquiryWorkflowMapForUser,
@@ -635,5 +636,106 @@ describe("managing the work", () => {
     );
     assert.equal(reopened.status, "open");
     assert.equal(reopened.currentStage, "inquiry");
+  });
+});
+
+describe("every step has its own person", () => {
+  let inquiryId: string;
+  const handlers = (inquiry: InquiryView) =>
+    Object.fromEntries(
+      inquiry.steps
+        .filter((step) => step.handlerName)
+        .map((step) => [step.key, step.handlerName]),
+    );
+
+  before(async () => {
+    const created = await createInquiryForUser(people.adam.userId, ORG, {
+      fields: { customerName: "Shared Work LLC", title: "Railing", contact: "1" },
+      lineItems: [item("Railing", "4", "50")],
+    });
+    inquiryId = created.id;
+  });
+
+  test("the person on one step stays on record when the next is given to another", async () => {
+    const first = await assignInquiryForUser(
+      owner,
+      ORG,
+      inquiryId,
+      people.adam.staffId,
+    );
+    assert.deepEqual(handlers(first), { inquiry: "Adam" });
+
+    const moved = await saveInquiryStageForUser(
+      people.adam.userId,
+      ORG,
+      inquiryId,
+      { fields: first.steps[0]!.fields, lineItems: first.lineItems },
+      { complete: true },
+    );
+    assert.equal(moved.currentStage, "quotation");
+    const second = await assignInquiryForUser(
+      owner,
+      ORG,
+      inquiryId,
+      people.amal.staffId,
+    );
+    // Changing who has the quotation does not touch the inquiry step.
+    assert.deepEqual(handlers(second), { inquiry: "Adam", quotation: "Amal" });
+  });
+
+  test("a step still to come is planned for someone of its own department", async () => {
+    await refused(
+      planInquiryStepForUser(owner, ORG, inquiryId, "quotation", people.adam.staffId),
+      /still to come/,
+    );
+    // The job card is Engineering's in this company; Adam is in Admin.
+    await refused(
+      planInquiryStepForUser(owner, ORG, inquiryId, "job_card", people.adam.staffId),
+      /step's department/,
+    );
+    await refused(
+      planInquiryStepForUser(people.tina.userId, ORG, inquiryId, "job_card", people.eli.staffId),
+      /Inquiry not found|permission/,
+    );
+
+    const planned = await planInquiryStepForUser(
+      owner,
+      ORG,
+      inquiryId,
+      "lpo",
+      people.adam.staffId,
+    );
+    assert.deepEqual(handlers(planned), {
+      inquiry: "Adam",
+      quotation: "Amal",
+      lpo: "Adam",
+    });
+    assert.equal(planned.steps[2]!.state, "locked");
+    // Planning changes nothing about who has the job now.
+    assert.equal(planned.assignedStaffName, "Amal");
+  });
+
+  test("when the job reaches a planned step it goes straight to that person", async () => {
+    const moved = await saveInquiryStageForUser(
+      people.amal.userId,
+      ORG,
+      inquiryId,
+      {
+        fields: {
+          quotationDate: appDateValue(),
+          vatPercent: "5",
+          termPayment: "Cash",
+        },
+        lineItems: [{ ...item("Railing", "4", "50"), unit: "m" }],
+      },
+      { complete: true },
+    );
+    assert.equal(moved.currentStage, "lpo");
+    assert.equal(moved.assignedStaffName, "Adam");
+    assert.deepEqual(handlers(moved), {
+      inquiry: "Adam",
+      quotation: "Amal",
+      lpo: "Adam",
+    });
   });
 });

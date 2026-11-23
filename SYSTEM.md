@@ -189,6 +189,10 @@ Saving the workflow map also **recomputes** `owningDepartmentKey` on open inquir
 Org-scoped HR directory:
 
 - Create / edit staff (name, contact, profession, status active/inactive, notes)
+- Every employee, staff and workers alike, has an **Employee ID** that nobody
+  else in the company has. Left empty it is given automatically (`EMP-0007`,
+  the company's next number, never given twice); an ID that is typed is kept.
+  The staff list is searched by it.
 - Assign department roles (management, accounts, reception, sales, engineering, admin, workers)
 - Salary & contract fields on the staff record
 - Detail sections for vacation history, login and actions
@@ -338,8 +342,16 @@ step 9 and the Receipt Voucher as step 10.
   and final prices on the Quotation, and ticked off on the Delivery Note.
   Other steps only add their own details to an item (a remark, a heat
   number, an HS code), so the invoice always matches the quote.
-- The company's address, TRN and bank details printed on the papers are
-  entered once under Company Settings.
+- The company's address and TRN printed on the papers are entered once
+  under Company Settings.
+- **Bank accounts** are kept by Accounts, under Accounts → Bank accounts: add,
+  correct, remove, and choose the one that is used first. The quotation and
+  every invoice have a **Bank account to print** dropdown; it starts with the
+  account the job's earlier papers carry, or else the one used first, and the
+  paper prints the chosen account's details. The details are copied onto the
+  step when it is saved (`inquiry_stage_records.bank`), so a paper already
+  issued keeps the account it was issued with after the account is corrected
+  or removed.
 
 #### Working a step
 
@@ -349,6 +361,11 @@ step 9 and the Receipt Voucher as step 10.
 - **Save** keeps the step as it is. **Save & Go to Next Step** also finishes
   it, and hands the inquiry to the next step's department **unassigned**.
   **Discard** drops unsaved changes.
+- **Every step has its own person.** Who handled a finished step stays on
+  record with that step; giving the current step to someone else changes
+  only the current step. For a step still to come, whoever may assign in its
+  department can **plan who handles it**: the job then arrives already in
+  that person's hands instead of unassigned.
 - If something required is missing, the step does not move: the missing
   places are marked in red and the first one is brought into view.
 - **Send back to the previous step** needs a reason. The earlier step goes
@@ -561,6 +578,7 @@ sessions when a password changes (sessions currently last 12 hours).
 | Organisation chart | `org_positions` (owners and department positions, who holds each), `organization_settings.closed_departments` |
 | Sign-offs | `document_signoffs` (append-only; each row keeps whose box it was and its heading) |
 | Signed forms | `approval_forms`, `document_counters` (running numbers) |
+| Bank accounts | `bank_accounts` (switched off, never deleted) |
 | Company Docs | `document_templates` (a company's versions of each paper, append-only) |
 | Activity | `staff_activity_logs` |
 | Inquiry CRM | `inquiry_workflow_settings`, `inquiries`, `inquiry_stage_records`, `inquiry_line_items`, `inquiry_stage_events`, `inquiry_comments`, `inquiry_stage_approvals` |

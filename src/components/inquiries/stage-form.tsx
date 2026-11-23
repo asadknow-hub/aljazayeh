@@ -56,6 +56,9 @@ export function hasFields(
   return stageFields(stage, template).some((field) => field.on === place);
 }
 
+/** A bank account that can be chosen for a paper. */
+export type BankChoice = { id: string; label: string };
+
 /** What a form needs to take in and show uploaded files. */
 export type FileHandling = {
   /** The name of an uploaded file, by its id. */
@@ -143,6 +146,7 @@ function FieldInput({
   invalid,
   fullWidth,
   files,
+  banks = [],
 }: {
   field: StageField;
   value: string;
@@ -151,6 +155,7 @@ function FieldInput({
   invalid: boolean;
   fullWidth: boolean;
   files?: FileHandling;
+  banks?: BankChoice[];
 }) {
   const id = fillId(field.key);
   const span = fullWidth ? "col-span-2" : "col-span-2 sm:col-span-1";
@@ -210,6 +215,22 @@ function FieldInput({
             files={files}
           />
         ) : null
+      ) : field.type === "bank" ? (
+        banks.length > 0 ? (
+          <select {...shared} onChange={(event) => onChange(event.target.value)}>
+            <option value="">No bank details on this paper</option>
+            {banks.map((bank) => (
+              <option key={bank.id} value={bank.id}>
+                {bank.label}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <p className="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-600">
+            The company has no bank account on record yet. Accounts adds them
+            under Accounts → Bank accounts, and they can then be chosen here.
+          </p>
+        )
       ) : field.type === "longtext" ? (
         <textarea
           {...shared}
@@ -263,6 +284,7 @@ export function StageFields({
   invalid,
   narrow = false,
   files,
+  banks,
   template,
 }: {
   stage: InquiryStageKey;
@@ -276,6 +298,8 @@ export function StageFields({
   invalid?: ReadonlySet<string>;
   narrow?: boolean;
   files?: FileHandling;
+  /** The company's bank accounts, for a paper that prints one. */
+  banks?: BankChoice[];
 }) {
   return (
     <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
@@ -290,6 +314,7 @@ export function StageFields({
             Boolean(field.wide) || (narrow && !SHORT_TYPES.has(field.type))
           }
           files={files}
+          banks={banks}
           onChange={(value) => onChange({ ...values, [field.key]: value })}
         />
       ))}

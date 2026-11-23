@@ -1,3 +1,4 @@
+import type { BankDetails } from "@/lib/banks/types";
 import type { SignedFormKey } from "@/lib/company-docs/catalog";
 import type {
   InquiryStageKey,
@@ -75,5 +76,7 @@ export type CompanyDocDetail = {
   templates: Partial<Record<InquiryStageKey, StepTemplate>>;
   /** Newest first. */
   versions: CompanyDocVersion[];
+  /** The bank account the sample paper prints: the company's usual one. */
+  sampleBank: BankDetails | null;
   canEdit: boolean;
 };

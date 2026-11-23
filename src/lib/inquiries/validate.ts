@@ -74,6 +74,12 @@ export function normalizeStageFields(
         }
         fields[field.key] = value;
         break;
+      case "bank":
+        if (!isUuid(value)) {
+          throw new UserError("Choose the bank account again.");
+        }
+        fields[field.key] = value;
+        break;
       case "yesno":
         fields[field.key] = value === "yes" ? "yes" : "";
         break;

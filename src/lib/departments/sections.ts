@@ -5,9 +5,15 @@ import {
 } from "@/lib/forms/definitions";
 import type { InquiryWorkflowDepartmentKey } from "@/lib/inquiries/stages";
 
-export type DepartmentSection = "inquiries" | FormType;
+/** The company's bank accounts, kept by Accounts. */
+export const BANKS_SECTION = "banks";
 
-/** A department workspace's sidebar: the inquiries, then the forms it raises. */
+export type DepartmentSection = "inquiries" | FormType | typeof BANKS_SECTION;
+
+/**
+ * A department workspace's sidebar: the inquiries, then the forms it raises;
+ * Accounts also keeps the bank accounts.
+ */
 export function departmentSections(
   department: InquiryWorkflowDepartmentKey,
 ): { key: DepartmentSection; label: string }[] {
@@ -17,5 +23,8 @@ export function departmentSections(
       key: type,
       label: FORM_DEFINITIONS[type].listLabel,
     })),
+    ...(department === "accounts"
+      ? [{ key: BANKS_SECTION, label: "Bank accounts" } as const]
+      : []),
   ];
 }

@@ -15,6 +15,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { BankDetails } from "@/lib/banks/types";
 import type {
   DocumentSettings,
   StepTemplate,
@@ -202,12 +203,6 @@ export const organizationSettings = pgTable("organization_settings", {
   addressArabic: text("address_arabic").notNull().default(""),
   poBox: text("po_box").notNull().default(""),
   trn: text("trn").notNull().default(""),
-  bankName: text("bank_name").notNull().default(""),
-  bankAccountName: text("bank_account_name").notNull().default(""),
-  bankAccountNumber: text("bank_account_number").notNull().default(""),
-  bankIban: text("bank_iban").notNull().default(""),
-  bankSwift: text("bank_swift").notNull().default(""),
-  bankBranch: text("bank_branch").notNull().default(""),
   /**
    * Departments the system offers that this company does not have. They are
    * left off the organisation chart, the home screen and every list to
@@ -260,6 +255,7 @@ export const staffMembers = pgTable(
     homeCountryContact: text("home_country_contact").notNull().default(""),
     passportNumber: text("passport_number").notNull().default(""),
     jobTitle: text("job_title").notNull().default(""),
+    /** The employee's ID in the company, e.g. EMP-0007. Given automatically. */
     employeeCode: text("employee_code").notNull().default(""),
     /** First working day. Attendance before it shows as "New join". */
     joinedOn: date("joined_on", { mode: "string" }),
@@ -289,6 +285,10 @@ export const staffMembers = pgTable(
       table.userId,
     ),
     index("staff_members_user_idx").on(table.userId),
+    // An employee ID belongs to one person in the company.
+    uniqueIndex("staff_members_org_employee_code_uidx")
+      .on(table.organizationId, table.employeeCode)
+      .where(sql`${table.employeeCode} <> ''`),
     allowSelect("staff_members_member_select", isOrgMember()),
     allowInsert("staff_members_manager_insert", canManageStaff()),
     allowUpdate("staff_members_manager_update", canManageStaff()),
@@ -437,6 +437,37 @@ export const documentCounters = pgTable(
       columns: [table.organizationId, table.counterKey, table.year],
     }),
     ...orgMemberRecords("document_counters"),
+  ],
+);
+
+/**
+ * The company's bank accounts, kept by Accounts. A paper that asks to be
+ * paid (quotation, invoices) names one of them; the details printed are
+ * copied onto the step, so a paper already issued keeps the account it was
+ * issued with. An account that is no longer used is switched off, not
+ * deleted.
+ */
+export const bankAccounts = pgTable(
+  "bank_accounts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    bankName: text("bank_name").notNull().default(""),
+    accountName: text("account_name").notNull().default(""),
+    accountNumber: text("account_number").notNull().default(""),
+    iban: text("iban").notNull().default(""),
+    swift: text("swift").notNull().default(""),
+    branch: text("branch").notNull().default(""),
+    isDefault: boolean("is_default").notNull().default(false),
+    active: boolean("active").notNull().default(true),
+    ...timestamps,
+  },
+  (table) => [
+    index("bank_accounts_org_idx").on(table.organizationId),
+    ...orgMemberRecords("bank_accounts"),
   ],
 );
 
@@ -747,6 +778,8 @@ export const inquiryStageRecords = pgTable(
      * changed.
      */
     template: jsonb("template").$type<StepTemplate>(),
+    /** The bank account printed on the step's papers, as it was chosen. */
+    bank: jsonb("bank").$type<BankDetails>(),
     /** When the step was sent for approval; empty until then. */
     approvalRequestedAt: timestamp("approval_requested_at", {
       withTimezone: true,

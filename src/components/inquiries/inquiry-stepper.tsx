@@ -1,25 +1,39 @@
 "use client";
 
+import { useState } from "react";
 import { DepartmentChip } from "@/components/inquiries/inquiry-chips";
-import { CheckIcon, LockIcon } from "@/components/ui/icons";
-import type { InquiryStageKey } from "@/lib/inquiries/stages";
-import type { InquiryStepView } from "@/lib/inquiries/types";
+import { CheckIcon, LockIcon, UserIcon } from "@/components/ui/icons";
+import type {
+  InquiryStageKey,
+  InquiryWorkflowDepartmentKey,
+} from "@/lib/inquiries/stages";
+import type { AssignableStaff, InquiryStepView } from "@/lib/inquiries/types";
 
 /**
- * The steps of the process, top to bottom. Finished steps and the current
- * one can be opened; steps the inquiry has not reached are locked.
+ * The steps of the process, top to bottom, each with its own person: who
+ * handled a finished step, who is on the current one, and who a step still
+ * to come is planned for. Finished steps and the current one can be opened;
+ * steps the inquiry has not reached are locked, but can be planned.
  */
 export function InquiryStepper({
   steps,
   viewing,
-  assignedStaffName,
+  assignable,
+  pending,
   onSelect,
+  onPlan,
 }: {
   steps: InquiryStepView[];
   viewing: InquiryStageKey;
-  assignedStaffName: string | null;
+  /** The staff of each department the signed-in person may assign in. */
+  assignable: Partial<Record<InquiryWorkflowDepartmentKey, AssignableStaff[]>>;
+  pending: boolean;
   onSelect: (key: InquiryStageKey) => void;
+  /** Plan an upcoming step for a person; an empty id takes the plan back. */
+  onPlan: (key: InquiryStageKey, staffId: string) => void;
 }) {
+  const [planning, setPlanning] = useState<InquiryStageKey | null>(null);
+
   return (
     <nav aria-label="Steps of this inquiry" className="card p-2">
       <ol className="flex flex-col gap-1">
@@ -73,9 +87,13 @@ export function InquiryStepper({
                   {step.state === "current" ? (
                     <span className="mt-1 block text-xs font-medium text-blue-700">
                       In progress ·{" "}
-                      {assignedStaffName ?? (
+                      {step.handlerName ?? (
                         <span className="text-accent">nobody assigned</span>
                       )}
+                    </span>
+                  ) : step.state === "done" && step.handlerName ? (
+                    <span className="mt-1 block text-xs font-medium text-slate-600">
+                      Handled by {step.handlerName}
                     </span>
                   ) : null}
                   {!locked && step.documentNumber ? (
@@ -85,6 +103,54 @@ export function InquiryStepper({
                   ) : null}
                 </span>
               </button>
+
+              {/* Who a step still to come is planned for. Kept outside the
+                  locked row, so it stays readable. */}
+              {locked && (step.handlerName || step.canPlan) ? (
+                <div className="mt-0.5 mb-1 ml-[3.125rem] flex flex-wrap items-center gap-1.5 text-xs">
+                  {planning === step.key ? (
+                    <select
+                      autoFocus
+                      aria-label={`Who will handle ${step.label}`}
+                      value={step.handlerStaffId ?? ""}
+                      disabled={pending}
+                      onBlur={() => setPlanning(null)}
+                      onChange={(event) => {
+                        onPlan(step.key, event.target.value);
+                        setPlanning(null);
+                      }}
+                      className="field !py-1 text-xs"
+                    >
+                      <option value="">Nobody yet</option>
+                      {(assignable[step.departmentKey] ?? []).map((staff) => (
+                        <option key={staff.id} value={staff.id}>
+                          {staff.fullName}
+                          {staff.jobTitle ? ` · ${staff.jobTitle}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <>
+                      {step.handlerName ? (
+                        <span className="inline-flex items-center gap-1 font-medium text-slate-700">
+                          <UserIcon className="h-3.5 w-3.5" />
+                          Planned for {step.handlerName}
+                        </span>
+                      ) : null}
+                      {step.canPlan ? (
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => setPlanning(step.key)}
+                          className="cursor-pointer font-medium text-primary hover:underline"
+                        >
+                          {step.handlerName ? "Change" : "Plan who handles it"}
+                        </button>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              ) : null}
             </li>
           );
         })}

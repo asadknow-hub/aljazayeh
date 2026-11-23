@@ -208,7 +208,7 @@ export function StaffClient({
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search name, profession, department…"
+          placeholder="Search name, employee ID, profession…"
           className="field w-full max-w-md"
         />
       </div>
@@ -410,10 +410,9 @@ export function StaffClient({
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="field-label">
-                      Employee code
-                    </span>
+                    <span className="field-label">Employee ID</span>
                     <input
+                      placeholder="Given automatically"
                       value={form.employeeCode}
                       onChange={(event) =>
                         setForm((current) => ({

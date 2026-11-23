@@ -108,15 +108,22 @@ function initialsOf(name: string): string {
     .join("");
 }
 
-/** Who is handling the current step, with a way to change it. */
+/**
+ * Who has the step on screen. Every step has its own person: for the
+ * current step there is a way to change them; a finished step shows who
+ * handled it.
+ */
 export function HandlingBlock({
   inquiry,
+  step,
   staffOptions,
   myStaffId,
   pending,
   onAssign,
 }: {
   inquiry: InquiryView;
+  /** The step being looked at. */
+  step: InquiryView["steps"][number];
   staffOptions: AssignableStaff[];
   myStaffId: string;
   pending: boolean;
@@ -125,7 +132,27 @@ export function HandlingBlock({
   const [choosing, setChoosing] = useState(false);
   const [assignStaffId, setAssignStaffId] = useState("");
 
-  if (inquiry.status !== "open") return null;
+  if (step.state !== "current" || inquiry.status !== "open") {
+    if (!step.handlerName) return null;
+    return (
+      <div className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-200 ring-inset">
+        <span
+          aria-hidden
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white"
+        >
+          {initialsOf(step.handlerName)}
+        </span>
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium tracking-wide text-slate-500 uppercase">
+            {step.label} was handled by
+          </p>
+          <p className="font-display text-base leading-tight font-semibold text-slate-900">
+            {step.handlerName}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const assigned = inquiry.assignedStaffName;
   const department = workflowDepartmentLabel(inquiry.owningDepartmentKey);

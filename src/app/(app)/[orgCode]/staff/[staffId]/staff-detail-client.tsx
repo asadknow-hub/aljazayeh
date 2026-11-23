@@ -284,6 +284,11 @@ export function StaffDetailClient({
             <p className="mt-0.5 truncate text-xs text-slate-500">
               {staff.jobTitle || "Staff member"}
             </p>
+            {staff.employeeCode ? (
+              <p className="mt-1 font-mono text-[11px] text-slate-500">
+                ID {staff.employeeCode}
+              </p>
+            ) : null}
           </div>
           <nav className="flex flex-col gap-0.5 p-2 sm:p-3">
             {STAFF_DETAIL_SECTIONS.map((item) => {
@@ -411,9 +416,7 @@ export function StaffDetailClient({
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="field-label">
-                      Employee code
-                    </span>
+                    <span className="field-label">Employee ID</span>
                     <input
                       value={profile.employeeCode}
                       onChange={(event) =>

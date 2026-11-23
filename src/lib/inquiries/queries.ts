@@ -31,6 +31,7 @@ import {
   type InquiryWorkflowMap,
 } from "@/lib/inquiries/stages";
 import {
+  BANK_FIELD,
   documentsInUse,
   INQUIRY_COUNTER_KEY,
   inquiryTotals,
@@ -61,6 +62,8 @@ import {
   normalizeStageTables,
 } from "@/lib/inquiries/validate";
 import { appDateValue } from "@/lib/datetime/format";
+import { loadBankAccounts } from "@/lib/banks/queries";
+import type { BankDetails } from "@/lib/banks/types";
 import { loadStepTemplates } from "@/lib/company-docs/templates";
 import {
   approverOptions,
@@ -593,6 +596,21 @@ async function loadInquiryView(
         .limit(1)
     : [];
 
+  // Each step's own person: who handled it, or who it is planned for.
+  const handlerIds = [...records.values()].flatMap((record) =>
+    record.handledByStaffId ? [record.handledByStaffId] : [],
+  );
+  const handlerNames = new Map(
+    handlerIds.length > 0
+      ? (
+          await tx
+            .select({ id: staffMembers.id, fullName: staffMembers.fullName })
+            .from(staffMembers)
+            .where(inArray(staffMembers.id, handlerIds))
+        ).map((staff) => [staff.id, staff.fullName])
+      : [],
+  );
+
   const live = await loadStepTemplates(tx, org.id);
   const stages = stagesForJob(row.jobType);
   const currentIndex = stages.findIndex((item) => item.key === stage);
@@ -605,6 +623,14 @@ async function loadInquiryView(
           ? "current"
           : "locked";
     const reached = state !== "locked";
+    const handlerStaffId =
+      state === "current"
+        ? row.assignedStaffId
+        : (record?.handledByStaffId ?? null);
+    const completedByName =
+      state === "done" && record?.completedByUserId
+        ? (names.get(record.completedByUserId) ?? null)
+        : null;
     return {
       key: item.key,
       number: index + 1,
@@ -626,6 +652,19 @@ async function loadInquiryView(
       // A finished step keeps the papers as they were when it was finished.
       template:
         state === "done" ? (record?.template ?? {}) : (live[item.key] ?? {}),
+      bank: reached ? (record?.bank ?? null) : null,
+      handlerStaffId,
+      handlerName:
+        state === "current"
+          ? (assigned?.fullName ?? null)
+          : handlerStaffId
+            ? (handlerNames.get(handlerStaffId) ?? null)
+            : // Steps finished before handlers were kept per step.
+              completedByName,
+      canPlan:
+        status === "open" &&
+        state === "locked" &&
+        can.assignInquiry(org.access, departmentForStage(map, item.key)),
       preparedByName:
         state === "done" && record?.completedByUserId
           ? (names.get(record.completedByUserId) ?? null)
@@ -706,6 +745,7 @@ async function loadInquiryView(
     createdByName,
     steps,
     lineItems,
+    bankAccounts: await loadBankAccounts(tx, org.id),
     attachments: await listAttachments(tx, row.id),
     approvalRequested,
     currentStageApproved,
@@ -820,6 +860,7 @@ async function writeStageRecord(
       | "documentNumber"
       | "documentNumbers"
       | "handledByStaffId"
+      | "bank"
       | "approvalRequestedAt"
       | "template"
       | "completedAt"
@@ -937,6 +978,40 @@ async function nextStageNumber(
   );
 }
 
+/**
+ * The details of the bank account a paper was saved with. They are copied
+ * onto the step, so the paper keeps printing the account it was issued with
+ * whatever happens to the company's list of accounts afterwards.
+ */
+async function chosenBank(
+  tx: DbTransaction,
+  org: ResolvedOrg,
+  fields: Record<string, string>,
+  saved: { fields: Record<string, string>; bank: BankDetails | null } | undefined,
+): Promise<BankDetails | null> {
+  const accountId = fields[BANK_FIELD];
+  if (!accountId) return null;
+
+  const account = (await loadBankAccounts(tx, org.id)).find(
+    (item) => item.id === accountId,
+  );
+  if (account) {
+    return {
+      bankName: account.bankName,
+      accountName: account.accountName,
+      accountNumber: account.accountNumber,
+      iban: account.iban,
+      swift: account.swift,
+      branch: account.branch,
+    };
+  }
+  // An account no longer in use stays on a paper that already carried it.
+  if (saved?.bank && saved.fields[BANK_FIELD] === accountId) return saved.bank;
+  throw new UserError(
+    "That bank account is no longer in use. Choose another one.",
+  );
+}
+
 /** Save what was typed into one step. Returns the answers as stored. */
 async function saveStageAnswers(
   tx: DbTransaction,
@@ -979,6 +1054,8 @@ async function saveStageAnswers(
     .select({
       documentNumber: inquiryStageRecords.documentNumber,
       documentNumbers: inquiryStageRecords.documentNumbers,
+      fields: inquiryStageRecords.fields,
+      bank: inquiryStageRecords.bank,
     })
     .from(inquiryStageRecords)
     .where(
@@ -1018,6 +1095,11 @@ async function saveStageAnswers(
         : fields,
     tables: normalizeStageTables(stage, input.tables),
     documentNumbers,
+    ...(STAGE_DEFINITIONS[stage].fields.some(
+      (field) => field.key === BANK_FIELD,
+    )
+      ? { bank: await chosenBank(tx, org, fields, record) }
+      : {}),
     // Normally given when the job reached the step; older inquiries get it
     // here.
     ...(stage !== "inquiry" && !record?.documentNumber
@@ -1482,10 +1564,71 @@ export async function assignInquiryForUser(
       .set({ assignedStaffId: staffId, updatedAt: new Date() })
       .where(eq(inquiries.id, inquiryId));
     const stage = stageOf(existing);
+    // Kept on the step itself, so every step has its own person on record.
+    await writeStageRecord(tx, org, inquiryId, stage, {
+      handledByStaffId: staffId,
+    });
     await recordEvent(tx, org, userId, inquiryId, {
       from: stage,
       to: stage,
       note: `Assigned to ${assignee.fullName}`,
+    });
+
+    return reloadInquiryView(tx, org, inquiryId);
+  });
+}
+
+/**
+ * Say who will handle a step the job has not reached yet, or take that back
+ * with an empty `staffId`. When the job gets to the step it goes straight to
+ * that person, if they are still in the step's department.
+ */
+export async function planInquiryStepForUser(
+  userId: string,
+  orgCode: string,
+  inquiryId: string,
+  stage: string,
+  staffId: string,
+): Promise<InquiryView> {
+  return withTenantContext(userId, async (tx) => {
+    const org = await requireOrg(tx, userId, orgCode);
+    const existing = await requireInquiry(tx, org, inquiryId);
+    requireOpen(existing);
+
+    const stages = stagesForJob(existing.jobType);
+    const index = stages.findIndex((item) => item.key === stage);
+    const current = stages.findIndex((item) => item.key === stageOf(existing));
+    if (index === -1 || index <= current) {
+      throw new UserError("Only a step still to come can be planned.");
+    }
+    const target = stages[index]!;
+    const owner = departmentForStage(
+      await loadWorkflowMap(tx, org.id),
+      target.key,
+    );
+    assertCan(can.assignInquiry(org.access, owner));
+
+    const person = staffId
+      ? (await loadAssignableStaff(tx, org.id, owner)).find(
+          (staff) => staff.id === staffId,
+        )
+      : null;
+    if (staffId && !person) {
+      throw new UserError(
+        "Select an active staff member from the step's department.",
+      );
+    }
+
+    await writeStageRecord(tx, org, inquiryId, target.key, {
+      handledByStaffId: person?.id ?? null,
+    });
+    const now = stageOf(existing);
+    await recordEvent(tx, org, userId, inquiryId, {
+      from: now,
+      to: now,
+      note: person
+        ? `${target.label} planned for ${person.fullName}`
+        : `${target.label} no longer planned for anyone`,
     });
 
     return reloadInquiryView(tx, org, inquiryId);

@@ -105,8 +105,8 @@ async function main() {
 
 /**
  * The company details printed on customer documents, as on the company's
- * own letterhead. Only filled in where nothing has been entered yet; the
- * bank account is left for the company to enter itself.
+ * own letterhead. Only filled in where nothing has been entered yet. Bank
+ * accounts are left for the company to enter itself, under Accounts.
  */
 async function fillLetterhead(ownerId: string) {
   const settings = await getCompanySettingsForUser(ownerId, ORG);
@@ -119,7 +119,6 @@ async function fillLetterhead(ownerId: string) {
     address: "Jebel Ali Industrial Area - 3",
     addressArabic: "منطقة جبل علي الصناعية - ٣، ص.ب: ٤٩٤٩٠، دبي",
     poBox: "P.O. Box: 49490, Dubai, U.A.E.",
-    bankAccountName: settings.bankAccountName || "AL JAZEYAH ENGINEERING LLC",
   });
 }
 

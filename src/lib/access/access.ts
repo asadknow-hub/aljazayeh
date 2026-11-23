@@ -56,6 +56,10 @@ export const can = {
     companyHas(access, dept) &&
     (isLeadership(access) || inDepartment(access, dept)),
 
+  /** Keep the company's bank accounts: whoever works in Accounts. */
+  manageBankAccounts: (access: OrgAccess) =>
+    can.openDepartment(access, "accounts"),
+
   /** See every inquiry in the company, whichever department owns it. */
   viewAllInquiries: (access: OrgAccess) =>
     isLeadership(access) || inDepartment(access, "admin"),

@@ -67,11 +67,5 @@ export function normalizeCompanySettingsInput(
     addressArabic: clean(input.addressArabic ?? ""),
     poBox: clean(input.poBox ?? ""),
     trn: clean(input.trn ?? ""),
-    bankName: clean(input.bankName ?? ""),
-    bankAccountName: clean(input.bankAccountName ?? ""),
-    bankAccountNumber: clean(input.bankAccountNumber ?? ""),
-    bankIban: clean(input.bankIban ?? ""),
-    bankSwift: clean(input.bankSwift ?? ""),
-    bankBranch: clean(input.bankBranch ?? ""),
   };
 }

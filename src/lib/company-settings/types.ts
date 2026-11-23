@@ -18,12 +18,6 @@ export type CompanySettingsInput = {
   addressArabic: string;
   poBox: string;
   trn: string;
-  bankName: string;
-  bankAccountName: string;
-  bankAccountNumber: string;
-  bankIban: string;
-  bankSwift: string;
-  bankBranch: string;
 };
 
 /** What a customer document prints about the company itself. */
@@ -37,12 +31,6 @@ export type CompanyLetterhead = {
   addressArabic: string;
   poBox: string;
   trn: string;
-  bankName: string;
-  bankAccountName: string;
-  bankAccountNumber: string;
-  bankIban: string;
-  bankSwift: string;
-  bankBranch: string;
 };
 
 export type CompanySettingsView = CompanySettingsInput & {

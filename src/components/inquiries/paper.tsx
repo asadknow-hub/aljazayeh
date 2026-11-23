@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
+import type { BankDetails } from "@/lib/banks/types";
 import type { CompanyLetterhead } from "@/lib/company-settings/types";
 import { formatFormDate } from "@/lib/datetime/format";
 import type { InquiryStageKey } from "@/lib/inquiries/stages";
@@ -35,6 +36,8 @@ type PaperState = {
   items: InquiryLineItemInput[];
   tables: StageTables;
   totals: InquiryTotals;
+  /** The bank account the paper prints; none if the company chose none. */
+  bank: BankDetails | null;
 };
 
 const PaperContext = createContext<PaperState | null>(null);
