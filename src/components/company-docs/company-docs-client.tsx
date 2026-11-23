@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import {
-  approverLabel,
   countLabel,
   stepPlace,
   whenPrepared,
@@ -86,7 +85,7 @@ export function CompanyDocsClient({
                     <DepartmentChip department={step.departmentKey} />
                     {step.approvalBy ? (
                       <span className="chip bg-amber-50 text-amber-900 ring-1 ring-amber-200 ring-inset">
-                        Approved by {approverLabel(step.approvalBy)}
+                        Approved by {step.approvalBy}
                       </span>
                     ) : null}
                     {place.note ? (

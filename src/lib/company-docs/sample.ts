@@ -256,7 +256,7 @@ export function sampleInquiry(options: {
       completedAt: `${today}T08:00:00.000Z`,
       completedByName: "Rameez",
       approvalRequired: false,
-      approvalRequiredBy: "" as const,
+      approvalBy: "",
     };
   });
 

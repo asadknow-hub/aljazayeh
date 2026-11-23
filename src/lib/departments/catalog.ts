@@ -40,6 +40,12 @@ export const DEPARTMENTS = [
     accent: "#0f766e",
   },
   {
+    key: "organization",
+    slug: "organization",
+    label: "Organization",
+    accent: "#1e3a8a",
+  },
+  {
     key: "company-docs",
     slug: "company-docs",
     label: "Company Docs",
@@ -78,6 +84,20 @@ export const STAFF_ASSIGNABLE_ROLES = [
 ] as const;
 
 export type StaffRoleKey = (typeof STAFF_ASSIGNABLE_ROLES)[number]["key"];
+
+/**
+ * The departments staff can be put in: all of them, less the ones the
+ * company does not have. One a person is already in stays listed for them.
+ */
+export function assignableRoles(
+  closedDepartments: readonly string[],
+  already: readonly string[] = [],
+) {
+  return STAFF_ASSIGNABLE_ROLES.filter(
+    (role) =>
+      !closedDepartments.includes(role.key) || already.includes(role.key),
+  );
+}
 
 export function departmentPath(orgCode: string, slug: DepartmentSlug): string {
   return `/${orgCode}/${slug}`;

@@ -12,7 +12,7 @@ import {
   formatLeavePeriod,
 } from "@/lib/datetime/format";
 import {
-  STAFF_ASSIGNABLE_ROLES,
+  assignableRoles,
   type StaffRoleKey,
 } from "@/lib/departments/catalog";
 import {
@@ -55,6 +55,8 @@ type StaffDetailClientProps = {
   initialVacations: VacationRequestView[];
   initialSection: StaffDetailSection;
   viewer: { staffId: string; canManageCompany: boolean };
+  /** Departments the company does not have; nobody is put in those. */
+  closedDepartments: string[];
 };
 
 export function StaffDetailClient({
@@ -63,6 +65,7 @@ export function StaffDetailClient({
   initialVacations: vacations,
   initialSection,
   viewer,
+  closedDepartments,
 }: StaffDetailClientProps) {
   usePageTitle(initialStaff.fullName);
   const router = useRouter();
@@ -480,7 +483,10 @@ export function StaffDetailClient({
                       Departments <span className="text-red-600">*</span>
                     </legend>
                     <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {STAFF_ASSIGNABLE_ROLES.map((role) => (
+                      {assignableRoles(
+                        closedDepartments,
+                        initialStaff.departmentKeys,
+                      ).map((role) => (
                         <label
                           key={role.key}
                           className="flex cursor-pointer items-center gap-2 border border-slate-200 px-3 py-2 text-sm rounded-lg"

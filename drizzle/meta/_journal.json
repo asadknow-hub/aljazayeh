@@ -92,6 +92,20 @@
       "when": 1795375104106,
       "tag": "0012_numbers_without_company",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1795435016151,
+      "tag": "0013_organization_chart",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1795435047696,
+      "tag": "0014_drop_signatories",
+      "breakpoints": true
     }
   ]
 }

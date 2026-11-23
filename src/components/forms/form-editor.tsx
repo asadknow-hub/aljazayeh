@@ -132,7 +132,7 @@ export function FormEditor({
     raisedBy: context.raisedBy,
     signoffs: context.signoffs,
   };
-  const approver = firstApprover(formType, context.signoffs.steps);
+  const approver = firstApprover(context.signoffs.steps);
 
   const setLine = (index: number, key: string, value: string) =>
     setLines((current) =>

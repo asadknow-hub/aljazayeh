@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import postgres from "postgres";
-import { PASSWORD, PIN, refused } from "./helpers";
+import { namePositions, PASSWORD, PIN, refused } from "./helpers";
 import { getAdminDatabaseUrl } from "@/db/admin-env";
 import { authenticateUser } from "@/lib/auth/authenticate";
 import { appDateValue } from "@/lib/datetime/format";
@@ -21,9 +21,7 @@ import {
   signApprovalFormForUser,
 } from "@/lib/forms/queries";
 import { createOrganizationForUser } from "@/lib/org/queries";
-import type { PositionKey } from "@/lib/signoffs/chains";
 import { setApprovalPinForUser } from "@/lib/signoffs/credentials";
-import { setSignatoryForUser } from "@/lib/signoffs/queries";
 import {
   createStaffForUser,
   createStaffLoginForUser,
@@ -113,17 +111,14 @@ before(async () => {
   people.sam = await addPerson("Sam", ["sales"]);
   welderId = await addStaff("Khairul Islam", ["workers"]);
 
-  const holders: [PositionKey, Person][] = [
-    ["admin", people.rameez],
-    ["foreman", people.fahad],
-    ["purchaser", people.rameez],
-    ["accountant", people.tina],
-    ["managing_partner", people.abu],
-    ["managing_director", people.didar],
-  ];
-  for (const [position, person] of holders) {
-    await setSignatoryForUser(owner, ORG, position, person.staffId);
-  }
+  await namePositions(owner, ORG, {
+    Admin: people.rameez,
+    Foreman: people.fahad,
+    Purchaser: people.rameez,
+    Accountant: people.tina,
+    "CEO & Managing Partner": people.abu,
+    "Managing Director": people.didar,
+  });
 });
 
 after(async () => {

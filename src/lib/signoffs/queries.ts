@@ -1,199 +1,48 @@
 import "server-only";
 
-import { and, asc, eq, isNotNull } from "drizzle-orm";
-import { withTenantContext, type DbTransaction } from "@/db/client";
-import {
-  documentSignoffs,
-  signatoryPositions,
-  staffMembers,
-  users,
-} from "@/db/schema";
-import { assertCan, can } from "@/lib/access/access";
+import { and, asc, eq } from "drizzle-orm";
+import type { DbTransaction } from "@/db/client";
+import { documentSignoffs, users } from "@/db/schema";
 import { UserError } from "@/lib/errors";
-import { requireOrg, resolveOrg, type ResolvedOrg } from "@/lib/org/resolve";
+import type { ResolvedOrg } from "@/lib/org/resolve";
+import { loadPositions } from "@/lib/organization/positions";
 import {
-  DOCUMENT_CHAINS,
-  SIGNATORY_POSITIONS,
-  isPositionKey,
-  positionLabel,
-  type ChainStep,
+  PREPARER_KEY,
+  resolveChain,
+  type ChainBox,
   type DocumentType,
-  type PositionKey,
   type SignoffDecision,
   type SignoffState,
+  type SignoffStepView,
 } from "@/lib/signoffs/chains";
-import { isUuid } from "@/lib/ids";
 
-/* ------------------------------- signatories ------------------------------ */
-
-type Holder = { staffId: string; fullName: string };
-
-/** Who currently holds each signing position in the company. */
-async function loadHolders(
+/** The boxes a document has today, from the organisation chart. */
+async function loadChain(
   tx: DbTransaction,
-  organizationId: string,
-): Promise<Map<PositionKey, Holder>> {
-  const rows = await tx
-    .select({
-      positionKey: signatoryPositions.positionKey,
-      staffId: staffMembers.id,
-      fullName: staffMembers.fullName,
-    })
-    .from(signatoryPositions)
-    .innerJoin(staffMembers, eq(staffMembers.id, signatoryPositions.staffId))
-    .where(eq(signatoryPositions.organizationId, organizationId));
-
-  const holders = new Map<PositionKey, Holder>();
-  for (const row of rows) {
-    if (isPositionKey(row.positionKey)) {
-      holders.set(row.positionKey, {
-        staffId: row.staffId,
-        fullName: row.fullName,
-      });
-    }
-  }
-  return holders;
+  org: ResolvedOrg,
+  type: DocumentType,
+): Promise<ChainBox[]> {
+  return resolveChain(type, await loadPositions(tx, org.id));
 }
 
-export type SignatoriesView = {
-  positions: { key: PositionKey; label: string; staffId: string }[];
-  /** Staff who can be given a position: active, with a login. */
-  candidates: { id: string; fullName: string; jobTitle: string }[];
-};
-
-export async function getSignatoriesForUser(
-  userId: string,
-  orgCode: string,
-): Promise<SignatoriesView | null> {
-  return withTenantContext(userId, async (tx) => {
-    const org = await resolveOrg(tx, userId, orgCode);
-    if (!org || !can.manageCompany(org.access)) return null;
-
-    const holders = await loadHolders(tx, org.id);
-    const candidates = await tx
-      .select({
-        id: staffMembers.id,
-        fullName: staffMembers.fullName,
-        jobTitle: staffMembers.jobTitle,
-      })
-      .from(staffMembers)
-      .where(
-        and(
-          eq(staffMembers.organizationId, org.id),
-          eq(staffMembers.status, "active"),
-          isNotNull(staffMembers.userId),
-        ),
-      )
-      .orderBy(asc(staffMembers.fullName));
-
-    return {
-      positions: SIGNATORY_POSITIONS.map((position) => ({
-        ...position,
-        staffId: holders.get(position.key)?.staffId ?? "",
-      })),
-      candidates,
-    };
-  });
-}
-
-/** Give a signing position to a staff member, or leave it empty. */
-export async function setSignatoryForUser(
-  userId: string,
-  orgCode: string,
-  positionKey: string,
-  staffId: string,
-): Promise<void> {
-  if (!isPositionKey(positionKey)) {
-    throw new UserError("Unknown signing position.");
-  }
-
-  await withTenantContext(userId, async (tx) => {
-    const org = await requireOrg(tx, userId, orgCode);
-    assertCan(can.manageCompany(org.access));
-
-    if (staffId && !isUuid(staffId)) {
-      throw new UserError("Staff member not found.");
-    }
-    if (!staffId) {
-      await tx
-        .delete(signatoryPositions)
-        .where(
-          and(
-            eq(signatoryPositions.organizationId, org.id),
-            eq(signatoryPositions.positionKey, positionKey),
-          ),
-        );
-      return;
-    }
-
-    const [staff] = await tx
-      .select({ userId: staffMembers.userId })
-      .from(staffMembers)
-      .where(
-        and(
-          eq(staffMembers.id, staffId),
-          eq(staffMembers.organizationId, org.id),
-          eq(staffMembers.status, "active"),
-        ),
-      )
-      .limit(1);
-    if (!staff?.userId) {
-      throw new UserError(
-        "Only an active staff member with a login can sign documents.",
-      );
-    }
-
-    await tx
-      .insert(signatoryPositions)
-      .values({ organizationId: org.id, positionKey, staffId })
-      .onConflictDoUpdate({
-        target: [
-          signatoryPositions.organizationId,
-          signatoryPositions.positionKey,
-        ],
-        set: { staffId, updatedAt: new Date() },
-      });
-  });
-}
-
-/* -------------------------------- sign-offs ------------------------------- */
-
-const chainOf = (type: DocumentType): readonly ChainStep[] =>
-  DOCUMENT_CHAINS[type];
-
-/** A document can only be raised once everyone who must sign it is known. */
+/**
+ * A document can only be raised once everyone who must sign it is known.
+ * A position that is on the chart with nobody in it holds the form up; one
+ * that is not on the chart is simply not asked for.
+ */
 export async function assertChainStaffed(
   tx: DbTransaction,
   org: ResolvedOrg,
   type: DocumentType,
 ): Promise<void> {
-  const holders = await loadHolders(tx, org.id);
-  const missing = chainOf(type)
-    .map((step) => step.signer)
-    .filter(
-      (signer): signer is PositionKey =>
-        signer !== "preparer" && !holders.has(signer),
-    );
-
-  if (missing.length > 0) {
+  const vacant = (await loadChain(tx, org, type)).filter(
+    (box) => box.key !== PREPARER_KEY && !box.staffId,
+  );
+  if (vacant.length > 0) {
     throw new UserError(
-      `Nobody is set as ${missing.map(positionLabel).join(", ")} yet. An administrator sets this in Company Settings → Signatories.`,
+      `Nobody is set as ${vacant.map((box) => box.title).join(", ")} yet. An administrator names them under Organization.`,
     );
   }
-}
-
-/** Whether the signed-in person holds any position that signs this document. */
-export async function isSignerOf(
-  tx: DbTransaction,
-  org: ResolvedOrg,
-  type: DocumentType,
-): Promise<boolean> {
-  const holders = await loadHolders(tx, org.id);
-  return chainOf(type).some(
-    (step) =>
-      step.signer !== "preparer" &&
-      holders.get(step.signer)?.staffId === org.access.staffId,
-  );
 }
 
 async function loadSignoffRows(
@@ -213,55 +62,88 @@ async function loadSignoffRows(
     .orderBy(asc(documentSignoffs.step));
 }
 
-/** The signature boxes of a document and where it stands. */
+type SignoffRow = Awaited<ReturnType<typeof loadSignoffRows>>[number];
+
+const signedBox = (row: SignoffRow): SignoffStepView => ({
+  label: row.label,
+  preparer: row.signerKey === PREPARER_KEY,
+  expectedName: row.signerName,
+  signed: {
+    decision: row.decision as SignoffDecision,
+    name: row.signerName,
+    signatureImage: row.signatureImage,
+    remarks: row.remarks,
+    signedAt: row.signedAt.toISOString(),
+  },
+});
+
+/**
+ * Whether the signed-in person has to do with a document's signatures: they
+ * signed it, or they hold a position that signs this kind of document.
+ */
+export async function isSignerOf(
+  tx: DbTransaction,
+  org: ResolvedOrg,
+  userId: string,
+  type: DocumentType,
+  documentId: string,
+): Promise<boolean> {
+  const chain = await loadChain(tx, org, type);
+  if (chain.some((box) => box.staffId === org.access.staffId)) return true;
+  const rows = await loadSignoffRows(tx, type, documentId);
+  return rows.some((row) => row.signedByUserId === userId);
+}
+
+/**
+ * The signature boxes of a document and where it stands.
+ *
+ * A finished document shows exactly the signatures it was finished with.
+ * One still going round shows the signatures given so far, then the boxes
+ * the chart asks for today that are not signed yet: a position removed from
+ * the chart is no longer waited for, and a new owner gets a box.
+ */
 export async function loadSignoffState(
   tx: DbTransaction,
   org: ResolvedOrg,
   type: DocumentType,
   documentId: string,
+  options: { finished: boolean },
 ): Promise<SignoffState> {
-  const chain = chainOf(type);
-  const holders = await loadHolders(tx, org.id);
   const rows = await loadSignoffRows(tx, type, documentId);
-  const signedByStep = new Map(rows.map((row) => [row.step, row]));
-
-  const steps = chain.map((step, index) => {
-    const row = signedByStep.get(index);
-    return {
-      label: step.label,
-      expectedName:
-        step.signer === "preparer"
-          ? (row?.signerName ?? "")
-          : (holders.get(step.signer)?.fullName ?? ""),
-      signed: row
-        ? {
-            decision: row.decision as SignoffDecision,
-            name: row.signerName,
-            signatureImage: row.signatureImage,
-            remarks: row.remarks,
-            signedAt: row.signedAt.toISOString(),
-          }
-        : null,
-    };
-  });
-
   const rejected = rows.some((row) => row.decision === "rejected");
-  const nextIndex = steps.findIndex((step) => !step.signed);
-  const status = rejected
-    ? "rejected"
-    : nextIndex === -1
-      ? "approved"
-      : "pending";
+  const signed = rows.map(signedBox);
 
-  const next = status === "pending" ? chain[nextIndex]! : null;
+  if (options.finished || rejected) {
+    return {
+      steps: signed,
+      status: rejected ? "rejected" : "approved",
+      waitingFor: null,
+      canSign: false,
+    };
+  }
+
+  const signedKeys = new Set(rows.map((row) => row.signerKey));
+  const waiting = (await loadChain(tx, org, type)).filter(
+    (box) => !signedKeys.has(box.key),
+  );
+  const next = waiting[0] ?? null;
+
   return {
-    steps,
-    status,
+    steps: [
+      ...signed,
+      ...waiting.map((box) => ({
+        label: box.label,
+        preparer: box.key === PREPARER_KEY,
+        expectedName: box.staffName,
+        signed: null,
+      })),
+    ],
+    status: next ? "pending" : "approved",
     waitingFor: next ? next.label : null,
     canSign:
       next !== null &&
-      next.signer !== "preparer" &&
-      holders.get(next.signer)?.staffId === org.access.staffId,
+      next.key !== PREPARER_KEY &&
+      next.staffId === org.access.staffId,
   };
 }
 
@@ -272,7 +154,7 @@ async function insertSignoff(
   values: {
     type: DocumentType;
     documentId: string;
-    step: number;
+    box: ChainBox;
     decision: SignoffDecision;
     remarks: string;
   },
@@ -288,11 +170,14 @@ async function insertSignoff(
     .limit(1);
   if (!signer) throw new UserError("User not found.");
 
+  const rows = await loadSignoffRows(tx, values.type, values.documentId);
   await tx.insert(documentSignoffs).values({
     organizationId: org.id,
     documentType: values.type,
     documentId: values.documentId,
-    step: values.step,
+    step: rows.length,
+    signerKey: values.box.key,
+    label: values.box.label,
     decision: values.decision,
     signedByUserId: userId,
     signerName: signer.fullName.trim() || signer.username,
@@ -309,20 +194,23 @@ export async function signAsPreparer(
   type: DocumentType,
   documentId: string,
 ): Promise<void> {
-  const step = chainOf(type).findIndex((item) => item.signer === "preparer");
-  if (step === -1) return;
+  const box = (await loadChain(tx, org, type)).find(
+    (item) => item.key === PREPARER_KEY,
+  );
+  if (!box) return;
   await insertSignoff(tx, org, userId, {
     type,
     documentId,
-    step,
+    box,
     decision: "approved",
     remarks: "",
   });
 }
 
 /**
- * Sign the next box of a document. The caller has already checked the
- * signer's PIN. Returns where the document stands afterwards.
+ * Sign the next box of a document that is still going round. The caller has
+ * already checked the signer's PIN. Returns where the document stands
+ * afterwards.
  */
 export async function signNextStep(
   tx: DbTransaction,
@@ -332,7 +220,9 @@ export async function signNextStep(
   documentId: string,
   input: { decision: SignoffDecision; remarks: string },
 ): Promise<SignoffState> {
-  const state = await loadSignoffState(tx, org, type, documentId);
+  const state = await loadSignoffState(tx, org, type, documentId, {
+    finished: false,
+  });
   if (state.status !== "pending") {
     throw new UserError(`This document is already ${state.status}.`);
   }
@@ -347,13 +237,18 @@ export async function signNextStep(
     throw new UserError("Give a reason for rejecting.");
   }
 
+  const rows = await loadSignoffRows(tx, type, documentId);
+  const signedKeys = new Set(rows.map((row) => row.signerKey));
+  const box = (await loadChain(tx, org, type)).find(
+    (item) => !signedKeys.has(item.key),
+  )!;
   await insertSignoff(tx, org, userId, {
     type,
     documentId,
-    step: state.steps.findIndex((step) => !step.signed),
+    box,
     decision: input.decision,
     remarks,
   });
 
-  return loadSignoffState(tx, org, type, documentId);
+  return loadSignoffState(tx, org, type, documentId, { finished: false });
 }

@@ -1,22 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 import { LogoField } from "@/app/(app)/[orgCode]/company-settings/logo-field";
-import { SignatoriesSection } from "@/app/(app)/[orgCode]/company-settings/signatories-section";
 import { useOrganizations } from "@/components/providers/org-provider";
 import { usePageTitle } from "@/components/providers/page-title-provider";
 import { useToast } from "@/components/providers/toast-provider";
-import type { SignatoriesView } from "@/lib/signoffs/queries";
 import { saveCompanySettingsAction } from "@/lib/company-settings/actions";
 import type { CompanySettingsView } from "@/lib/company-settings/types";
 import { saveInquiryWorkflowMapAction } from "@/lib/inquiries/actions";
 import {
-  INQUIRY_APPROVAL_ROLES,
   INQUIRY_STAGES,
   isExportOnlyStage,
-  INQUIRY_WORKFLOW_DEPARTMENTS,
-  type InquiryApprovalRoleKey,
   type InquiryStageKey,
   type InquiryWorkflowDepartmentKey,
   type InquiryWorkflowMap,
@@ -152,19 +148,26 @@ const ADMIN_FIELDS: FieldConfig[] = [
   },
 ];
 
-type SettingsSection = "company" | "inquiry-settings" | "signatories";
+type SettingsSection = "company" | "inquiry-settings";
 
 type CompanySettingsClientProps = {
   initialSettings: CompanySettingsView;
   initialWorkflow: InquiryWorkflowMap;
-  initialSignatories: SignatoriesView;
+  /**
+   * What a step can be given: the departments the company has, and the
+   * owners and positions of its organisation chart to approve it.
+   */
+  choices: {
+    departments: { key: string; label: string }[];
+    approvers: { key: string; label: string }[];
+  };
   initialSection?: SettingsSection;
 };
 
 export function CompanySettingsClient({
   initialSettings,
   initialWorkflow,
-  initialSignatories,
+  choices,
   initialSection = "company",
 }: CompanySettingsClientProps) {
   usePageTitle("Company Settings");
@@ -188,11 +191,7 @@ export function CompanySettingsClient({
     () => !workflowEqual(workflow, savedWorkflow),
     [workflow, savedWorkflow],
   );
-  // Signatories save as they are chosen; the other sections use Save.
-  const isDirty =
-    section === "company"
-      ? companyDirty
-      : section === "inquiry-settings" && workflowDirty;
+  const isDirty = section === "company" ? companyDirty : workflowDirty;
   const canSave = isDirty && !pending;
 
   function selectSection(next: SettingsSection) {
@@ -323,7 +322,6 @@ export function CompanySettingsClient({
               [
                 { key: "company", label: "Company" },
                 { key: "inquiry-settings", label: "Inquiry Settings" },
-                { key: "signatories", label: "Signatories" },
               ] as const
             ).map((item) => {
               const active = item.key === section;
@@ -575,11 +573,6 @@ export function CompanySettingsClient({
                   </label>
                 </div>
               </>
-            ) : section === "signatories" ? (
-              <SignatoriesSection
-                orgCode={form.organizationCode}
-                initial={initialSignatories}
-              />
             ) : (
               <>
                 <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
@@ -589,7 +582,14 @@ export function CompanySettingsClient({
                   <p className="mt-1 text-sm text-slate-600">
                     Choose which department handles each step of an inquiry
                     and whether it needs approval before moving on. The order
-                    of the steps is fixed.
+                    of the steps is fixed. Who can approve comes from the{" "}
+                    <Link
+                      href={`/${form.organizationCode}/organization`}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      Organization
+                    </Link>{" "}
+                    chart: the owners, or any position on it.
                   </p>
                 </div>
 
@@ -658,7 +658,7 @@ export function CompanySettingsClient({
                                 }
                                 className="h-full w-full border-0 bg-transparent px-3 py-2.5 text-sm outline-none focus:bg-[#fff8e1]"
                               >
-                                {INQUIRY_WORKFLOW_DEPARTMENTS.map((dept) => (
+                                {choices.departments.map((dept) => (
                                   <option key={dept.key} value={dept.key}>
                                     {dept.label}
                                   </option>
@@ -675,7 +675,7 @@ export function CompanySettingsClient({
                                     approvalRequired: checked,
                                     approvalRequiredBy: checked
                                       ? config.approvalRequiredBy ||
-                                        "management"
+                                        choices.approvers[0]!.key
                                       : "",
                                   });
                                 }}
@@ -689,8 +689,7 @@ export function CompanySettingsClient({
                                 disabled={!config.approvalRequired}
                                 onChange={(event) =>
                                   updateStageConfig(stage.key, {
-                                    approvalRequiredBy: event.target
-                                      .value as InquiryApprovalRoleKey,
+                                    approvalRequiredBy: event.target.value,
                                   })
                                 }
                                 className="h-full w-full border-0 bg-transparent px-3 py-2.5 text-sm outline-none disabled:cursor-not-allowed disabled:bg-[#f0f0f0] disabled:text-slate-400 focus:bg-[#fff8e1]"
@@ -698,7 +697,7 @@ export function CompanySettingsClient({
                                 {!config.approvalRequired ? (
                                   <option value="">—</option>
                                 ) : null}
-                                {INQUIRY_APPROVAL_ROLES.map((role) => (
+                                {choices.approvers.map((role) => (
                                   <option key={role.key} value={role.key}>
                                     {role.label}
                                   </option>

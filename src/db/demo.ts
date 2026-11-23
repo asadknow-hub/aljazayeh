@@ -21,12 +21,14 @@ import {
   signApprovalFormForUser,
 } from "@/lib/forms/queries";
 import { createOrganizationForUser } from "@/lib/org/queries";
-import type { PositionKey } from "@/lib/signoffs/chains";
 import {
   saveSignatureForUser,
   setApprovalPinForUser,
 } from "@/lib/signoffs/credentials";
-import { setSignatoryForUser } from "@/lib/signoffs/queries";
+import {
+  getOrganizationChartForUser,
+  updatePositionForUser,
+} from "@/lib/organization/queries";
 import {
   createStaffForUser,
   createStaffLoginForUser,
@@ -213,16 +215,27 @@ async function loadCompany(ownerId: string) {
     );
   }
 
-  const signatories: [PositionKey, Person][] = [
-    ["admin", rameez],
-    ["foreman", hakeem],
-    ["purchaser", rameez],
-    ["accountant", tabassum],
-    ["managing_partner", abu],
-    ["managing_director", didar],
+  // Name who holds each position of the organisation chart a new company
+  // starts with; the forms take their signatures from there.
+  const chart = (await getOrganizationChartForUser(owner.id, ORG))!;
+  const positions = [
+    ...chart.owners,
+    ...chart.departments.flatMap((department) => department.positions),
   ];
-  for (const [position, person] of signatories) {
-    await setSignatoryForUser(owner.id, ORG, position, person.staffId);
+  const holders: [string, Person][] = [
+    ["CEO & Managing Partner", abu],
+    ["Managing Director", didar],
+    ["Accountant", tabassum],
+    ["Admin", rameez],
+    ["Purchaser", rameez],
+    ["Foreman", hakeem],
+  ];
+  for (const [title, person] of holders) {
+    const position = positions.find((item) => item.title === title)!;
+    await updatePositionForUser(owner.id, ORG, position.id, {
+      title,
+      staffId: person.staffId,
+    });
   }
 
   // Attendance for this month up to yesterday, with a few absences.

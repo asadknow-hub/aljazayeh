@@ -4,15 +4,10 @@ import { DepartmentChip } from "@/components/inquiries/inquiry-chips";
 import { AlertIcon } from "@/components/ui/icons";
 import type { CompanyDocStep } from "@/lib/company-docs/types";
 import type { CompanyLetterhead } from "@/lib/company-settings/types";
-import { INQUIRY_APPROVAL_ROLES } from "@/lib/inquiries/stages";
 
 /** "8 jobs", "1 job". */
 export function countLabel(count: number, one: string, many = `${one}s`) {
   return `${count} ${count === 1 ? one : many}`;
-}
-
-export function approverLabel(key: string): string {
-  return INQUIRY_APPROVAL_ROLES.find((role) => role.key === key)?.label ?? key;
 }
 
 /** Where a step sits in the process, for local and for export jobs. */
@@ -77,7 +72,7 @@ export function StepFacts({ step }: { step: Omit<CompanyDocStep, "docs"> }) {
       </Fact>
       <Fact label="Approval">
         {step.approvalBy
-          ? `${approverLabel(step.approvalBy)} approves it before the job moves on`
+          ? `${step.approvalBy} must approve it before the job moves on`
           : "Not needed"}
       </Fact>
     </>

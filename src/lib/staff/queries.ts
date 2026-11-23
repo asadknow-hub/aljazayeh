@@ -14,6 +14,7 @@ import { assertCan, can } from "@/lib/access/access";
 import { insertStaffActivityLog } from "@/lib/activity/record";
 import { hashPassword } from "@/lib/auth/password";
 import {
+  departmentLabel,
   isAssignableDepartmentKey,
   type StaffRoleKey,
 } from "@/lib/departments/catalog";
@@ -181,6 +182,26 @@ export async function getStaffForUser(
   });
 }
 
+/**
+ * Nobody is put in a department the company does not have (see the
+ * organisation chart). One somebody was already in is left as it is.
+ */
+function assertDepartmentsInUse(
+  org: ResolvedOrg,
+  departmentKeys: StaffRoleKey[],
+  already: readonly string[] = [],
+) {
+  const closed = departmentKeys.find(
+    (key) =>
+      org.access.closedDepartments.includes(key) && !already.includes(key),
+  );
+  if (closed) {
+    throw new UserError(
+      `This company does not have a ${departmentLabel(closed)} department. It can be added under Organization.`,
+    );
+  }
+}
+
 async function replaceDepartments(
   tx: DbTransaction,
   staffId: string,
@@ -206,6 +227,7 @@ export async function createStaffForUser(
   return withTenantContext(userId, async (tx) => {
     const org = await requireOrg(tx, userId, orgCode);
     assertCan(can.manageStaff(org.access));
+    assertDepartmentsInUse(org, normalized.departmentKeys);
 
     const staffId = crypto.randomUUID();
     await tx.insert(staffMembers).values({
@@ -253,6 +275,11 @@ export async function updateStaffProfileForUser(
     const org = await requireOrg(tx, userId, orgCode);
     assertCan(can.manageStaff(org.access));
     const existing = await requireStaffView(tx, org, staffId);
+    assertDepartmentsInUse(
+      org,
+      normalized.departmentKeys,
+      existing.departmentKeys,
+    );
 
     // Only an administrator may change an administrator's record, and nobody
     // can lock themselves out by deactivating their own record.

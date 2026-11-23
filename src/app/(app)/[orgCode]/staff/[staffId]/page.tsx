@@ -45,6 +45,7 @@ export default async function StaffDetailPage({
         staffId: org.access.staffId,
         canManageCompany: can.manageCompany(org.access),
       }}
+      closedDepartments={org.access.closedDepartments}
     />
   );
 }

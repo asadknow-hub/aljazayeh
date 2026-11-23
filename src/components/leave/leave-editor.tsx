@@ -118,7 +118,7 @@ export function LeaveEditor({
   const set = (patch: Partial<VacationRequestInput>) =>
     setRequest((current) => ({ ...current, ...patch }));
   const preview = previewOf(context, request, now);
-  const approver = firstApprover("leave_request", context.signoffs.steps);
+  const approver = firstApprover(context.signoffs.steps);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();

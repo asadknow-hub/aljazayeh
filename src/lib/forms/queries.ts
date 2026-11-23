@@ -104,7 +104,9 @@ export async function listFormsAwaitingMySignature(
 
     const mine: ApprovalFormView[] = [];
     for (const form of await loadForms(tx, org.id, { status: "pending" })) {
-      const state = await loadSignoffState(tx, org, form.formType, form.id);
+      const state = await loadSignoffState(tx, org, form.formType, form.id, {
+        finished: false,
+      });
       if (state.canSign) mine.push(form);
     }
     return mine;
@@ -208,7 +210,7 @@ export async function getApprovalFormDocumentForUser(
     const mayView =
       canRaise(org.access, form.formType) ||
       form.staffId === org.access.staffId ||
-      (await isSignerOf(tx, org, form.formType));
+      (await isSignerOf(tx, org, userId, form.formType, form.id));
     if (!mayView) return null;
 
     const [employee = null] = form.staffId
@@ -262,7 +264,9 @@ export async function getApprovalFormDocumentForUser(
         fullName: raiser?.fullName ?? raiserName?.name ?? "",
         jobTitle: raiser?.jobTitle ?? "",
       },
-      signoffs: await loadSignoffState(tx, org, form.formType, form.id),
+      signoffs: await loadSignoffState(tx, org, form.formType, form.id, {
+        finished: form.status !== "pending",
+      }),
     };
   });
 }
@@ -337,6 +341,7 @@ export async function getFormDraftContextForUser(
         org,
         formType,
         crypto.randomUUID(),
+        { finished: false },
       ),
       employees,
     };
@@ -373,4 +378,39 @@ export async function signApprovalFormForUser(
     }
     return state.status;
   });
+}
+
+/**
+ * After the organisation chart changed: forms that were only waiting for a
+ * position that is no longer on it are approved. Returns how many.
+ */
+export async function settleApprovalForms(
+  tx: DbTransaction,
+  org: ResolvedOrg,
+): Promise<number> {
+  const pending = await tx
+    .select({ id: approvalForms.id, formType: approvalForms.formType })
+    .from(approvalForms)
+    .where(
+      and(
+        eq(approvalForms.organizationId, org.id),
+        eq(approvalForms.status, "pending"),
+      ),
+    );
+
+  let settled = 0;
+  for (const form of pending) {
+    if (!isFormType(form.formType)) continue;
+    const state = await loadSignoffState(tx, org, form.formType, form.id, {
+      finished: false,
+    });
+    if (state.status === "approved") {
+      await tx
+        .update(approvalForms)
+        .set({ status: "approved", updatedAt: new Date() })
+        .where(eq(approvalForms.id, form.id));
+      settled += 1;
+    }
+  }
+  return settled;
 }

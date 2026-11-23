@@ -123,7 +123,9 @@ export async function listVacationsAwaitingMySignature(
     const pending = await loadRequests(tx, org.id, { status: "pending" });
     const mine: VacationRequestView[] = [];
     for (const request of pending) {
-      const state = await loadSignoffState(tx, org, DOCUMENT_TYPE, request.id);
+      const state = await loadSignoffState(tx, org, DOCUMENT_TYPE, request.id, {
+        finished: false,
+      });
       if (state.canSign) mine.push(request);
     }
     return mine;
@@ -255,11 +257,13 @@ export async function getLeaveDocumentForUser(
     if (!found) return null;
     const { request, staff } = found;
 
-    const signoffs = await loadSignoffState(tx, org, DOCUMENT_TYPE, request.id);
+    const signoffs = await loadSignoffState(tx, org, DOCUMENT_TYPE, request.id, {
+      finished: request.status !== "pending",
+    });
     const mayView =
       can.useReception(org.access) ||
       staff.id === org.access.staffId ||
-      (await isSignerOf(tx, org, DOCUMENT_TYPE));
+      (await isSignerOf(tx, org, userId, DOCUMENT_TYPE, request.id));
     if (!mayView) return null;
 
     const departments = await tx
@@ -384,6 +388,7 @@ export async function getLeaveDraftContextForUser(
         org,
         DOCUMENT_TYPE,
         crypto.randomUUID(),
+        { finished: false },
       ),
       employees: staff.map((person) => ({
         id: person.id,
@@ -430,28 +435,69 @@ export async function signVacationRequestForUser(
     );
 
     if (state.status !== "pending") {
-      await tx
-        .update(vacationRequests)
-        .set({ status: state.status, updatedAt: new Date() })
-        .where(eq(vacationRequests.id, request.id));
-      await insertStaffActivityLog(tx, {
-        organizationId: org.id,
-        staffId: request.staffId,
-        category: "vacation",
-        action: state.status,
-        summary:
-          state.status === "approved"
-            ? "Vacation approved"
-            : "Vacation rejected",
-        details: describeLeave(request),
-        status: state.status,
-        dayCount: request.dayCount,
-        referenceType: "vacation_request",
-        referenceId: request.id,
-        actorUserId: userId,
-      });
+      await recordOutcome(tx, org, userId, request, state.status);
     }
 
     return state.status;
   });
+}
+
+/** Write down how a leave request ended. */
+async function recordOutcome(
+  tx: DbTransaction,
+  org: ResolvedOrg,
+  userId: string,
+  request: RequestRow,
+  status: "approved" | "rejected",
+) {
+  await tx
+    .update(vacationRequests)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(vacationRequests.id, request.id));
+  await insertStaffActivityLog(tx, {
+    organizationId: org.id,
+    staffId: request.staffId,
+    category: "vacation",
+    action: status,
+    summary: status === "approved" ? "Vacation approved" : "Vacation rejected",
+    details: describeLeave(request),
+    status,
+    dayCount: request.dayCount,
+    referenceType: "vacation_request",
+    referenceId: request.id,
+    actorUserId: userId,
+  });
+}
+
+/**
+ * After the organisation chart changed: leave requests that were only
+ * waiting for a position that is no longer on it are approved. Returns how
+ * many.
+ */
+export async function settleVacationRequests(
+  tx: DbTransaction,
+  org: ResolvedOrg,
+  userId: string,
+): Promise<number> {
+  const pending = await tx
+    .select()
+    .from(vacationRequests)
+    .where(
+      and(
+        eq(vacationRequests.organizationId, org.id),
+        eq(vacationRequests.status, "pending"),
+      ),
+    );
+
+  let settled = 0;
+  for (const request of pending) {
+    const state = await loadSignoffState(tx, org, DOCUMENT_TYPE, request.id, {
+      finished: false,
+    });
+    if (state.status === "approved") {
+      await recordOutcome(tx, org, userId, request, "approved");
+      settled += 1;
+    }
+  }
+  return settled;
 }

@@ -16,5 +16,11 @@ export default async function StaffPage({
   );
   const staff = await listStaffForUser(session.userId, org.code);
 
-  return <StaffClient org={org} initialStaff={staff} />;
+  return (
+    <StaffClient
+      org={org}
+      initialStaff={staff}
+      closedDepartments={org.access.closedDepartments}
+    />
+  );
 }

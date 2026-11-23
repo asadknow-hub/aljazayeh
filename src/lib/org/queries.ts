@@ -16,6 +16,7 @@ import {
   INQUIRY_STAGES,
 } from "@/lib/inquiries/stages";
 import { assertValidOrgCode } from "@/lib/org/code";
+import { seedDefaultChart } from "@/lib/organization/positions";
 import { resolveOrg } from "@/lib/org/resolve";
 
 export type OrgListItem = {
@@ -149,6 +150,8 @@ export async function createOrganizationForUser(
       adminName: creator?.fullName.trim() ?? "",
       adminEmail: creator?.email.trim() ?? "",
     });
+
+    await seedDefaultChart(tx, organizationId);
 
     const workflow = defaultInquiryWorkflowMap();
     await tx.insert(inquiryWorkflowSettings).values(

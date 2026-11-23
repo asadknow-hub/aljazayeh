@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import type { DbTransaction } from "@/db/client";
 import {
   organizations,
+  organizationSettings,
   staffDepartmentAssignments,
   staffMembers,
 } from "@/db/schema";
@@ -37,6 +38,7 @@ export async function resolveOrg(
       code: organizations.code,
       staffId: staffMembers.id,
       isAdmin: staffMembers.isAdmin,
+      closedDepartments: organizationSettings.closedDepartments,
     })
     .from(organizations)
     .innerJoin(
@@ -46,6 +48,10 @@ export async function resolveOrg(
         eq(staffMembers.userId, userId),
         eq(staffMembers.status, "active"),
       ),
+    )
+    .leftJoin(
+      organizationSettings,
+      eq(organizationSettings.organizationId, organizations.id),
     )
     .where(eq(organizations.code, normalizeOrgCode(orgCode)))
     .limit(1);
@@ -67,6 +73,9 @@ export async function resolveOrg(
       departments: assignments
         .map((item) => item.departmentKey)
         .filter(isAssignableDepartmentKey),
+      closedDepartments: (row.closedDepartments ?? []).filter(
+        isAssignableDepartmentKey,
+      ),
     },
   };
 }
