@@ -7,6 +7,7 @@ import {
   addInquiryCommentForUser,
   approveInquiryStageForUser,
   assignInquiryForUser,
+  planInquiryStepForUser,
   closeInquiryForUser,
   createInquiryForUser,
   reopenInquiryForUser,
@@ -84,6 +85,17 @@ export async function assignInquiryAction(
 ) {
   return inquiryAction((userId) =>
     assignInquiryForUser(userId, orgCode, inquiryId, staffId),
+  );
+}
+
+export async function planInquiryStepAction(
+  orgCode: string,
+  inquiryId: string,
+  stage: string,
+  staffId: string,
+) {
+  return inquiryAction((userId) =>
+    planInquiryStepForUser(userId, orgCode, inquiryId, stage, staffId),
   );
 }
 

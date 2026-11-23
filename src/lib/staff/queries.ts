@@ -18,6 +18,7 @@ import {
   isAssignableDepartmentKey,
   type StaffRoleKey,
 } from "@/lib/departments/catalog";
+import { employeeIdFor } from "@/lib/staff/employee-ids";
 import { UserError } from "@/lib/errors";
 import { requireOrg, resolveOrg, type ResolvedOrg } from "@/lib/org/resolve";
 import type {
@@ -230,6 +231,11 @@ export async function createStaffForUser(
     assertDepartmentsInUse(org, normalized.departmentKeys);
 
     const staffId = crypto.randomUUID();
+    const employeeCode = await employeeIdFor(
+      tx,
+      org.id,
+      normalized.employeeCode,
+    );
     await tx.insert(staffMembers).values({
       id: staffId,
       organizationId: org.id,
@@ -239,7 +245,7 @@ export async function createStaffForUser(
       homeCountryContact: normalized.homeCountryContact,
       passportNumber: normalized.passportNumber,
       jobTitle: normalized.jobTitle,
-      employeeCode: normalized.employeeCode,
+      employeeCode,
       joinedOn: normalized.joinedOn || null,
       status: normalized.status,
       notes: normalized.notes,
@@ -288,6 +294,13 @@ export async function updateStaffProfileForUser(
       throw new UserError("You cannot deactivate your own staff record.");
     }
 
+    // An ID that is cleared is given back as it was: nobody is without one.
+    const employeeCode = await employeeIdFor(
+      tx,
+      org.id,
+      normalized.employeeCode || existing.employeeCode,
+      staffId,
+    );
     await tx
       .update(staffMembers)
       .set({
@@ -297,7 +310,7 @@ export async function updateStaffProfileForUser(
         homeCountryContact: normalized.homeCountryContact,
         passportNumber: normalized.passportNumber,
         jobTitle: normalized.jobTitle,
-        employeeCode: normalized.employeeCode,
+        employeeCode,
         joinedOn: normalized.joinedOn || null,
         status: normalized.status,
         notes: normalized.notes,

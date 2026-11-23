@@ -91,19 +91,26 @@ function useJob() {
 const amountOf = (item: { quantity: string; unitPrice: string }) =>
   (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
 
+/**
+ * The bank account chosen for this paper. Left out altogether when the
+ * company keeps no bank account, or none is chosen.
+ */
 function BankDetails({ title }: { title: string }) {
-  const { company } = usePaper();
+  const { bank } = usePaper();
+  if (!bank) return null;
   return (
     <div>
       <p className="mb-1 font-bold uppercase">{title}</p>
-      <Line label="Bank Name:">{company.bankName}</Line>
-      <Line label="Account Name:">{company.bankAccountName}</Line>
-      <Line label="Account No:">{company.bankAccountNumber}</Line>
-      <Line label="IBAN:">{company.bankIban}</Line>
-      {company.bankSwift ? (
-        <Line label="SWIFT Code:">{company.bankSwift}</Line>
+      <Line label="Bank Name:">{bank.bankName}</Line>
+      {bank.accountName ? (
+        <Line label="Account Name:">{bank.accountName}</Line>
       ) : null}
-      <Line label="Branch:">{company.bankBranch}</Line>
+      {bank.accountNumber ? (
+        <Line label="Account No:">{bank.accountNumber}</Line>
+      ) : null}
+      {bank.iban ? <Line label="IBAN:">{bank.iban}</Line> : null}
+      {bank.swift ? <Line label="SWIFT Code:">{bank.swift}</Line> : null}
+      {bank.branch ? <Line label="Branch:">{bank.branch}</Line> : null}
     </div>
   );
 }
@@ -144,7 +151,7 @@ function TotalsLines({ grandLabel }: { grandLabel: string }) {
 
 function QuotationPaper() {
   const job = useJob();
-  const { items, totals, company, inquiry } = job;
+  const { items, totals, company, inquiry, bank } = job;
   const t = usePaperTexts("quotation");
   const asked = useAsked();
   const terms = (
@@ -289,9 +296,11 @@ function QuotationPaper() {
           </>
         ) : null}
 
-        <Shaded className="mt-6 w-[62%]">
-          <BankDetails title="Bank Details for Payment" />
-        </Shaded>
+        {bank ? (
+          <Shaded className="mt-6 w-[62%]">
+            <BankDetails title="Bank Details for Payment" />
+          </Shaded>
+        ) : null}
 
         <p className="mt-8 font-bold">For {company.name}</p>
         <div className="mt-14 w-64 border-t border-slate-600 pt-1">
@@ -636,6 +645,14 @@ function InvoicePaper({
                 </Line>
               ) : null}
               <FieldLine label="Amount billed now (AED):" name="amount" />
+              {asked("workDetails") && values.workDetails ? (
+                <div className="mt-1.5">
+                  <p className="font-semibold">Details of the work done:</p>
+                  <p className="whitespace-pre-wrap">
+                    <Fill name="workDetails" />
+                  </p>
+                </div>
+              ) : null}
               <Line label="Payable now:">AED {formatMoney(billedNow)}</Line>
             </>
           )}
@@ -1138,7 +1155,7 @@ function DeliveryNotePaper() {
 
 function CommercialInvoicePaper() {
   const job = useJob();
-  const { items, totals, company } = job;
+  const { items, totals, company, bank } = job;
   const t = usePaperTexts("commercial_invoice");
   const box = "border border-black px-1.5 py-1";
 
@@ -1259,13 +1276,15 @@ function CommercialInvoicePaper() {
         </tbody>
       </table>
 
-      <div className="mt-8 leading-[2.2]">
-        <p className="uppercase">Bank Details</p>
-        <p>Bank Name : {company.bankName}</p>
-        <p>Account Name: {company.bankAccountName}</p>
-        <p>IBAN Number : {company.bankIban}</p>
-        <p>SWIFT / BIC : {company.bankSwift}</p>
-      </div>
+      {bank ? (
+        <div className="mt-8 leading-[2.2]">
+          <p className="uppercase">Bank Details</p>
+          <p>Bank Name : {bank.bankName}</p>
+          <p>Account Name: {bank.accountName}</p>
+          <p>IBAN Number : {bank.iban || bank.accountNumber}</p>
+          <p>SWIFT / BIC : {bank.swift}</p>
+        </div>
+      ) : null}
 
       <Shaded className="mt-4 w-[45%]">
         <p className="font-bold uppercase">For {company.name}</p>

@@ -49,6 +49,7 @@ import {
   addInquiryCommentAction,
   approveInquiryStageAction,
   assignInquiryAction,
+  planInquiryStepAction,
   closeInquiryAction,
   reopenInquiryAction,
   reopenInquiryStepAction,
@@ -63,6 +64,7 @@ import {
   type InquiryWorkflowDepartmentKey,
 } from "@/lib/inquiries/stages";
 import {
+  BANK_FIELD,
   documentsInUse,
   formatMoney,
   inquiryTotals,
@@ -124,6 +126,16 @@ function canEdit(inquiry: InquiryView): boolean {
   );
 }
 
+/** The bank account a new paper of this job starts with. */
+function startingBank(inquiry: InquiryView): string {
+  const inUse = new Set(inquiry.bankAccounts.map((account) => account.id));
+  const earlier = inquiry.steps
+    .filter((step) => step.state === "done")
+    .map((step) => step.fields[BANK_FIELD] ?? "")
+    .findLast((id) => inUse.has(id));
+  return earlier ?? inquiry.bankAccounts[0]?.id ?? "";
+}
+
 /**
  * What the current step starts with: what is saved, plus the values a step
  * offers the first time it is opened (today's date, the job's total, the
@@ -137,6 +149,12 @@ function draftOf(inquiry: InquiryView): InquiryStageInput {
 
   if (editable) {
     for (const field of stageFields(inquiry.currentStage, step?.template)) {
+      // Until the step is first saved it starts with the bank account the
+      // job's earlier papers carry, or else the company's usual one. Once
+      // saved, the choice stands, also the choice to print none.
+      if (field.type === "bank" && !(field.key in fields)) {
+        fields[field.key] = startingBank(inquiry);
+      }
       if (fields[field.key] || !field.prefill) continue;
       fields[field.key] =
         field.prefill === "today"
@@ -335,6 +353,33 @@ export function InquiryDetailClient({
   const papers = documentsInUse(viewedStep.key, shown.fields);
   const paper = papers.find((doc) => doc.key === openDocument) ?? papers[0];
 
+  // The bank account on the paper: the one chosen right now while the step
+  // is being worked on, the one it was saved with once it is finished.
+  const bankId = stageFields(viewedStep.key, viewedStep.template).some(
+    (field) => field.key === BANK_FIELD,
+  )
+    ? (shown.fields[BANK_FIELD] ?? "")
+    : "";
+  const bank = !bankId
+    ? null
+    : ((viewingCurrent
+        ? inquiry.bankAccounts.find((account) => account.id === bankId)
+        : undefined) ?? viewedStep.bank);
+  // An account no longer in use stays on offer for the paper that has it.
+  const banks = [
+    ...inquiry.bankAccounts,
+    ...(bankId &&
+    viewedStep.bank &&
+    !inquiry.bankAccounts.some((account) => account.id === bankId)
+      ? [
+          {
+            id: bankId,
+            label: `${viewedStep.bank.bankName} (no longer in use)`,
+          },
+        ]
+      : []),
+  ].map(({ id, label }) => ({ id, label }));
+
   // Files on the inquiry, and the ones uploaded just now but not saved yet.
   const allFiles = [...inquiry.attachments, ...uploads];
   const files: FileHandling = {
@@ -436,6 +481,29 @@ export function InquiryDetailClient({
     }
   }
 
+  /**
+   * Say who will handle a step the job has not reached yet. What is being
+   * typed into the current step stays as it is.
+   */
+  async function plan(stage: InquiryStageKey, staffId: string) {
+    if (pending) return;
+    setError(null);
+    setPending(true);
+    try {
+      setInquiry(
+        await unwrap(
+          planInquiryStepAction(orgCode, inquiry.id, stage, staffId),
+        ),
+      );
+      showToast(staffId ? "Planned" : "Plan removed");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setPending(false);
+    }
+  }
+
   async function approve() {
     if (await run(() => approveInquiryStageAction(orgCode, inquiry.id))) {
       showToast("Approved");
@@ -530,6 +598,7 @@ export function InquiryDetailClient({
           <HandlingBlock
             key={`${inquiry.currentStage}-${inquiry.assignedStaffId}`}
             inquiry={inquiry}
+            step={viewedStep}
             staffOptions={assignable[inquiry.owningDepartmentKey] ?? []}
             myStaffId={myStaffId}
             pending={pending}
@@ -573,8 +642,10 @@ export function InquiryDetailClient({
           <InquiryStepper
             steps={inquiry.steps}
             viewing={viewedStep.key}
-            assignedStaffName={inquiry.assignedStaffName}
+            assignable={assignable}
+            pending={pending}
             onSelect={setViewing}
+            onPlan={plan}
           />
           <InquiryExtras
             key={`${inquiry.currentStage}-${inquiry.status}`}
@@ -707,6 +778,7 @@ export function InquiryDetailClient({
                             disabled={pending}
                             invalid={invalid}
                             narrow
+                            banks={banks}
                             onChange={setFields}
                           />
                         </div>
@@ -812,6 +884,7 @@ export function InquiryDetailClient({
                       items: shown.lineItems,
                       tables: shown.tables ?? {},
                       totals,
+                      bank,
                     }}
                   >
                     <StagePaper document={paper.key} />

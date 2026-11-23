@@ -5,6 +5,7 @@ import {
   departmentSections,
   type DepartmentSection,
 } from "@/lib/departments/sections";
+import { listBankAccountsForUser } from "@/lib/banks/queries";
 import { getStepTemplateForUser } from "@/lib/company-docs/queries";
 import { formTypesRaisedIn } from "@/lib/forms/definitions";
 import { listApprovalFormsForUser } from "@/lib/forms/queries";
@@ -40,13 +41,17 @@ export default async function DepartmentPage({
 
   // The Admin workspace shows every inquiry; others what they handle.
   const formTypes = formTypesRaisedIn(dept);
-  const [inquiries, assignable, inquiryTemplate, ...formLists] = await Promise.all([
+  const [inquiries, assignable, inquiryTemplate, bankAccounts, ...formLists] =
+    await Promise.all([
     dept === "admin"
       ? listInquiriesForUser(session.userId, org.code)
       : listInquiriesForDepartment(session.userId, org.code, dept),
     listAssignableStaffForUser(session.userId, org.code),
     // What a new inquiry asks for, the way the company set it up.
     getStepTemplateForUser(session.userId, org.code, "inquiry"),
+    dept === "accounts"
+      ? listBankAccountsForUser(session.userId, org.code)
+      : Promise.resolve([]),
     ...formTypes.map((type) =>
       listApprovalFormsForUser(session.userId, org.code, type),
     ),
@@ -61,6 +66,7 @@ export default async function DepartmentPage({
       myStaffId={org.access.staffId}
       assignable={assignable}
       inquiryTemplate={inquiryTemplate}
+      bankAccounts={bankAccounts}
       forms={Object.fromEntries(
         formTypes.map((type, index) => [type, formLists[index]]),
       )}

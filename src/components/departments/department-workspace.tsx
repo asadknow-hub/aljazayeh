@@ -4,8 +4,11 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { InquiriesListPanel } from "@/components/inquiries/inquiries-list-panel";
 import { usePageTitle } from "@/components/providers/page-title-provider";
+import { BankAccountsPanel } from "@/components/banks/bank-accounts-panel";
 import { FormsPanel } from "@/components/forms/forms-panel";
+import type { BankAccount } from "@/lib/banks/types";
 import {
+  BANKS_SECTION,
   departmentSections,
   type DepartmentSection,
 } from "@/lib/departments/sections";
@@ -35,6 +38,8 @@ type DepartmentWorkspaceProps = {
   inquiryTemplate: StepTemplate;
   /** The forms this department raises, by kind. */
   forms: Partial<Record<FormType, ApprovalFormView[]>>;
+  /** The company's bank accounts; only Accounts keeps them. */
+  bankAccounts: BankAccount[];
 };
 
 export function DepartmentWorkspace({
@@ -46,6 +51,7 @@ export function DepartmentWorkspace({
   assignable,
   inquiryTemplate,
   forms,
+  bankAccounts,
 }: DepartmentWorkspaceProps) {
   const label = workflowDepartmentLabel(departmentKey);
   const basePath = `/${org.code}/${departmentKey}`;
@@ -114,6 +120,9 @@ export function DepartmentWorkspace({
               formType={section}
               forms={forms[section] ?? []}
             />
+          ) : null}
+          {section === BANKS_SECTION ? (
+            <BankAccountsPanel orgCode={org.code} initialAccounts={bankAccounts} />
           ) : null}
         </div>
       </div>

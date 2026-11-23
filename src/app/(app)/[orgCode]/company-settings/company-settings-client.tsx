@@ -43,12 +43,6 @@ const EDITABLE_KEYS: FieldKey[] = [
   "addressArabic",
   "poBox",
   "trn",
-  "bankName",
-  "bankAccountName",
-  "bankAccountNumber",
-  "bankIban",
-  "bankSwift",
-  "bankBranch",
 ];
 
 function settingsEqual(
@@ -248,12 +242,6 @@ export function CompanySettingsClient({
           addressArabic: form.addressArabic,
           poBox: form.poBox,
           trn: form.trn,
-          bankName: form.bankName,
-          bankAccountName: form.bankAccountName,
-          bankAccountNumber: form.bankAccountNumber,
-          bankIban: form.bankIban,
-          bankSwift: form.bankSwift,
-          bankBranch: form.bankBranch,
         }));
         setForm(next);
         setSaved(next);
@@ -466,7 +454,8 @@ export function CompanySettingsClient({
                   <p className="mt-1 text-sm text-slate-600">
                     Printed at the top of quotations, job cards, delivery notes
                     and invoices, together with the telephone number and email
-                    above. The bank details print on quotations and invoices.
+                    above. Bank accounts are kept under Accounts, in Bank accounts;
+                    each quotation and invoice chooses one of them.
                   </p>
                 </div>
 
@@ -507,66 +496,6 @@ export function CompanySettingsClient({
                       value={form.trn}
                       onChange={(event) =>
                         updateField("trn", event.target.value)
-                      }
-                      className="field"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1.5">
-                    <span className="field-label">Bank name</span>
-                    <input
-                      value={form.bankName}
-                      onChange={(event) =>
-                        updateField("bankName", event.target.value)
-                      }
-                      className="field"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1.5">
-                    <span className="field-label">Account name</span>
-                    <input
-                      value={form.bankAccountName}
-                      onChange={(event) =>
-                        updateField("bankAccountName", event.target.value)
-                      }
-                      className="field"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1.5">
-                    <span className="field-label">Account number</span>
-                    <input
-                      value={form.bankAccountNumber}
-                      onChange={(event) =>
-                        updateField("bankAccountNumber", event.target.value)
-                      }
-                      className="field"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1.5">
-                    <span className="field-label">IBAN</span>
-                    <input
-                      value={form.bankIban}
-                      onChange={(event) =>
-                        updateField("bankIban", event.target.value)
-                      }
-                      className="field"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1.5">
-                    <span className="field-label">SWIFT code</span>
-                    <input
-                      value={form.bankSwift}
-                      onChange={(event) =>
-                        updateField("bankSwift", event.target.value)
-                      }
-                      className="field"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1.5">
-                    <span className="field-label">Branch</span>
-                    <input
-                      value={form.bankBranch}
-                      onChange={(event) =>
-                        updateField("bankBranch", event.target.value)
                       }
                       className="field"
                     />

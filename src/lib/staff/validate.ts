@@ -68,12 +68,21 @@ export function normalizeStaffProfileInput(
     homeCountryContact: clean(input.homeCountryContact),
     passportNumber: clean(input.passportNumber).toUpperCase(),
     jobTitle: clean(input.jobTitle),
-    employeeCode: clean(input.employeeCode),
+    employeeCode: employeeId(clean(input.employeeCode)),
     joinedOn,
     status,
     notes: clean(input.notes),
     departmentKeys: normalizeDepartments(input.departmentKeys),
   };
+}
+
+/** An employee ID as it is kept: capitals, no spaces. */
+function employeeId(value: string): string {
+  const id = value.toUpperCase().replace(/\s+/g, "");
+  if (id.length > 20) {
+    throw new UserError("The employee ID is too long.");
+  }
+  return id;
 }
 
 export function normalizeStaffSalaryInput(

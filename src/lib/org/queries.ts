@@ -18,6 +18,7 @@ import {
 import { assertValidOrgCode } from "@/lib/org/code";
 import { seedDefaultChart } from "@/lib/organization/positions";
 import { resolveOrg } from "@/lib/org/resolve";
+import { employeeIdFor } from "@/lib/staff/employee-ids";
 
 export type OrgListItem = {
   id: string;
@@ -132,12 +133,18 @@ export async function createOrganizationForUser(
     const organizationId = crypto.randomUUID();
 
     await tx.insert(organizations).values({ id: organizationId, name, code });
+    const staffId = crypto.randomUUID();
     await tx.execute(sql`
       select app_claim_new_organization(
         ${organizationId}::uuid,
-        ${crypto.randomUUID()}::uuid
+        ${staffId}::uuid
       )
     `);
+    // The company's first employee gets its first employee ID.
+    await tx
+      .update(staffMembers)
+      .set({ employeeCode: await employeeIdFor(tx, organizationId, "") })
+      .where(eq(staffMembers.id, staffId));
 
     const [creator] = await tx
       .select({ fullName: users.fullName, email: users.email })

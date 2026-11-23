@@ -1,5 +1,6 @@
 import "server-only";
 
+import { loadBankAccounts } from "@/lib/banks/queries";
 import { and, count, desc, eq, sql } from "drizzle-orm";
 import { withTenantContext, type DbTransaction } from "@/db/client";
 import {
@@ -296,6 +297,7 @@ async function loadDetail(
       byName: names.get(item.createdByUserId) ?? "",
       note: item.note,
     })),
+    sampleBank: (await loadBankAccounts(tx, org.id))[0] ?? null,
     canEdit: can.editCompanyDocs(org.access),
   };
 }
