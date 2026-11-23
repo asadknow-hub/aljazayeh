@@ -1,5 +1,4 @@
 import type {
-  InquiryApprovalRoleKey,
   InquiryStageKey,
   InquiryWorkflowDepartmentKey,
   InquiryWorkflowMap,
@@ -105,7 +104,8 @@ export type InquiryStepView = {
   completedAt: string | null;
   completedByName: string | null;
   approvalRequired: boolean;
-  approvalRequiredBy: InquiryApprovalRoleKey | "";
+  /** Who approves it: "Owners" or a position's title; empty if nobody. */
+  approvalBy: string;
 };
 
 /** The whole inquiry, as shown on its own page. */

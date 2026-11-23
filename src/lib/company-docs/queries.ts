@@ -43,12 +43,15 @@ import {
   formListPath,
   isFormType,
 } from "@/lib/forms/definitions";
-import { loadDisplayNames, loadWorkflowMap } from "@/lib/inquiries/queries";
+import {
+  loadDisplayNames,
+  loadWorkflow,
+  type Workflow,
+} from "@/lib/inquiries/queries";
 import {
   INQUIRY_STAGES,
   stagesForJob,
   type InquiryStageKey,
-  type InquiryWorkflowMap,
 } from "@/lib/inquiries/stages";
 import {
   numberCode,
@@ -70,9 +73,8 @@ function placeOf(stage: InquiryStageKey, jobType: string): number | null {
 
 function stepOf(
   stage: InquiryStageKey,
-  map: InquiryWorkflowMap,
+  workflow: Workflow,
 ): Omit<CompanyDocStep, "docs"> {
-  const config = map[stage];
   return {
     stage,
     label: INQUIRY_STAGES.find((item) => item.key === stage)!.label,
@@ -80,8 +82,8 @@ function stepOf(
       local: placeOf(stage, "local"),
       export: placeOf(stage, "export"),
     },
-    departmentKey: config.departmentKey,
-    approvalBy: config.approvalRequired ? config.approvalRequiredBy : "",
+    departmentKey: workflow.map[stage].departmentKey,
+    approvalBy: workflow.approvers[stage]?.label ?? "",
   };
 }
 
@@ -188,7 +190,9 @@ async function loadSignedForms(
   const rows: SignedFormRow[] = [];
   for (const key of SIGNED_FORM_KEYS) {
     // The boxes of a form nobody has raised: who would sign it today.
-    const signoffs = await loadSignoffState(tx, org, key, crypto.randomUUID());
+    const signoffs = await loadSignoffState(tx, org, key, crypto.randomUUID(), {
+      finished: false,
+    });
     const counts = counted(key);
     const form = isFormType(key) ? FORM_DEFINITIONS[key] : null;
     rows.push({
@@ -204,6 +208,7 @@ async function loadSignedForms(
       signers: signoffs.steps.map((step) => ({
         label: step.label,
         name: step.expectedName,
+        preparer: step.preparer,
       })),
       numberExample: form ? numberExample(form.counterKey) : null,
       raised: counts.reduce((total, row) => total + row.forms, 0),
@@ -224,7 +229,7 @@ export async function getCompanyDocsForUser(
     const org = await resolveOrg(tx, userId, orgCode);
     if (!org) return null;
 
-    const map = await loadWorkflowMap(tx, org.id);
+    const workflow = await loadWorkflow(tx, org.id);
     const live = await loadLiveTemplates(tx, org.id);
     const usage = await loadUsage(tx, org.id);
     const names = await loadDisplayNames(
@@ -234,7 +239,7 @@ export async function getCompanyDocsForUser(
 
     return {
       steps: INQUIRY_STAGES.map((stage) => ({
-        ...stepOf(stage.key, map),
+        ...stepOf(stage.key, workflow),
         docs: INQUIRY_CATALOG.filter((entry) => entry.stage === stage.key).map(
           (entry) =>
             toRow(
@@ -281,7 +286,7 @@ async function loadDetail(
   const live = versions[0];
 
   return {
-    step: stepOf(entry.stage, await loadWorkflowMap(tx, org.id)),
+    step: stepOf(entry.stage, await loadWorkflow(tx, org.id)),
     doc: toRow(org, entry, live, (await loadUsage(tx, org.id))(entry), names),
     settings: live?.settings ?? {},
     templates: await loadStepTemplates(tx, org.id),

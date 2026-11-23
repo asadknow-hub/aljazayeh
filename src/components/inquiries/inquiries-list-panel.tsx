@@ -154,7 +154,7 @@ export function InquiriesListPanel({
       </div>
 
       {/* How many open inquiries sit at each step; click one to see them. */}
-      <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-10">
+      <div className="mt-4 grid grid-cols-2 gap-2 min-[30rem]:grid-cols-3 sm:grid-cols-5 lg:grid-cols-10">
         {INQUIRY_STAGES.map((item) => {
           const count = countByStage.get(item.key) ?? 0;
           const active = status === "open" && stage === item.key;
@@ -168,11 +168,11 @@ export function InquiriesListPanel({
                 setStage(active ? null : item.key);
               }}
               className={[
-                "card cursor-pointer px-2.5 py-2 text-left transition-colors hover:border-blue-300",
+                "card min-w-0 cursor-pointer px-2.5 py-2 text-left transition-colors hover:border-blue-300",
                 active ? "!border-primary !bg-primary-soft" : "",
               ].join(" ")}
             >
-              <span className="block text-[11px] leading-tight font-medium text-slate-500">
+              <span className="block text-[11px] leading-tight font-medium break-words text-slate-500">
                 {isExportOnlyStage(item.key)
                   ? `${item.label} (export)`
                   : `${stageNumber(item.key, "local")}. ${item.label}`}

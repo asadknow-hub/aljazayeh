@@ -1,6 +1,5 @@
 import {
   INQUIRY_STAGES,
-  isInquiryApprovalRoleKey,
   isInquiryWorkflowDepartmentKey,
   type InquiryStageKey,
   type InquiryWorkflowMap,
@@ -160,28 +159,31 @@ export function normalizeStageTables(
 
 export function normalizeInquiryWorkflowMap(
   input: Partial<Record<InquiryStageKey, Partial<InquiryWorkflowStageConfig>>>,
+  /** What the company has: its departments and who can approve a step. */
+  company: { departments: ReadonlySet<string>; approvers: ReadonlySet<string> },
 ): InquiryWorkflowMap {
   const map = {} as InquiryWorkflowMap;
 
   for (const stage of INQUIRY_STAGES) {
     const raw = input[stage.key] ?? {};
     const departmentKey = raw.departmentKey ?? "admin";
-    if (!isInquiryWorkflowDepartmentKey(departmentKey)) {
-      throw new UserError(`Invalid department for ${stage.label}.`);
+    if (
+      !isInquiryWorkflowDepartmentKey(departmentKey) ||
+      !company.departments.has(departmentKey)
+    ) {
+      throw new UserError(`Choose a department for ${stage.label}.`);
     }
 
     const approvalRequired = Boolean(raw.approvalRequired);
-    let approvalRequiredBy: InquiryWorkflowStageConfig["approvalRequiredBy"] =
-      "";
+    let approvalRequiredBy = "";
 
     if (approvalRequired) {
-      const role = raw.approvalRequiredBy ?? "";
-      if (!role || !isInquiryApprovalRoleKey(role)) {
+      approvalRequiredBy = raw.approvalRequiredBy ?? "";
+      if (!company.approvers.has(approvalRequiredBy)) {
         throw new UserError(
           `Select who must approve ${stage.label} when approval is required.`,
         );
       }
-      approvalRequiredBy = role;
     }
 
     map[stage.key] = {

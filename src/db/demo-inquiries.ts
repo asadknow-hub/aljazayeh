@@ -21,6 +21,7 @@ import {
 } from "@/lib/inquiries/stages";
 import type { InquiryLineItemInput } from "@/lib/inquiries/types";
 import { UserError } from "@/lib/errors";
+import { OWNERS_APPROVE } from "@/lib/inquiries/approvers";
 
 type Person = { userId: string; staffId: string };
 
@@ -318,8 +319,8 @@ export async function loadDemoInquiries(
     return;
   }
 
-  // Quotations need Management's approval in the demo, unless the company
-  // has already set up approvals of its own.
+  // Quotations need an owner's approval in the demo, unless the company has
+  // already set up approvals of its own.
   const map = await getInquiryWorkflowMapForUser(ownerId, orgCode);
   if (!map) return;
   const untouched = INQUIRY_STAGES.every(
@@ -330,7 +331,7 @@ export async function loadDemoInquiries(
       map[stage.key] = {
         departmentKey: STEP_DEPARTMENTS[stage.key],
         approvalRequired: stage.key === "quotation",
-        approvalRequiredBy: stage.key === "quotation" ? "management" : "",
+        approvalRequiredBy: stage.key === "quotation" ? OWNERS_APPROVE : "",
       };
     }
     await saveInquiryWorkflowMapForUser(ownerId, orgCode, map);

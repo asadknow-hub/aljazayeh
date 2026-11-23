@@ -5,17 +5,24 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import postgres from "postgres";
-import { PASSWORD, PIN, leaveInput, refused } from "./helpers";
+import {
+  chartPositions,
+  leaveInput,
+  namePositions,
+  PASSWORD,
+  PIN,
+  refused,
+} from "./helpers";
 import { getAdminDatabaseUrl } from "@/db/admin-env";
 import { authenticateUser } from "@/lib/auth/authenticate";
 import type { StaffRoleKey } from "@/lib/departments/catalog";
 import { createOrganizationForUser } from "@/lib/org/queries";
-import type { PositionKey, SignoffDecision } from "@/lib/signoffs/chains";
+import type { SignoffDecision } from "@/lib/signoffs/chains";
 import {
   saveSignatureForUser,
   setApprovalPinForUser,
 } from "@/lib/signoffs/credentials";
-import { setSignatoryForUser } from "@/lib/signoffs/queries";
+import { updatePositionForUser } from "@/lib/organization/queries";
 import {
   createStaffForUser,
   createStaffLoginForUser,
@@ -126,31 +133,32 @@ describe("signatories", () => {
   });
 
   test("only an administrator names signatories, and only people with a login", async () => {
+    const foreman = (await chartPositions(owner, ORG)).find(
+      (position) => position.title === "Foreman",
+    )!;
     await refused(
-      setSignatoryForUser(
-        people.rita.userId,
-        ORG,
-        "foreman",
-        people.fahad.staffId,
-      ),
+      updatePositionForUser(people.rita.userId, ORG, foreman.id, {
+        title: "Foreman",
+        staffId: people.fahad.staffId,
+      }),
       /permission/,
     );
     await refused(
-      setSignatoryForUser(owner, ORG, "foreman", welderId),
+      updatePositionForUser(owner, ORG, foreman.id, {
+        title: "Foreman",
+        staffId: welderId,
+      }),
       /with a login/,
     );
 
-    const holders: [PositionKey, Person][] = [
-      ["admin", people.rita],
-      ["foreman", people.fahad],
-      ["purchaser", people.tina],
-      ["accountant", people.tina],
-      ["managing_partner", people.abu],
-      ["managing_director", people.didar],
-    ];
-    for (const [position, person] of holders) {
-      await setSignatoryForUser(owner, ORG, position, person.staffId);
-    }
+    await namePositions(owner, ORG, {
+      Admin: people.rita,
+      Foreman: people.fahad,
+      Purchaser: people.tina,
+      Accountant: people.tina,
+      "CEO & Managing Partner": people.abu,
+      "Managing Director": people.didar,
+    });
   });
 });
 

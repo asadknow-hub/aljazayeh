@@ -20,12 +20,10 @@ import {
   adjacentInquiryStages,
   defaultInquiryWorkflowMap,
   departmentForStage,
-  INQUIRY_APPROVAL_ROLES,
   INQUIRY_STAGES,
   INQUIRY_WORKFLOW_DEPARTMENTS,
   stagesForJob,
   inquiryStageLabel,
-  isInquiryApprovalRoleKey,
   isInquiryStageKey,
   isInquiryWorkflowDepartmentKey,
   type InquiryStageKey,
@@ -64,6 +62,12 @@ import {
 } from "@/lib/inquiries/validate";
 import { appDateValue } from "@/lib/datetime/format";
 import { loadStepTemplates } from "@/lib/company-docs/templates";
+import {
+  approverOptions,
+  stepApprover,
+  type StepApprover,
+} from "@/lib/inquiries/approvers";
+import { loadPositions } from "@/lib/organization/positions";
 import { nextDocumentNumber } from "@/lib/documents/numbering";
 import {
   insertAttachment,
@@ -95,40 +99,63 @@ function statusOf(row: InquiryRow): InquiryStatus {
     : "open";
 }
 
-function approvalRoleLabel(key: string): string {
-  return INQUIRY_APPROVAL_ROLES.find((role) => role.key === key)?.label ?? key;
-}
-
 /* ------------------------------ workflow map ------------------------------ */
+
+/**
+ * How the company runs the inquiry process: who prepares each step, and who
+ * approves it. The approvers come from the organisation chart.
+ */
+export type Workflow = {
+  map: InquiryWorkflowMap;
+  /** Per step: who approves it, or nothing if it needs no approval. */
+  approvers: Record<InquiryStageKey, StepApprover | null>;
+};
+
+export async function loadWorkflow(
+  tx: DbTransaction,
+  organizationId: string,
+): Promise<Workflow> {
+  const rows = await tx
+    .select()
+    .from(inquiryWorkflowSettings)
+    .where(eq(inquiryWorkflowSettings.organizationId, organizationId));
+  const positions = await loadPositions(tx, organizationId);
+
+  // Stages without a saved row fall back to the defaults.
+  const map = defaultInquiryWorkflowMap();
+  const approvers = {} as Workflow["approvers"];
+  for (const stage of INQUIRY_STAGES) {
+    const row = rows.find((item) => item.stageKey === stage.key);
+    const saved =
+      row && isInquiryWorkflowDepartmentKey(row.departmentKey)
+        ? {
+            departmentKey: row.departmentKey,
+            approvalRequired: row.approvalRequired,
+            approvalRequiredBy: row.approvalRequiredBy,
+          }
+        : map[stage.key];
+    const approver = stepApprover(saved, positions);
+    approvers[stage.key] = approver;
+    // A step whose approver is no longer on the chart needs no approval.
+    map[stage.key] = {
+      departmentKey: saved.departmentKey,
+      approvalRequired: approver !== null,
+      approvalRequiredBy: approver?.key ?? "",
+    };
+  }
+  return { map, approvers };
+}
 
 export async function loadWorkflowMap(
   tx: DbTransaction,
   organizationId: string,
 ): Promise<InquiryWorkflowMap> {
-  const rows = await tx
-    .select()
-    .from(inquiryWorkflowSettings)
-    .where(eq(inquiryWorkflowSettings.organizationId, organizationId));
+  return (await loadWorkflow(tx, organizationId)).map;
+}
 
-  // Stages without a saved row fall back to the defaults.
-  const map = defaultInquiryWorkflowMap();
-  for (const row of rows) {
-    if (
-      isInquiryStageKey(row.stageKey) &&
-      isInquiryWorkflowDepartmentKey(row.departmentKey)
-    ) {
-      map[row.stageKey] = {
-        departmentKey: row.departmentKey,
-        approvalRequired: row.approvalRequired,
-        approvalRequiredBy:
-          row.approvalRequired &&
-          isInquiryApprovalRoleKey(row.approvalRequiredBy)
-            ? row.approvalRequiredBy
-            : "",
-      };
-    }
-  }
-  return map;
+/** Whether the signed-in person may approve a step. */
+function isApprover(org: ResolvedOrg, approver: StepApprover | null): boolean {
+  return approver !== null && approver.staffIds.includes(org.access.staffId);
 }
 
 export async function getInquiryWorkflowMapForUser(
@@ -147,11 +174,21 @@ export async function saveInquiryWorkflowMapForUser(
   orgCode: string,
   input: InquiryWorkflowMap,
 ): Promise<InquiryWorkflowMap> {
-  const map = normalizeInquiryWorkflowMap(input);
-
   return withTenantContext(userId, async (tx) => {
     const org = await requireOrg(tx, userId, orgCode);
     assertCan(can.manageCompany(org.access));
+    const map = normalizeInquiryWorkflowMap(input, {
+      departments: new Set(
+        INQUIRY_WORKFLOW_DEPARTMENTS.map((item) => item.key).filter(
+          (key) => !org.access.closedDepartments.includes(key),
+        ),
+      ),
+      approvers: new Set(
+        approverOptions(await loadPositions(tx, org.id)).map(
+          (option) => option.key,
+        ),
+      ),
+    });
     const now = new Date();
 
     for (const stage of INQUIRY_STAGES) {
@@ -435,15 +472,10 @@ export async function listInquiryTasksForUser(
       reason: "assigned",
     }));
 
-    const map = await loadWorkflowMap(tx, org.id);
-    const approvable = INQUIRY_STAGES.filter((stage) => {
-      const config = map[stage.key];
-      return (
-        config.approvalRequired &&
-        config.approvalRequiredBy !== "" &&
-        org.access.departments.includes(config.approvalRequiredBy)
-      );
-    }).map((stage) => stage.key as string);
+    const { approvers } = await loadWorkflow(tx, org.id);
+    const approvable = INQUIRY_STAGES.filter((stage) =>
+      isApprover(org, approvers[stage.key]),
+    ).map((stage) => stage.key as string);
     if (approvable.length === 0) return tasks;
 
     const waiting = (await loadInquiryList(tx, org, { openOnly: true })).filter(
@@ -481,24 +513,11 @@ async function findInquiry(
 }
 
 /** The department that must approve the inquiry's current step, if any. */
-function approverOf(
-  map: InquiryWorkflowMap,
-  row: InquiryRow,
-): InquiryWorkflowMap[InquiryStageKey]["approvalRequiredBy"] {
-  const config = map[stageOf(row)];
-  return config.approvalRequired ? config.approvalRequiredBy : "";
-}
-
 /** Whoever owns, oversees or must approve an inquiry may open it. */
-function canView(
-  org: ResolvedOrg,
-  map: InquiryWorkflowMap,
-  row: InquiryRow,
-): boolean {
-  const approver = approverOf(map, row);
+function canView(org: ResolvedOrg, workflow: Workflow, row: InquiryRow): boolean {
   return (
     can.viewInquiry(org.access, ownerOf(row)) ||
-    (approver !== "" && org.access.departments.includes(approver))
+    isApprover(org, workflow.approvers[stageOf(row)])
   );
 }
 
@@ -508,7 +527,7 @@ async function requireInquiry(
   inquiryId: string,
 ): Promise<InquiryRow> {
   const row = await findInquiry(tx, org, inquiryId);
-  if (!row || !canView(org, await loadWorkflowMap(tx, org.id), row)) {
+  if (!row || !canView(org, await loadWorkflow(tx, org.id), row)) {
     throw new UserError("Inquiry not found.");
   }
   return row;
@@ -540,7 +559,7 @@ async function loadInquiryView(
 ): Promise<InquiryView> {
   const stage = stageOf(row);
   const status = statusOf(row);
-  const map = await loadWorkflowMap(tx, org.id);
+  const { map, approvers } = await loadWorkflow(tx, org.id);
   const config = map[stage];
   const records =
     (await loadStageRecords(tx, [row.id])).get(row.id) ??
@@ -620,9 +639,7 @@ async function loadInquiryView(
           ? (names.get(record.completedByUserId) ?? null)
           : null,
       approvalRequired: map[item.key].approvalRequired,
-      approvalRequiredBy: map[item.key].approvalRequired
-        ? map[item.key].approvalRequiredBy
-        : "",
+      approvalBy: approvers[item.key]?.label ?? "",
     };
   });
 
@@ -693,9 +710,7 @@ async function loadInquiryView(
     approvalRequested,
     currentStageApproved,
     canApproveCurrentStage:
-      approvalRequested &&
-      config.approvalRequiredBy !== "" &&
-      org.access.departments.includes(config.approvalRequiredBy),
+      approvalRequested && isApprover(org, approvers[stage]),
     canClose: status !== "completed" && can.assignInquiry(org.access, ownerOf(row)),
     comments,
     activityLogs,
@@ -722,7 +737,7 @@ export async function getInquiryForUser(
     const org = await resolveOrg(tx, userId, orgCode);
     if (!org) return null;
     const row = await findInquiry(tx, org, inquiryId);
-    if (!row || !canView(org, await loadWorkflowMap(tx, org.id), row)) {
+    if (!row || !canView(org, await loadWorkflow(tx, org.id), row)) {
       return null;
     }
     return loadInquiryView(tx, org, row);
@@ -1213,10 +1228,10 @@ export async function saveInquiryStageForUser(
       fields,
     );
 
-    const map = await loadWorkflowMap(tx, org.id);
-    if (map[stage].approvalRequired && !(await hasApproval(tx, inquiryId, stage))) {
+    const { map, approvers } = await loadWorkflow(tx, org.id);
+    if (approvers[stage] && !(await hasApproval(tx, inquiryId, stage))) {
       throw new UserError(
-        `Approval required by ${approvalRoleLabel(map[stage].approvalRequiredBy)} before moving to the next step.`,
+        `Approval required by ${approvers[stage].label} before moving to the next step.`,
       );
     }
 
@@ -1491,13 +1506,12 @@ export async function approveInquiryStageForUser(
     }
 
     const stage = stageOf(existing);
-    const config = (await loadWorkflowMap(tx, org.id))[stage];
-    if (!config.approvalRequired || config.approvalRequiredBy === "") {
+    const approver = (await loadWorkflow(tx, org.id)).approvers[stage];
+    if (!approver) {
       throw new UserError("This step does not require approval.");
     }
-    const approver = approvalRoleLabel(config.approvalRequiredBy);
-    if (!org.access.departments.includes(config.approvalRequiredBy)) {
-      throw new UserError(`Only ${approver} can approve this step.`);
+    if (!isApprover(org, approver)) {
+      throw new UserError(`Only ${approver.label} can approve this step.`);
     }
     if (await hasApproval(tx, inquiryId, stage)) {
       throw new UserError("This step is already approved.");
@@ -1513,7 +1527,7 @@ export async function approveInquiryStageForUser(
       organizationId: org.id,
       inquiryId,
       stageKey: stage,
-      requiredBy: config.approvalRequiredBy,
+      requiredBy: approver.key,
       approvedByUserId: userId,
     });
     await writeStageRecord(tx, org, inquiryId, stage, {
@@ -1522,7 +1536,7 @@ export async function approveInquiryStageForUser(
     await recordEvent(tx, org, userId, inquiryId, {
       from: stage,
       to: stage,
-      note: `Approved by ${approver}`,
+      note: `Approved by ${approver.label}`,
     });
 
     return reloadInquiryView(tx, org, inquiryId);
@@ -1548,8 +1562,8 @@ export async function requestInquiryApprovalForUser(
       "Assign someone before working on this step.",
     );
     const stage = stageOf(existing);
-    const config = (await loadWorkflowMap(tx, org.id))[stage];
-    if (!config.approvalRequired || config.approvalRequiredBy === "") {
+    const approver = (await loadWorkflow(tx, org.id)).approvers[stage];
+    if (!approver) {
       throw new UserError("This step does not require approval.");
     }
 
@@ -1563,7 +1577,7 @@ export async function requestInquiryApprovalForUser(
     await recordEvent(tx, org, userId, inquiryId, {
       from: stage,
       to: stage,
-      note: `Sent to ${approvalRoleLabel(config.approvalRequiredBy)} for approval`,
+      note: `Sent to ${approver.label} for approval`,
     });
 
     return reloadInquiryView(tx, org, inquiryId);
@@ -1586,12 +1600,11 @@ export async function reopenInquiryStepForUser(
     requireOpen(existing);
 
     const stage = stageOf(existing);
-    const config = (await loadWorkflowMap(tx, org.id))[stage];
-    const isApprover =
-      config.approvalRequired &&
-      config.approvalRequiredBy !== "" &&
-      org.access.departments.includes(config.approvalRequiredBy);
-    assertCan(isApprover || can.workInquiry(org.access, ownerOf(existing)));
+    const { approvers } = await loadWorkflow(tx, org.id);
+    assertCan(
+      isApprover(org, approvers[stage]) ||
+        can.workInquiry(org.access, ownerOf(existing)),
+    );
 
     const why = reason.trim();
     await clearApproval(tx, org, userId, inquiryId, stage, "opened for changes");

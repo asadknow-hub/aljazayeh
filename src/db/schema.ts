@@ -208,6 +208,15 @@ export const organizationSettings = pgTable("organization_settings", {
   bankIban: text("bank_iban").notNull().default(""),
   bankSwift: text("bank_swift").notNull().default(""),
   bankBranch: text("bank_branch").notNull().default(""),
+  /**
+   * Departments the system offers that this company does not have. They are
+   * left off the organisation chart, the home screen and every list to
+   * choose a department from.
+   */
+  closedDepartments: jsonb("closed_departments")
+    .$type<string[]>()
+    .notNull()
+    .default([]),
   ...timestamps,
 }, () => [
   allowSelect("organization_settings_member_select", isOrgMember()),
@@ -318,34 +327,52 @@ export const staffDepartmentAssignments = pgTable(
 );
 
 /**
- * Who holds each signing position in a company (Foreman, Accountant,
- * Managing Director, …). Forms name positions; this says who signs for them.
+ * The organisation chart: the positions of a company and who holds each.
+ * Owners sit at the top (block "owners"); every other position belongs to a
+ * department. The company's forms take their signatures from here: each
+ * owner signs, and so does whoever holds a position the forms call for
+ * (`signs_as`: accountant, admin, foreman, purchaser). A position that is
+ * removed is no longer asked for; one that is there but has nobody in it
+ * holds the forms up until somebody is named. The rules are in
+ * src/lib/organization.
  */
-export const signatoryPositions = pgTable(
-  "signatory_positions",
+export const orgPositions = pgTable(
+  "org_positions",
   {
+    id: uuid("id").defaultRandom().primaryKey(),
     organizationId: uuid("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    positionKey: text("position_key").notNull(),
-    staffId: uuid("staff_id")
-      .notNull()
-      .references(() => staffMembers.id, { onDelete: "restrict" }),
+    /** "owners", or the key of the department the position belongs to. */
+    block: text("block").notNull(),
+    title: text("title").notNull(),
+    /** The role its holder signs the company's forms in, if any. */
+    signsAs: text("signs_as"),
+    /** Who holds it; empty while nobody has been named. */
+    staffId: uuid("staff_id").references(() => staffMembers.id, {
+      onDelete: "set null",
+    }),
+    sortOrder: integer("sort_order").notNull().default(0),
     ...timestamps,
   },
   (table) => [
-    primaryKey({ columns: [table.organizationId, table.positionKey] }),
-    allowSelect("signatory_positions_member_select", isOrgMember()),
-    allowInsert("signatory_positions_admin_insert", isOrgAdmin()),
-    allowUpdate("signatory_positions_admin_update", isOrgAdmin()),
-    allowDelete("signatory_positions_admin_delete", isOrgAdmin()),
+    index("org_positions_org_idx").on(table.organizationId),
+    // One position per signing role in a company.
+    uniqueIndex("org_positions_org_signs_as_uidx")
+      .on(table.organizationId, table.signsAs)
+      .where(sql`${table.signsAs} is not null`),
+    allowSelect("org_positions_member_select", isOrgMember()),
+    allowInsert("org_positions_admin_insert", isOrgAdmin()),
+    allowUpdate("org_positions_admin_update", isOrgAdmin()),
+    allowDelete("org_positions_admin_delete", isOrgAdmin()),
   ],
 );
 
 /**
- * A signature on a document: one row per step of its sign-off chain, written
- * when that step is signed. The signer's name and signature are copied in,
- * so the record stays as it was signed. Never changed or removed.
+ * A signature on a document: one row per box signed. The box's heading, the
+ * signer's name and their signature are copied in, so the record stays as it
+ * was signed whatever happens to the organisation chart afterwards. Never
+ * changed or removed.
  */
 export const documentSignoffs = pgTable(
   "document_signoffs",
@@ -356,7 +383,12 @@ export const documentSignoffs = pgTable(
       .references(() => organizations.id, { onDelete: "cascade" }),
     documentType: text("document_type").notNull(),
     documentId: uuid("document_id").notNull(),
+    /** The order it was signed in: 0 for the first signature. */
     step: integer("step").notNull(),
+    /** Whose box it is: "preparer", or the id of the position that signed. */
+    signerKey: text("signer_key").notNull(),
+    /** The heading printed over the box, e.g. "Verified by Accounts". */
+    label: text("label").notNull(),
     decision: text("decision").notNull(),
     signedByUserId: uuid("signed_by_user_id")
       .notNull()
@@ -373,6 +405,12 @@ export const documentSignoffs = pgTable(
       table.documentType,
       table.documentId,
       table.step,
+    ),
+    // A box is signed once.
+    uniqueIndex("document_signoffs_document_signer_uidx").on(
+      table.documentType,
+      table.documentId,
+      table.signerKey,
     ),
     index("document_signoffs_org_idx").on(table.organizationId),
     allowSelect("document_signoffs_member_select", isOrgMember()),

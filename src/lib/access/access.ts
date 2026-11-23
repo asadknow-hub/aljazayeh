@@ -11,10 +11,19 @@ export type OrgAccess = {
   staffId: string;
   isAdmin: boolean;
   departments: StaffRoleKey[];
+  /**
+   * Departments the system offers that this company does not have (see the
+   * organisation chart). Nobody opens those, whatever else they may do.
+   */
+  closedDepartments: StaffRoleKey[];
 };
 
 function inDepartment(access: OrgAccess, key: StaffRoleKey): boolean {
   return access.departments.includes(key);
+}
+
+function companyHas(access: OrgAccess, key: StaffRoleKey): boolean {
+  return !access.closedDepartments.includes(key);
 }
 
 /** Administrators and Management oversee the whole company. */
@@ -39,11 +48,13 @@ export const can = {
 
   /** Visitors log and raising leave requests. */
   useReception: (access: OrgAccess) =>
-    isLeadership(access) || inDepartment(access, "reception"),
+    companyHas(access, "reception") &&
+    (isLeadership(access) || inDepartment(access, "reception")),
 
   /** Open a department's workspace (Admin, Sales, Accounts, Engineering). */
   openDepartment: (access: OrgAccess, dept: InquiryWorkflowDepartmentKey) =>
-    isLeadership(access) || inDepartment(access, dept),
+    companyHas(access, dept) &&
+    (isLeadership(access) || inDepartment(access, dept)),
 
   /** See every inquiry in the company, whichever department owns it. */
   viewAllInquiries: (access: OrgAccess) =>
@@ -75,6 +86,7 @@ export function canOpenTile(access: OrgAccess, key: DepartmentKey): boolean {
       return can.viewActivityLog(access);
     case "company-settings":
       return can.manageCompany(access);
+    case "organization":
     case "company-docs":
       return true;
     default:

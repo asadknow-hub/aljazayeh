@@ -48,6 +48,7 @@ export function SignedFormDoc({
   const signoffs: SignoffState = {
     steps: form.signers.map((signer) => ({
       label: signer.label,
+      preparer: signer.preparer,
       expectedName: signer.name,
       signed: null,
     })),
@@ -167,7 +168,7 @@ export function SignedFormDoc({
                         {signer.label}
                       </span>
                       <span className="block text-slate-600">
-                        {signer.label === "Prepared By"
+                        {signer.preparer
                           ? "Whoever raises the form"
                           : signer.name || "Nobody named yet"}
                       </span>
@@ -176,20 +177,14 @@ export function SignedFormDoc({
                 ))}
               </ol>
               <p className="mt-3 text-xs text-slate-500">
-                {canManageCompany ? (
-                  <>
-                    Who holds each position is set under{" "}
-                    <Link
-                      href={`/${orgCode}/company-settings`}
-                      className="font-medium text-primary hover:underline"
-                    >
-                      Company Settings
-                    </Link>
-                    , Signatories.
-                  </>
-                ) : (
-                  "Who holds each position is set by an administrator under Company Settings."
-                )}
+                The signatures come from the{" "}
+                <Link
+                  href={`/${orgCode}/organization`}
+                  className="font-medium text-primary hover:underline"
+                >
+                  Organization
+                </Link>{" "}
+                chart: every owner, and the positions this form calls for.
               </p>
             </div>
 

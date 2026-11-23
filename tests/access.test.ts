@@ -354,14 +354,14 @@ describe("inquiry pipeline", () => {
   let inquiryId: string;
 
   before(async () => {
-    // Sales handles new inquiries and Management must approve them;
+    // Sales handles new inquiries and an owner must approve them;
     // quotations go to Accounts.
     const map = await getInquiryWorkflowMapForUser(owner, ORG);
     assert.ok(map);
     map.inquiry = {
       departmentKey: "sales",
       approvalRequired: true,
-      approvalRequiredBy: "management",
+      approvalRequiredBy: "owners",
     };
     map.quotation = {
       departmentKey: "accounts",
@@ -442,13 +442,13 @@ describe("inquiry pipeline", () => {
       saveInquiryStageForUser(people.sara.userId, ORG, inquiryId, inquiryStep(), {
         complete: true,
       }),
-      /Approval required by Management/,
+      /Approval required by Owners/,
     );
     // The refused attempt saved nothing, so the step is still as it was.
     const view = await getInquiryForUser(people.sara.userId, ORG, inquiryId);
     assert.equal(view?.title, "");
 
-    // Nothing is waiting on Management until the step is sent to them.
+    // Nothing is waiting on the owners until the step is sent to them.
     await refused(
       approveInquiryStageForUser(people.mona.userId, ORG, inquiryId),
       /has not been sent for approval/,
@@ -490,7 +490,7 @@ describe("inquiry pipeline", () => {
 
     await refused(
       approveInquiryStageForUser(people.sara.userId, ORG, inquiryId),
-      /Only Management/,
+      /Only Owners/,
     );
     const approved = await approveInquiryStageForUser(
       people.mona.userId,
@@ -502,7 +502,7 @@ describe("inquiry pipeline", () => {
   });
 
   test("the approver can ask for changes instead", async () => {
-    // Sent again, then turned back by Management with what has to change.
+    // Sent again, then turned back by an owner with what has to change.
     await requestInquiryApprovalForUser(
       people.sara.userId,
       ORG,

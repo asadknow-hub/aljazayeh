@@ -252,7 +252,7 @@ export function ApprovalBanner({
   onReopen,
 }: {
   inquiry: InquiryView;
-  /** Who approves this step: "Management". */
+  /** Who approves this step: "Owners", or a position's title. */
   approver: string;
   pending: boolean;
   onApprove: () => void;
@@ -298,7 +298,7 @@ export function ApprovalBanner({
               ? "It can move on to the next step now."
               : inquiry.canApproveCurrentStage
                 ? "Check the details below, then approve it or ask for changes."
-                : `Nothing more to do here until ${approver} approves it.`}
+                : `Nothing more to do here until it is approved by ${approver}.`}
           </p>
         </div>
       </div>

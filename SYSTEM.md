@@ -13,7 +13,7 @@ The product is an internal CRM + operations workspace for AlJazayeh-style compan
 - Create and switch between **companies** (organizations)
 - Run **department** workspaces (Admin, Sales, Engineering, Accounts, Reception, Staff, …)
 - Capture **reception visitors** and hand inquiry traffic into a locked **inquiry CRM pipeline**
-- Assign people, move stages, require **management / engineering approvals** when configured
+- Assign people, move stages, require an approval from the **owners or a position on the organisation chart** when configured
 - Maintain **staff HR** records, **vacation** requests, and a cross-department **activity log**
 - Keep **company profile** and **inquiry workflow settings** configurable per company
 - Keep personal **account settings** (name, email, password, salary/contract) for the logged-in user
@@ -30,7 +30,8 @@ It is not a public marketing site. It is an authenticated internal tool with ten
 | Company administrator | Company Settings, Inquiry Settings, staff logins, everything in the company |
 | Reception | Daily attendance and the monthly attendance sheet, visitors log, vacation requests |
 | Sales / Engineering / Accounts | The inquiries whose current step they handle |
-| Management | Approves vacation on company home; can approve inquiry stages when required |
+| Owners and position holders (Organization chart) | Sign the company's forms in turn; approve the inquiry steps set to them |
+| Management | Oversees every department; changes Company Docs |
 | Staff / HR | Staff directory, profiles, salary, contracts |
 | Any member | Profile `/settings`, company switcher, All Logs |
 
@@ -99,7 +100,8 @@ All rules are in [`src/lib/access/access.ts`](src/lib/access/access.ts).
 
 | Area | Who |
 | --- | --- |
-| Company settings, inquiry settings, signatories, creating logins, making administrators | Company administrator |
+| Company settings, inquiry settings, the organisation chart, creating logins, making administrators | Company administrator |
+| Looking at the organisation chart | Everyone in the company |
 | Staff directory incl. salary and contracts, All Logs | Administrator, Management |
 | Company Docs: looking | Everyone in the company |
 | Company Docs: changing a paper | Administrator, Management |
@@ -109,7 +111,7 @@ All rules are in [`src/lib/access/access.ts`](src/lib/access/access.ts).
 | Seeing every inquiry | Administrator, Management, Admin department |
 | Working an inquiry (fill in, move on, send back) | The department that handles its current step, Administrator |
 | Assigning an inquiry | Owning department, Administrator, Management |
-| Approving a stage | Whoever Inquiry Settings names (Management or Engineering) |
+| Approving a stage | Whoever Inquiry Settings names: any owner, or the holder of one position on the chart |
 
 The company home only shows the tiles a person can open; other pages return 404 for them.
 
@@ -145,6 +147,7 @@ After selecting a company, the home screen is **Select Department** with tiles:
 | Sales | `/{code}/sales` | Built (Inquiries) |
 | Engineering Department | `/{code}/engineering` | Built (Inquiries, Material requests) |
 | Admin | `/{code}/admin` | Built (all Inquiries, Verbal work approvals) |
+| Organization | `/{code}/organization` | Built (owners, departments, positions; drives signatures and approvals) |
 | Company Docs | `/{code}/company-docs` | Built (every paper, where it is used, changing it) |
 | All Logs | `/{code}/all-logs` | Built |
 | Company Settings | `/{code}/company-settings` | Built |
@@ -176,7 +179,7 @@ Two sections:
    - **Stages** (fixed order; cannot reorder)
    - **Handled by Department** (Sales / Admin / Engineering / Accounts)
    - **Approval Required** (checkbox)
-   - **Approval Required by** (Management or Engineering Department — enabled only when checked)
+   - **Approval Required by** (the owners, or any position on the Organization chart — enabled only when checked)
    - Vertical roadmap arrows between stage numbers
 
 Saving the workflow map also **recomputes** `owningDepartmentKey` on open inquiries from each inquiry’s current stage. If the owning department changes, the assignee is cleared.
@@ -233,8 +236,8 @@ Built from the company's paper "Leave Request Application".
   stands (sent, waiting for whom, approved, rejected and why, and the list of who has signed), on
   the right the form, laid out like the paper one. Printing is a secondary button and prints
   only the form: two A4 pages with the letterhead.
-- It is **signed in order**: Prepared By (whoever raised it), Foreman, Accountant, CEO & Managing
-  Partner, Managing Director. Each signer sees it under **My Tasks** on the company home when it
+- It is **signed in order**: Prepared By (whoever raised it), Foreman, Accountant, then every
+  owner on the organisation chart. Each signer sees it under **My Tasks** on the company home when it
   is their turn, opens it, and approves or rejects with their **approval PIN**. Approving stamps
   their saved signature, name and the date into their box. A rejection needs a reason and ends
   the request.
@@ -245,10 +248,10 @@ Built from the company's paper "Leave Request Application".
 on screen or uploaded) and chooses a 4–6 digit PIN. Five wrong PINs lock it until a new one is
 set. A signed form keeps the signature as it was at signing.
 
-**Signatories** — Company Settings → Signatories says who holds each signing position (Admin,
-Foreman, Purchaser, Accountant, CEO & Managing Partner, Managing Director). The chain of each
-document type is defined in [`src/lib/signoffs/chains.ts`](src/lib/signoffs/chains.ts); adding a
-form to the system means adding its chain there.
+**Who signs** — the people come from the organisation chart (section 6.9). The chain of each
+document type, in [`src/lib/signoffs/chains.ts`](src/lib/signoffs/chains.ts), names roles:
+whoever raises it, the Admin, Foreman, Purchaser or Accountant, and "the owners". Adding a form
+to the system means adding its chain there.
 
 ### 6.5a Signed internal forms
 
@@ -256,10 +259,10 @@ Five more of the company's paper forms use the same sign-off mechanism as leave 
 
 | Form | Raised in | Signed by, in order |
 | --- | --- | --- |
-| Fine Notice | Reception | Admin, Accounts, Managing Partner, Managing Director |
-| Medical Amount (company pays 70%, employee 30%) | Reception | Accounts, Managing Partner, Managing Director |
-| Petty Cash Form | Accounts workspace | Prepared By, Accounts, Managing Partner, Managing Director |
-| Material Request Approval Form | Engineering workspace | Foreman, Purchaser, Accounts, Managing Partner, Managing Director |
+| Fine Notice | Reception | Admin, Accounts, every owner |
+| Medical Amount (company pays 70%, employee 30%) | Reception | Accounts, every owner |
+| Petty Cash Form | Accounts workspace | Prepared By, Accounts, every owner |
+| Material Request Approval Form | Engineering workspace | Foreman, Purchaser, Accounts, every owner |
 | Verbal Work Approval Form (adds 5% VAT) | Admin workspace | Foreman, Purchaser, Accounts, Managing Partner, Managing Director |
 
 Each is raised and followed on the same kind of screen as a leave request: fields on the left,
@@ -373,8 +376,9 @@ If Inquiry Settings marks a step as needing approval:
   step has to be complete to be sent. They then see that it is done and
   waiting, and can no longer change it unless they take it back with
   **Change something**.
-- It appears under My Tasks for whoever must approve (Management or
-  Engineering, whichever is named). They open it and press **Approve**, or
+- It appears under My Tasks for whoever must approve: every owner when the
+  step is set to the owners (any one of them approves), or the holder of the
+  position it is set to. They open it and press **Approve**, or
   **Ask for changes** with what has to be changed.
 - Once approved, the person handling it presses **Save & Go to Next Step**.
 - Changing a step after it was sent or approved undoes that; it has to be
@@ -436,6 +440,51 @@ touched follows the system as it is improved.
 A signed form's page shows where it is raised, who signs it, and a sample of
 it; its wording and questions are built in for now.
 
+### 6.9 Organization
+
+The organisation chart (`/{code}/organization`): the **owners** at the top,
+**Accounts** under them, and every other department under Accounts. Each part
+has positions; each position has a title and one person holding it. Everyone
+in the company can look; administrators change it.
+
+A new company starts with two owners (CEO & Managing Partner, Managing
+Director), the Accountant in Accounts, Admin and Purchaser in Admin, and the
+Foreman over the Workers, with nobody named.
+
+**The paperwork takes its people from the chart.**
+
+- **Owners**: between one and four, each with their own title. Every form
+  has one box per owner, headed with the title ("Approved by Managing
+  Director"), in the order the owners stand on the chart. Add an owner and
+  every form still going round gets a box for them; remove one and nothing
+  asks for them any more. Naming someone as an owner puts them in
+  Management.
+- **Positions the forms call for** (Admin, Foreman, Purchaser, Accountant):
+  each can sit in any department. Take one off the chart and its box comes
+  off every form; add it back and the box is there again.
+- **Positions of the company's own** (say, QC Inspector): sign no form, and
+  can be chosen to approve an inquiry step.
+- **Inquiry steps** are approved by "the owners" (any one of them) or by one
+  position. When that position is taken off the chart, the step needs no
+  approval any more.
+
+What is on the chart but empty holds work up, and the chart says so: a form
+that needs an unnamed position cannot be raised, and a step it approves
+cannot move on. What is not on the chart is simply not asked for.
+
+**Removing something settles what was waiting for it.** Forms that were only
+waiting for a removed position are approved there and then. A finished form
+is never touched: it shows exactly the signatures it was finished with, under
+the headings they were given, whatever the chart looks like later.
+
+**Departments.** Accounts always exists. Any other department can be removed
+when the company does not have it: nobody is in it, no inquiry step is
+prepared by it, and it has no open inquiries. It then disappears from the
+chart, the home screen, the staff form and the inquiry settings, and can be
+added back at any time. New departments with their own names cannot be
+created: a department's workspace, permissions and colour are part of the
+system.
+
 ---
 
 ## 7. End-to-end flows
@@ -463,7 +512,7 @@ Open inquiry → assign someone from the step's department
 Fill in the step (Save as often as needed)
         │
         ▼
-If the step needs approval → Management / Engineering approves
+If the step needs approval → an owner, or the named position, approves
         │
         ▼
 Save & Go to Next Step → next department, nobody assigned yet
@@ -509,7 +558,8 @@ sessions when a password changes (sessions currently last 12 hours).
 | Company | `organizations`, `organization_settings` |
 | Staff and access | `staff_members` (login link, administrator flag), `staff_department_assignments` |
 | Reception / leave | `attendance_records`, `visitor_logs`, `vacation_requests` |
-| Sign-offs | `signatory_positions`, `document_signoffs` (append-only) |
+| Organisation chart | `org_positions` (owners and department positions, who holds each), `organization_settings.closed_departments` |
+| Sign-offs | `document_signoffs` (append-only; each row keeps whose box it was and its heading) |
 | Signed forms | `approval_forms`, `document_counters` (running numbers) |
 | Company Docs | `document_templates` (a company's versions of each paper, append-only) |
 | Activity | `staff_activity_logs` |
@@ -529,6 +579,8 @@ SQL access functions: [`drizzle/0000_access_functions.sql`](drizzle/0000_access_
 | Inquiries: the steps and their rules | `src/lib/inquiries/` |
 | What each inquiry step asks | `src/lib/inquiries/stage-forms.ts` |
 | Company Docs: the list, a company's settings, the sample job | `src/lib/company-docs/` |
+| Organisation chart: positions, owners, departments in use | `src/lib/organization/` |
+| Who signs which form, who approves a step | `src/lib/signoffs/chains.ts`, `src/lib/inquiries/approvers.ts` |
 | Look of the screens (buttons, fields, cards, colours) | `src/app/globals.css`, `src/lib/departments/colors.ts` |
 | Visitors | `src/lib/visitors/` |
 | Staff / vacation / activity | `src/lib/staff/`, `src/lib/vacation/`, `src/lib/activity/` |
@@ -592,4 +644,4 @@ Env essentials:
 
 ## 14. One-sentence pitch
 
-**AlJazayeh Internal System is a multi-company, RLS-secured 360° operations platform where reception, departments, and admin share one inquiry pipeline — configurable per company, assignable per stage, and approvable when management or engineering must sign off.**
+**AlJazayeh Internal System is a multi-company, RLS-secured 360° operations platform where reception, departments, and admin share one inquiry pipeline — configurable per company, assignable per stage, and approvable by the owners or a named position when a step needs it.**

@@ -45,18 +45,14 @@ export const INQUIRY_WORKFLOW_DEPARTMENTS = [
 export type InquiryWorkflowDepartmentKey =
   (typeof INQUIRY_WORKFLOW_DEPARTMENTS)[number]["key"];
 
-export const INQUIRY_APPROVAL_ROLES = [
-  { key: "management", label: "Management" },
-  { key: "engineering", label: "Engineering Department" },
-] as const;
-
-export type InquiryApprovalRoleKey =
-  (typeof INQUIRY_APPROVAL_ROLES)[number]["key"];
-
 export type InquiryWorkflowStageConfig = {
   departmentKey: InquiryWorkflowDepartmentKey;
   approvalRequired: boolean;
-  approvalRequiredBy: InquiryApprovalRoleKey | "";
+  /**
+   * Who approves it: "owners", or the id of a position on the organisation
+   * chart (src/lib/inquiries/approvers.ts). Empty when no approval is needed.
+   */
+  approvalRequiredBy: string;
 };
 
 export type InquiryWorkflowMap = Record<
@@ -80,12 +76,6 @@ export function workflowDepartmentLabel(
   return (
     INQUIRY_WORKFLOW_DEPARTMENTS.find((dept) => dept.key === key)?.label ?? key
   );
-}
-
-export function isInquiryApprovalRoleKey(
-  value: string,
-): value is InquiryApprovalRoleKey {
-  return INQUIRY_APPROVAL_ROLES.some((role) => role.key === value);
 }
 
 export function inquiryStageLabel(key: string): string {

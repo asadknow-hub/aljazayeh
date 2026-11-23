@@ -194,8 +194,9 @@ function AttendanceRow({
             .join(" · ")}
         </p>
       </div>
+      {/* On a narrow screen the marks wrap onto a second line. */}
       <div
-        className="flex shrink-0 gap-1"
+        className="flex max-w-full flex-wrap gap-1"
         role="group"
         aria-label={row.fullName}
       >

@@ -58,7 +58,6 @@ import {
   uploadInquiryAttachmentAction,
 } from "@/lib/inquiries/actions";
 import {
-  INQUIRY_APPROVAL_ROLES,
   workflowDepartmentLabel,
   type InquiryStageKey,
   type InquiryWorkflowDepartmentKey,
@@ -307,10 +306,7 @@ export function InquiryDetailClient({
     inquiry.steps.find((step) => step.key === viewing) ?? currentStep;
   const definition = STAGE_DEFINITIONS[viewedStep.key];
   const viewingCurrent = viewedStep.key === inquiry.currentStage;
-  const approver =
-    INQUIRY_APPROVAL_ROLES.find(
-      (role) => role.key === currentStep.approvalRequiredBy,
-    )?.label ?? "";
+  const approver = currentStep.approvalBy;
   // Once a step is sent for approval or approved it is not changed, unless
   // it is taken back first.
   const heldForApproval =

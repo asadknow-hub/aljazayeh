@@ -1,6 +1,5 @@
 import type { SignedFormKey } from "@/lib/company-docs/catalog";
 import type {
-  InquiryApprovalRoleKey,
   InquiryStageKey,
   InquiryWorkflowDepartmentKey,
 } from "@/lib/inquiries/stages";
@@ -34,7 +33,8 @@ export type CompanyDocStep = {
   /** Its place in a local job and in an export job; null if not part of it. */
   number: { local: number | null; export: number | null };
   departmentKey: InquiryWorkflowDepartmentKey;
-  approvalBy: InquiryApprovalRoleKey | "";
+  /** Who approves the step: "Owners" or a position's title; empty if nobody. */
+  approvalBy: string;
   docs: CompanyDocRow[];
 };
 
@@ -46,7 +46,7 @@ export type SignedFormRow = {
   raisedIn: string;
   raisedHref: string;
   /** The signature boxes in order, with who holds each today. */
-  signers: { label: string; name: string }[];
+  signers: { label: string; name: string; preparer: boolean }[];
   numberExample: string | null;
   raised: number;
   waiting: number;

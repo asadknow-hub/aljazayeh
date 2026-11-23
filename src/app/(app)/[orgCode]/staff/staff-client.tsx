@@ -11,7 +11,7 @@ import {
 import { usePageTitle } from "@/components/providers/page-title-provider";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import {
-  STAFF_ASSIGNABLE_ROLES,
+  assignableRoles,
   departmentLabel,
   type StaffRoleKey,
 } from "@/lib/departments/catalog";
@@ -32,6 +32,8 @@ type StaffClientProps = {
     code: string;
   };
   initialStaff: StaffView[];
+  /** Departments the company does not have; nobody is put in those. */
+  closedDepartments: string[];
 };
 
 const emptyForm: StaffProfileInput = {
@@ -52,7 +54,11 @@ function statusLabel(status: StaffStatus) {
   return STAFF_STATUSES.find((item) => item.value === status)?.label ?? status;
 }
 
-export function StaffClient({ org, initialStaff }: StaffClientProps) {
+export function StaffClient({
+  org,
+  initialStaff,
+  closedDepartments,
+}: StaffClientProps) {
   usePageTitle("Staff");
   const router = useRouter();
 
@@ -541,7 +547,7 @@ export function StaffClient({ org, initialStaff }: StaffClientProps) {
                       Required. Choose one or more roles/departments.
                     </p>
                     <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {STAFF_ASSIGNABLE_ROLES.map((role) => {
+                      {assignableRoles(closedDepartments).map((role) => {
                         const checked = form.departmentKeys.includes(role.key);
                         return (
                           <label

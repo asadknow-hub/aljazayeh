@@ -1,9 +1,13 @@
 /** Shared pieces for the test suites. */
 import assert from "node:assert/strict";
 import { UserError } from "@/lib/errors";
-import { SIGNATORY_POSITIONS } from "@/lib/signoffs/chains";
+import { DEFAULT_POSITIONS } from "@/lib/organization/chart";
+import {
+  getOrganizationChartForUser,
+  updatePositionForUser,
+} from "@/lib/organization/queries";
+import type { ChartPosition } from "@/lib/organization/types";
 import { setApprovalPinForUser } from "@/lib/signoffs/credentials";
-import { setSignatoryForUser } from "@/lib/signoffs/queries";
 import { signVacationRequestForUser } from "@/lib/vacation/queries";
 import type { VacationRequestInput } from "@/lib/vacation/types";
 
@@ -35,20 +39,49 @@ export function leaveInput(
   };
 }
 
-/** Make one person hold every signing position, with a PIN to sign with. */
+/** Every position on a company's organisation chart. */
+export async function chartPositions(
+  userId: string,
+  orgCode: string,
+): Promise<ChartPosition[]> {
+  const chart = await getOrganizationChartForUser(userId, orgCode);
+  assert.ok(chart);
+  return [
+    ...chart.owners,
+    ...chart.departments.flatMap((department) => department.positions),
+  ];
+}
+
+/** Name who holds positions of the chart, by the position's title. */
+export async function namePositions(
+  adminUserId: string,
+  orgCode: string,
+  holders: Record<string, { staffId: string }>,
+) {
+  const positions = await chartPositions(adminUserId, orgCode);
+  for (const [title, person] of Object.entries(holders)) {
+    const position = positions.find((item) => item.title === title);
+    assert.ok(position, `no position called ${title}`);
+    await updatePositionForUser(adminUserId, orgCode, position.id, {
+      title,
+      staffId: person.staffId,
+    });
+  }
+}
+
+/** Make one person hold every position, with a PIN to sign with. */
 export async function makeSoleSignatory(
   adminUserId: string,
   orgCode: string,
   signer: { userId: string; staffId: string },
 ) {
-  for (const position of SIGNATORY_POSITIONS) {
-    await setSignatoryForUser(
-      adminUserId,
-      orgCode,
-      position.key,
-      signer.staffId,
-    );
-  }
+  await namePositions(
+    adminUserId,
+    orgCode,
+    Object.fromEntries(
+      DEFAULT_POSITIONS.map((position) => [position.title, signer]),
+    ),
+  );
   await setApprovalPinForUser(signer.userId, { password: PASSWORD, pin: PIN });
 }
 
@@ -58,7 +91,7 @@ export async function approveLeaveFully(
   orgCode: string,
   requestId: string,
 ) {
-  for (let step = 0; step < SIGNATORY_POSITIONS.length; step += 1) {
+  for (let step = 0; step < DEFAULT_POSITIONS.length; step += 1) {
     const status = await signVacationRequestForUser(
       signerUserId,
       orgCode,
