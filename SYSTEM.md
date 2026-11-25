@@ -200,6 +200,12 @@ Org-scoped HR directory:
 
 New company creators automatically get a linked Admin staff row so they can assign/approve immediately.
 
+**When people change.** Making someone inactive, or taking them out of a department, sends
+the open jobs they held in that department back to it unassigned, with a line in each job's
+history, so the others there find them under "not assigned". Finished jobs keep their name.
+Someone who holds a position on the Organization chart cannot be made inactive until
+someone else is put in that position: forms wait for the holder's signature.
+
 ### 6.4 Reception
 
 Sidebar sections:

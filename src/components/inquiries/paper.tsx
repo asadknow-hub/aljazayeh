@@ -123,11 +123,17 @@ export function usePaperTexts(document: string): (key: string) => string {
 
 /* ------------------------------ paper pieces ------------------------------ */
 
-/** The sheet itself: white, A4 wide on screen, the whole page when printed. */
+/**
+ * The sheet itself: white, A4 wide on screen, the whole page when printed.
+ * On a screen too narrow for a paper it keeps its shape and is moved
+ * sideways with a finger, rather than squeezing its tables off the screen.
+ */
 export function PaperSheet({ children }: { children: ReactNode }) {
   return (
-    <div className="paper print-exact mx-auto w-full max-w-[210mm] border border-slate-300 bg-white px-8 py-8 shadow-sm print:max-w-none print:border-0 print:p-0 print:shadow-none">
-      {children}
+    <div className="max-w-full overflow-x-auto print:overflow-visible">
+      <div className="paper print-exact mx-auto w-full max-w-[210mm] min-w-[36rem] border border-slate-300 bg-white px-8 py-8 shadow-sm print:max-w-none print:min-w-0 print:border-0 print:p-0 print:shadow-none">
+        {children}
+      </div>
     </div>
   );
 }

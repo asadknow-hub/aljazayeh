@@ -26,6 +26,7 @@ import {
   inquiryStageLabel,
   isInquiryStageKey,
   isInquiryWorkflowDepartmentKey,
+  workflowDepartmentLabel,
   type InquiryStageKey,
   type InquiryWorkflowDepartmentKey,
   type InquiryWorkflowMap,
@@ -1419,6 +1420,46 @@ async function enterStage(
     to: toStage,
     note,
   });
+}
+
+/**
+ * A person can no longer work some of the jobs they hold, because they left
+ * the company or the department. Those jobs go back to their department,
+ * for someone there to take, and the job's history says why. `stillIn` is
+ * the departments the person still works in.
+ */
+export async function releaseInquiriesOf(
+  tx: DbTransaction,
+  org: ResolvedOrg,
+  userId: string,
+  staff: { id: string; fullName: string },
+  stillIn: ReadonlySet<string>,
+): Promise<number> {
+  const held = await tx
+    .select()
+    .from(inquiries)
+    .where(
+      and(
+        eq(inquiries.organizationId, org.id),
+        eq(inquiries.assignedStaffId, staff.id),
+      ),
+    );
+
+  let released = 0;
+  for (const row of held) {
+    if (statusOf(row) !== "open" || stillIn.has(ownerOf(row))) continue;
+    await tx
+      .update(inquiries)
+      .set({ assignedStaffId: null, updatedAt: new Date() })
+      .where(eq(inquiries.id, row.id));
+    await recordEvent(tx, org, userId, row.id, {
+      from: stageOf(row),
+      to: stageOf(row),
+      note: `Unassigned: ${staff.fullName} no longer works in ${workflowDepartmentLabel(ownerOf(row))}`,
+    });
+    released += 1;
+  }
+  return released;
 }
 
 /** Return an inquiry to the step before, saying what has to be fixed. */

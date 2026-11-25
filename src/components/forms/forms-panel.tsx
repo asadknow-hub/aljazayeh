@@ -38,7 +38,8 @@ export function FormsPanel({
             {definition.listLabel}
           </h2>
           <p className="mt-1 text-sm text-slate-600">
-            Raise a {definition.itemLabel} and follow its approval.
+            Raise {/^[aeiou]/i.test(definition.itemLabel) ? "an" : "a"}{" "}
+            {definition.itemLabel} and follow its approval.
           </p>
         </div>
         <Link

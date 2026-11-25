@@ -203,9 +203,17 @@ async function loadSignedForms(
         !form || form.raisedIn === "reception"
           ? "Reception"
           : departmentLabel(form.raisedIn),
-      raisedHref: isFormType(key)
-        ? formListPath(org.code, key)
-        : `/${org.code}/reception?section=vacation`,
+      // A link only for someone who works where the form is raised;
+      // anyone else would find the page closed to them.
+      raisedHref: !(
+        !form || form.raisedIn === "reception"
+          ? can.useReception(org.access)
+          : can.openDepartment(org.access, form.raisedIn)
+      )
+        ? null
+        : isFormType(key)
+          ? formListPath(org.code, key)
+          : `/${org.code}/reception?section=vacation`,
       signers: signoffs.steps.map((step) => ({
         label: step.label,
         name: step.expectedName,

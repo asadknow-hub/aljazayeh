@@ -138,7 +138,7 @@ export function LetterheadsField({
               if (file) void chooseLogo(file);
               event.target.value = "";
             }}
-            className="text-sm"
+            className="w-full max-w-xs min-w-0 text-sm"
           />
         </div>
       </div>
