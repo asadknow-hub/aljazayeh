@@ -3,12 +3,16 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
+import { LetterheadsField } from "@/app/(app)/[orgCode]/company-settings/letterheads-field";
 import { LogoField } from "@/app/(app)/[orgCode]/company-settings/logo-field";
 import { useOrganizations } from "@/components/providers/org-provider";
 import { usePageTitle } from "@/components/providers/page-title-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { saveCompanySettingsAction } from "@/lib/company-settings/actions";
-import type { CompanySettingsView } from "@/lib/company-settings/types";
+import type {
+  CompanySettingsView,
+  OtherLetterhead,
+} from "@/lib/company-settings/types";
 import { saveInquiryWorkflowMapAction } from "@/lib/inquiries/actions";
 import {
   INQUIRY_STAGES,
@@ -146,6 +150,8 @@ type SettingsSection = "company" | "inquiry-settings";
 
 type CompanySettingsClientProps = {
   initialSettings: CompanySettingsView;
+  /** The other names the company prints its papers under. */
+  initialLetterheads: OtherLetterhead[];
   initialWorkflow: InquiryWorkflowMap;
   /**
    * What a step can be given: the departments the company has, and the
@@ -160,6 +166,7 @@ type CompanySettingsClientProps = {
 
 export function CompanySettingsClient({
   initialSettings,
+  initialLetterheads,
   initialWorkflow,
   choices,
   initialSection = "company",
@@ -500,6 +507,14 @@ export function CompanySettingsClient({
                       className="field"
                     />
                   </label>
+                </div>
+
+                <div className="border-t border-slate-200 px-4 py-4 sm:px-5">
+                  <LetterheadsField
+                    orgCode={form.organizationCode}
+                    companyName={saved.companyName}
+                    initialNames={initialLetterheads}
+                  />
                 </div>
               </>
             ) : (

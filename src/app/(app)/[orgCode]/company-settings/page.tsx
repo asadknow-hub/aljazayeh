@@ -1,7 +1,10 @@
 import { can } from "@/lib/access/access";
 import { notFound } from "next/navigation";
 import { CompanySettingsClient } from "@/app/(app)/[orgCode]/company-settings/company-settings-client";
-import { getCompanySettingsForUser } from "@/lib/company-settings/queries";
+import {
+  getCompanySettingsForUser,
+  listLetterheadsForUser,
+} from "@/lib/company-settings/queries";
 import { getInquiryWorkflowMapForUser } from "@/lib/inquiries/queries";
 import { getWorkflowChoicesForUser } from "@/lib/organization/queries";
 import { firstParam, loadOrgPage } from "@/lib/org/page";
@@ -20,10 +23,11 @@ export default async function CompanySettingsPage({
     can.manageCompany,
   );
 
-  const [settings, workflow, choices] = await Promise.all([
+  const [settings, workflow, choices, letterheads] = await Promise.all([
     getCompanySettingsForUser(session.userId, org.code),
     getInquiryWorkflowMapForUser(session.userId, org.code),
     getWorkflowChoicesForUser(session.userId, org.code),
+    listLetterheadsForUser(session.userId, org.code),
   ]);
   if (!settings || !workflow || !choices) notFound();
 
@@ -34,6 +38,7 @@ export default async function CompanySettingsPage({
   return (
     <CompanySettingsClient
       initialSettings={settings}
+      initialLetterheads={letterheads}
       initialWorkflow={workflow}
       choices={choices}
       initialSection={initialSection}

@@ -54,6 +54,7 @@ function useJob() {
     answers,
     customer: {
       name: customer.customerName ?? paper.inquiry.customerName,
+      code: customer.clientCode ?? "",
       attention: customer.contactPerson ?? "",
       contact: customer.contact ?? paper.inquiry.contact,
       email: customer.email ?? "",
@@ -153,6 +154,8 @@ function QuotationPaper() {
   const job = useJob();
   const { items, totals, company, inquiry, bank } = job;
   const t = usePaperTexts("quotation");
+  // What the person preparing it adds under the terms, heading by heading.
+  const notes = job.tables.notes ?? [];
   const asked = useAsked();
   const terms = (
     [
@@ -294,6 +297,26 @@ function QuotationPaper() {
               ))}
             </ol>
           </>
+        ) : null}
+
+        {notes.length > 0 ? (
+          <div className="mt-5">
+            <p className="mb-1.5 font-bold uppercase">Notes</p>
+            <div className="space-y-2">
+              {notes.map((note, index) => (
+                <div key={index}>
+                  {note.heading ? (
+                    <p className="font-semibold">
+                      {note.heading.replace(/[:\s]+$/, "")}:
+                    </p>
+                  ) : null}
+                  {note.text ? (
+                    <p className="whitespace-pre-wrap">{note.text}</p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
         ) : null}
 
         {bank ? (
@@ -719,6 +742,14 @@ function JobCardPaper() {
               {job.numbers.jobCard}
             </td>
           </tr>
+          {job.customer.code ? (
+            <tr>
+              <td className={label}>Client Code:</td>
+              <td className={value} colSpan={3}>
+                {job.customer.code}
+              </td>
+            </tr>
+          ) : null}
           <tr>
             <td className={label}>Phone / Mobile:</td>
             <td className={value}>{job.customer.contact}</td>

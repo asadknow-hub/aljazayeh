@@ -59,6 +59,12 @@ export function hasFields(
 /** A bank account that can be chosen for a paper. */
 export type BankChoice = { id: string; label: string };
 
+/**
+ * The names a step's papers can be printed under. The first is the
+ * company's own name, whose id is empty.
+ */
+export type LetterheadChoice = { id: string; label: string };
+
 /** What a form needs to take in and show uploaded files. */
 export type FileHandling = {
   /** The name of an uploaded file, by its id. */
@@ -147,6 +153,7 @@ function FieldInput({
   fullWidth,
   files,
   banks = [],
+  letterheads = [],
 }: {
   field: StageField;
   value: string;
@@ -156,6 +163,7 @@ function FieldInput({
   fullWidth: boolean;
   files?: FileHandling;
   banks?: BankChoice[];
+  letterheads?: LetterheadChoice[];
 }) {
   const id = fillId(field.key);
   const span = fullWidth ? "col-span-2" : "col-span-2 sm:col-span-1";
@@ -215,6 +223,14 @@ function FieldInput({
             files={files}
           />
         ) : null
+      ) : field.type === "letterhead" ? (
+        <select {...shared} onChange={(event) => onChange(event.target.value)}>
+          {letterheads.map((name) => (
+            <option key={name.id} value={name.id}>
+              {name.label}
+            </option>
+          ))}
+        </select>
       ) : field.type === "bank" ? (
         banks.length > 0 ? (
           <select {...shared} onChange={(event) => onChange(event.target.value)}>
@@ -285,6 +301,7 @@ export function StageFields({
   narrow = false,
   files,
   banks,
+  letterheads = [],
   template,
 }: {
   stage: InquiryStageKey;
@@ -300,10 +317,16 @@ export function StageFields({
   files?: FileHandling;
   /** The company's bank accounts, for a paper that prints one. */
   banks?: BankChoice[];
+  /** The names the papers can be printed under, the company's own first. */
+  letterheads?: LetterheadChoice[];
 }) {
+  // A company with one name is not asked which name to print under.
+  const fields = fieldsOn(stage, place, values, template).filter(
+    (field) => field.type !== "letterhead" || letterheads.length > 1,
+  );
   return (
     <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
-      {fieldsOn(stage, place, values, template).map((field) => (
+      {fields.map((field) => (
         <FieldInput
           key={field.key}
           field={field}
@@ -315,6 +338,7 @@ export function StageFields({
           }
           files={files}
           banks={banks}
+          letterheads={letterheads}
           onChange={(value) => onChange({ ...values, [field.key]: value })}
         />
       ))}
@@ -529,6 +553,7 @@ function SmallInput({
   disabled,
   invalid = false,
   numeric = false,
+  multiline = false,
   className = "",
 }: {
   id?: string;
@@ -540,8 +565,26 @@ function SmallInput({
   disabled: boolean;
   invalid?: boolean;
   numeric?: boolean;
+  /** Running text, in a box of several lines. */
+  multiline?: boolean;
   className?: string;
 }) {
+  if (multiline) {
+    return (
+      <label className={`flex min-w-0 flex-col gap-1 ${className}`}>
+        <span className="field-label">{label}</span>
+        <textarea
+          id={id}
+          aria-label={`${row} ${label.toLowerCase()}`}
+          value={value}
+          rows={3}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          className="field w-full !px-2 !py-1.5"
+        />
+      </label>
+    );
+  }
   return (
     <label className={`flex min-w-0 flex-col gap-1 ${className}`}>
       <span className="field-label">{label}</span>
@@ -799,7 +842,12 @@ export function TablesEditor({
                     value={row[column.key] ?? ""}
                     disabled={disabled}
                     numeric={column.numeric}
-                    className={columnIndex === 0 ? "col-span-6" : "col-span-3"}
+                    multiline={column.multiline}
+                    className={
+                      columnIndex === 0 || column.multiline
+                        ? "col-span-6"
+                        : "col-span-3"
+                    }
                     onChange={(value) =>
                       onChange(
                         name,

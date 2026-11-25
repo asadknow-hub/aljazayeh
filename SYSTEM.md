@@ -299,7 +299,7 @@ responsible for it.
 | --- | --- | --- | --- |
 | 1 | Inquiry | none: the customer's details and the items with quantity and price | `INQ/2026/0001` |
 | 2 | Quotation | Quotation (Commercial Quotation for an export job), two pages | `QTN/…` |
-| 3 | LPO | chosen first, from a dropdown: the **customer's LPO** (their file is uploaded, with its number and date) or **our own LPO** (prepared here on the company's Purchase Order form) | `LPO/…` |
+| 3 | LPO | the **customer's LPO** is uploaded with its number and date (or the job is marked as confirmed **verbally**); **our own LPO**, on the company's Purchase Order form, is an extra paper of the step when it is needed | `LPO/…` |
 | 4 | Proforma Invoice | Proforma Invoice | `PI/…` |
 | 5 | Job Card | Job Card; Certificate of Compliance and Coating Certificate when the job needs them | `JC/…`, `COC/…`, `CC/…` |
 | 6 | Progress Invoice | Progress Invoice | `PRG/…` |
@@ -325,13 +325,14 @@ step 9 and the Receipt Voucher as step 10.
 - A step gets its number the moment the job reaches it, shown beside the
   step's name, in the step list, and as a pill at the top of the inquiry
   together with the numbers of all the other steps reached so far.
-- The LPO step starts with one choice, which decides what the step asks for.
-  **Customer's LPO**: the file they sent (PDF or photo, up to 5 MB) is
-  uploaded and shown beside the fields, and its number and date are typed in.
-  **Our own LPO**: the company's Purchase Order form is filled in and carries
-  the step's own number. The papers that follow (job card, delivery note,
-  invoices) quote whichever LPO number was chosen. Uploaded files are kept
-  in the database and can only be opened by people allowed to see the inquiry.
+- The LPO step is about the customer's LPO: the file they sent (PDF or
+  photo, up to 5 MB) is uploaded with its number and date, and that is the
+  LPO the later papers quote. A job the customer confirmed **verbally** has
+  nothing to upload; it records who confirmed it and, if there is one, the
+  Verbal Work Approval Form number, and the later papers say "Verbal". Either
+  way, ticking **We also prepare an LPO of our own** adds the company's
+  Purchase Order form to the step as an extra paper. Uploaded files are kept
+  with the inquiry and open from the step.
 - An optional paper (certificate, packing list) gets its
   number the first time the step is saved with it switched on. **Print**
   prints the paper that is on screen and nothing else.
@@ -344,6 +345,17 @@ step 9 and the Receipt Voucher as step 10.
   number, an HS code), so the invoice always matches the quote.
 - The company's address and TRN printed on the papers are entered once
   under Company Settings.
+- **Two names.** A company that issues papers under more than one name (a
+  workshop name and an engineering name) adds the other one, with its logo,
+  under Company Settings. Every step with papers then has a **Print under
+  the name** dropdown: it starts with the name the job's earlier papers
+  carry, and the papers print that name and logo. The address, telephone and
+  TRN are the company's in both cases. Stored in `letterheads`; a name no
+  longer used is switched off and stays on the papers that carry it.
+- The quotation has **notes under its terms**: the person preparing it adds
+  as many as needed, each with its own heading and text.
+- The inquiry has a **client code**, typed by staff, which the job card
+  prints.
 - **Bank accounts** are kept by Accounts, under Accounts → Bank accounts: add,
   correct, remove, and choose the one that is used first. The quotation and
   every invoice have a **Bank account to print** dropdown; it starts with the
@@ -579,6 +591,7 @@ sessions when a password changes (sessions currently last 12 hours).
 | Sign-offs | `document_signoffs` (append-only; each row keeps whose box it was and its heading) |
 | Signed forms | `approval_forms`, `document_counters` (running numbers) |
 | Bank accounts | `bank_accounts` (switched off, never deleted) |
+| Names to print under | `letterheads` (the company's other names and logos) |
 | Company Docs | `document_templates` (a company's versions of each paper, append-only) |
 | Activity | `staff_activity_logs` |
 | Inquiry CRM | `inquiry_workflow_settings`, `inquiries`, `inquiry_stage_records`, `inquiry_line_items`, `inquiry_stage_events`, `inquiry_comments`, `inquiry_stage_approvals` |

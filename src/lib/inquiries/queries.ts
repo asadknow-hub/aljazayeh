@@ -32,6 +32,7 @@ import {
 } from "@/lib/inquiries/stages";
 import {
   BANK_FIELD,
+  LETTERHEAD_FIELD,
   documentsInUse,
   INQUIRY_COUNTER_KEY,
   inquiryTotals,
@@ -65,6 +66,7 @@ import { appDateValue } from "@/lib/datetime/format";
 import { loadBankAccounts } from "@/lib/banks/queries";
 import type { BankDetails } from "@/lib/banks/types";
 import { loadStepTemplates } from "@/lib/company-docs/templates";
+import { loadLetterheads } from "@/lib/company-settings/queries";
 import {
   approverOptions,
   stepApprover,
@@ -1080,6 +1082,18 @@ async function saveStageAnswers(
         org,
         doc.counterKey!,
         numberCode(doc.counterKey!, template?.[doc.key]),
+      );
+    }
+  }
+
+  // A name the papers are printed under must be one of the company's own.
+  // One that is no longer offered stays on a step that already carried it.
+  const letterhead = fields[LETTERHEAD_FIELD];
+  if (letterhead && record?.fields[LETTERHEAD_FIELD] !== letterhead) {
+    const names = await loadLetterheads(tx, org.id);
+    if (!names.some((item) => item.id === letterhead && item.active)) {
+      throw new UserError(
+        "That name is no longer in use. Choose another one to print under.",
       );
     }
   }

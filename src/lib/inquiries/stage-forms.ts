@@ -27,7 +27,9 @@ type StageFieldType =
   | "yesno"
   | "file"
   /** One of the company's bank accounts, kept under Accounts. */
-  | "bank";
+  | "bank"
+  /** Which of the company's names and logos the step's papers print under. */
+  | "letterhead";
 
 /** "Only when this answer of the step has this value." */
 type Condition = { field: string; value: string };
@@ -78,6 +80,25 @@ function bankField(on: string): StageField {
   };
 }
 
+/** The answer that says which name and logo a step's papers print under. */
+export const LETTERHEAD_FIELD = "letterhead";
+
+/**
+ * "Under which of our names is this printed?" Asked only of a company that
+ * has more than one, such as a workshop and an engineering name; empty
+ * means the company's own name.
+ */
+function letterheadField(on: string): StageField {
+  return {
+    key: LETTERHEAD_FIELD,
+    label: "Print under the name",
+    type: "letterhead",
+    on,
+    locked: true,
+    wide: true,
+  };
+}
+
 /**
  * How a step treats the job's items:
  * - entry: listed with quantity and price (the Inquiry)
@@ -121,7 +142,13 @@ type StageTable = {
   /** What the list and one row of it are called. */
   title: string;
   rowLabel: string;
-  columns: readonly { key: string; label: string; numeric?: boolean }[];
+  columns: readonly {
+    key: string;
+    label: string;
+    numeric?: boolean;
+    /** Running text, typed in a box of several lines. */
+    multiline?: boolean;
+  }[];
 };
 
 /** Something a step writes against each item: a remark, a heat number, … */
@@ -369,6 +396,12 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         locked: true,
       },
       {
+        key: "clientCode",
+        label: "Client code",
+        type: "text",
+        on: STEP_FORM,
+      },
+      {
         key: "contactPerson",
         label: "Attention (contact person)",
         type: "text",
@@ -447,7 +480,17 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
     ],
     items: "priced",
     itemDetails: [],
-    tables: {},
+    tables: {
+      notes: {
+        on: "quotation",
+        title: "Notes under the terms",
+        rowLabel: "Quotation note",
+        columns: [
+          { key: "heading", label: "Heading" },
+          { key: "text", label: "Text", multiline: true },
+        ],
+      },
+    },
     fields: [
       {
         key: "quotationDate",
@@ -500,17 +543,18 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         on: "quotation",
       },
       bankField("quotation"),
+      letterheadField("quotation"),
     ],
   },
 
   lpo: {
     purpose:
-      "Choose whose LPO this job runs on: the customer's own LPO, which is uploaded here, or our LPO, which is prepared here.",
+      "Upload the LPO the customer sent; it is the LPO this job runs on. If we also need an LPO of our own for the job, it is prepared here too.",
     documents: [
       {
         key: "purchase_order",
         title: "Our LPO",
-        enabledWhen: { field: "lpoType", value: "own" },
+        enabledWhen: { field: "ownLpo", value: "yes" },
         texts: [
           title("Purchase Order"),
           {
@@ -523,7 +567,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
       },
     ],
     counterKey: "LPO",
-    formTitle: "LPO choice and the customer's LPO",
+    formTitle: "The customer's LPO",
     items: "fixed",
     itemDetails: [],
     tables: {
@@ -541,15 +585,16 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
     fields: [
       {
         key: "lpoType",
-        label: "Which LPO is this?",
+        label: "How did the customer confirm the job?",
         type: "choice",
         on: STEP_FORM,
         required: true,
         locked: true,
         wide: true,
+        prefill: "customer",
         options: [
-          { value: "customer", label: "Customer's LPO: they sent it to us" },
-          { value: "own", label: "Our own LPO: we prepare it" },
+          { value: "customer", label: "With an LPO: they sent it to us" },
+          { value: "verbal", label: "Verbally: there is no LPO" },
         ],
       },
       {
@@ -592,6 +637,29 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         on: STEP_FORM,
         wide: true,
         showWhen: { field: "lpoType", value: "customer" },
+      },
+      {
+        key: "verbalBy",
+        label: "Who confirmed it, and to whom",
+        type: "text",
+        on: STEP_FORM,
+        required: true,
+        wide: true,
+        showWhen: { field: "lpoType", value: "verbal" },
+      },
+      {
+        key: "verbalFormNumber",
+        label: "Verbal Work Approval Form no.",
+        type: "text",
+        on: STEP_FORM,
+        showWhen: { field: "lpoType", value: "verbal" },
+      },
+      {
+        key: "ownLpo",
+        label: "We also prepare an LPO of our own for this job",
+        type: "yesno",
+        on: STEP_FORM,
+        locked: true,
       },
       {
         key: "poDate",
@@ -657,6 +725,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         type: "longtext",
         on: "purchase_order",
       },
+      letterheadField("purchase_order"),
     ],
   },
 
@@ -703,6 +772,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         on: "proforma_invoice",
       },
       bankField("proforma_invoice"),
+      letterheadField("proforma_invoice"),
     ],
   },
 
@@ -902,6 +972,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         on: "coating_certificate",
         prefill: "PASSED",
       },
+      letterheadField("job_card"),
     ],
   },
 
@@ -956,6 +1027,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         wide: true,
       },
       bankField("progress_invoice"),
+      letterheadField("progress_invoice"),
     ],
   },
 
@@ -991,6 +1063,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         on: "delivery_note",
         prefill: "customerAddress",
       },
+      letterheadField("delivery_note"),
     ],
   },
 
@@ -1038,6 +1111,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         on: "tax_invoice",
       },
       bankField("tax_invoice"),
+      letterheadField("tax_invoice"),
     ],
   },
 
@@ -1178,6 +1252,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         on: "packing_list",
       },
       bankField("commercial_invoice"),
+      letterheadField("commercial_invoice"),
     ],
   },
 
@@ -1244,6 +1319,7 @@ export const STAGE_DEFINITIONS: Record<InquiryStageKey, StageDefinition> = {
         type: "text",
         on: "receipt_voucher",
       },
+      letterheadField("receipt_voucher"),
     ],
   },
 };
@@ -1387,14 +1463,18 @@ export function fieldShown(
   return holds(field.showWhen, fields);
 }
 
-/** The LPO the rest of the job refers to: the customer's number, or ours. */
+/**
+ * The LPO the rest of the job refers to: the customer's number. A job
+ * confirmed verbally refers to our own LPO if one was prepared, and
+ * otherwise says that it is verbal and who confirmed it.
+ */
 export function lpoReference(
   lpo: { documentNumber: string; fields: Record<string, string> } | undefined,
 ): string {
   if (!lpo) return "";
-  return lpo.fields.lpoType === "own"
-    ? lpo.documentNumber
-    : (lpo.fields.customerLpoNumber ?? "");
+  if (lpo.fields.lpoType !== "verbal") return lpo.fields.customerLpoNumber ?? "";
+  if (lpo.fields.ownLpo === "yes") return lpo.documentNumber;
+  return ["Verbal", lpo.fields.verbalBy].filter(Boolean).join(": ");
 }
 
 /**

@@ -20,11 +20,32 @@ export type CompanySettingsInput = {
   trn: string;
 };
 
+/**
+ * Another name the company prints its papers under, with its own logo.
+ * Everything else on the paper (address, telephone, TRN) is the company's.
+ */
+export type OtherLetterhead = {
+  id: string;
+  name: string;
+  nameArabic: string;
+  logoImage: string | null;
+  /** Still offered on new papers. */
+  active: boolean;
+};
+
+export type OtherLetterheadInput = {
+  name: string;
+  nameArabic: string;
+  logoImage: string | null;
+};
+
 /** What a customer document prints about the company itself. */
 export type CompanyLetterhead = {
   name: string;
   nameArabic: string;
   logoImage: string | null;
+  /** The other names a paper can be printed under instead. */
+  others: OtherLetterhead[];
   telephone: string;
   email: string;
   address: string;

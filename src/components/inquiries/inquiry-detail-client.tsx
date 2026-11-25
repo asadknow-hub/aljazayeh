@@ -65,6 +65,7 @@ import {
 } from "@/lib/inquiries/stages";
 import {
   BANK_FIELD,
+  LETTERHEAD_FIELD,
   documentsInUse,
   formatMoney,
   inquiryTotals,
@@ -137,11 +138,30 @@ function startingBank(inquiry: InquiryView): string {
 }
 
 /**
+ * The name a new paper of this job is printed under: the one its earlier
+ * papers carry, as long as it is still in use. Empty is the company's own.
+ */
+function startingLetterhead(
+  inquiry: InquiryView,
+  company: CompanyLetterhead,
+): string {
+  const earlier = inquiry.steps.findLast(
+    (step) => step.state === "done" && LETTERHEAD_FIELD in step.fields,
+  )?.fields[LETTERHEAD_FIELD];
+  return company.others.some((item) => item.id === earlier && item.active)
+    ? earlier!
+    : "";
+}
+
+/**
  * What the current step starts with: what is saved, plus the values a step
  * offers the first time it is opened (today's date, the job's total, the
  * customer's name, everything delivered in full).
  */
-function draftOf(inquiry: InquiryView): InquiryStageInput {
+function draftOf(
+  inquiry: InquiryView,
+  company: CompanyLetterhead,
+): InquiryStageInput {
   const step = inquiry.steps.find((item) => item.key === inquiry.currentStage);
   const definition = STAGE_DEFINITIONS[inquiry.currentStage];
   const editable = canEdit(inquiry);
@@ -154,6 +174,9 @@ function draftOf(inquiry: InquiryView): InquiryStageInput {
       // saved, the choice stands, also the choice to print none.
       if (field.type === "bank" && !(field.key in fields)) {
         fields[field.key] = startingBank(inquiry);
+      }
+      if (field.type === "letterhead" && !(field.key in fields)) {
+        fields[field.key] = startingLetterhead(inquiry, company);
       }
       if (fields[field.key] || !field.prefill) continue;
       fields[field.key] =
@@ -261,7 +284,7 @@ export function InquiryDetailClient({
   const router = useRouter();
   const { showToast } = useToast();
   const [inquiry, setInquiry] = useState(initialInquiry);
-  const [saved, setSaved] = useState(() => draftOf(initialInquiry));
+  const [saved, setSaved] = useState(() => draftOf(initialInquiry, company));
   const [draft, setDraft] = useState(saved);
   const [viewing, setViewing] = useState<InquiryStageKey>(
     initialInquiry.currentStage,
@@ -279,7 +302,7 @@ export function InquiryDetailClient({
 
   /** Show a fresh copy of the inquiry and start its form from what is saved. */
   function show(next: InquiryView) {
-    const nextDraft = draftOf(next);
+    const nextDraft = draftOf(next, company);
     setInquiry(next);
     setSaved(nextDraft);
     setDraft(nextDraft);
@@ -379,6 +402,25 @@ export function InquiryDetailClient({
         ]
       : []),
   ].map(({ id, label }) => ({ id, label }));
+
+  // The name and logo the step's papers are printed under: the company's
+  // own, or another of its names chosen on the step.
+  const letterheadId = shown.fields[LETTERHEAD_FIELD] ?? "";
+  const printedUnder = company.others.find((item) => item.id === letterheadId);
+  const paperCompany: CompanyLetterhead = printedUnder
+    ? {
+        ...company,
+        name: printedUnder.name,
+        nameArabic: printedUnder.nameArabic,
+        logoImage: printedUnder.logoImage,
+      }
+    : company;
+  const letterheads = [
+    { id: "", label: company.name },
+    ...company.others
+      .filter((item) => item.active || item.id === letterheadId)
+      .map((item) => ({ id: item.id, label: item.name })),
+  ];
 
   // Files on the inquiry, and the ones uploaded just now but not saved yet.
   const allFiles = [...inquiry.attachments, ...uploads];
@@ -779,6 +821,7 @@ export function InquiryDetailClient({
                             invalid={invalid}
                             narrow
                             banks={banks}
+                            letterheads={letterheads}
                             onChange={setFields}
                           />
                         </div>
@@ -876,7 +919,7 @@ export function InquiryDetailClient({
                   >
                   <PaperProvider
                     state={{
-                      company,
+                      company: paperCompany,
                       inquiry,
                       stage: viewedStep.key,
                       template: viewedStep.template,

@@ -80,6 +80,12 @@ export function normalizeStageFields(
         }
         fields[field.key] = value;
         break;
+      case "letterhead":
+        if (!isUuid(value)) {
+          throw new UserError("Choose the name to print under again.");
+        }
+        fields[field.key] = value;
+        break;
       case "yesno":
         fields[field.key] = value === "yes" ? "yes" : "";
         break;
