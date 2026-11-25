@@ -18,6 +18,8 @@ import {
   isAssignableDepartmentKey,
   type StaffRoleKey,
 } from "@/lib/departments/catalog";
+import { releaseInquiriesOf } from "@/lib/inquiries/queries";
+import { loadPositions } from "@/lib/organization/positions";
 import { employeeIdFor } from "@/lib/staff/employee-ids";
 import { UserError } from "@/lib/errors";
 import { requireOrg, resolveOrg, type ResolvedOrg } from "@/lib/org/resolve";
@@ -294,6 +296,19 @@ export async function updateStaffProfileForUser(
       throw new UserError("You cannot deactivate your own staff record.");
     }
 
+    // Forms wait for whoever holds a position on the chart, so a person
+    // who holds one stays active until someone else is put in it.
+    if (existing.status === "active" && normalized.status !== "active") {
+      const held = (await loadPositions(tx, org.id))
+        .filter((position) => position.staffId === staffId)
+        .map((position) => position.title);
+      if (held.length > 0) {
+        throw new UserError(
+          `${existing.fullName} holds ${held.join(" and ")} on the Organization chart. Put someone else there first, so that forms waiting for that signature are not left hanging.`,
+        );
+      }
+    }
+
     // An ID that is cleared is given back as it was: nobody is without one.
     const employeeCode = await employeeIdFor(
       tx,
@@ -318,6 +333,14 @@ export async function updateStaffProfileForUser(
       })
       .where(eq(staffMembers.id, staffId));
     await replaceDepartments(tx, staffId, normalized.departmentKeys);
+    // Jobs they can no longer work go back to the department they are in.
+    await releaseInquiriesOf(
+      tx,
+      org,
+      userId,
+      { id: staffId, fullName: normalized.fullName },
+      new Set(normalized.status === "active" ? normalized.departmentKeys : []),
+    );
 
     if (existing.status !== normalized.status) {
       await insertStaffActivityLog(tx, {

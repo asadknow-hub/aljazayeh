@@ -45,7 +45,8 @@ export type SignedFormRow = {
   name: string;
   /** Where it is raised, and the page it is raised on. */
   raisedIn: string;
-  raisedHref: string;
+  /** Null for someone who does not work there and cannot open it. */
+  raisedHref: string | null;
   /** The signature boxes in order, with who holds each today. */
   signers: { label: string; name: string; preparer: boolean }[];
   numberExample: string | null;

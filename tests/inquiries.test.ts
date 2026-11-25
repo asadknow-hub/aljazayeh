@@ -36,6 +36,7 @@ import { createOrganizationForUser } from "@/lib/org/queries";
 import {
   createStaffForUser,
   createStaffLoginForUser,
+  updateStaffProfileForUser,
 } from "@/lib/staff/queries";
 
 const run = Date.now().toString(36);
@@ -748,5 +749,102 @@ describe("every step has its own person", () => {
       quotation: "Amal",
       lpo: "Adam",
     });
+  });
+});
+
+describe("when people change", () => {
+  let noor: Person;
+  let inquiryId: string;
+  const profile = (
+    departmentKeys: StaffRoleKey[],
+    status: "active" | "inactive" = "active",
+  ) => ({
+    fullName: "Noor",
+    email: "",
+    phone: "",
+    homeCountryContact: "",
+    passportNumber: "",
+    jobTitle: "",
+    employeeCode: "",
+    joinedOn: "",
+    status,
+    notes: "",
+    departmentKeys,
+  });
+  const move = (
+    departmentKeys: StaffRoleKey[],
+    status: "active" | "inactive" = "active",
+  ) =>
+    updateStaffProfileForUser(
+      owner,
+      ORG,
+      noor.staffId,
+      profile(departmentKeys, status),
+    );
+  const job = async () => (await getInquiryForUser(owner, ORG, inquiryId))!;
+
+  before(async () => {
+    noor = await addPerson("Noor", ["admin", "accounts"]);
+    const created = await createInquiryForUser(people.adam.userId, ORG, {
+      fields: {
+        customerName: "Moving People LLC",
+        title: "Ladder",
+        contact: "1",
+      },
+      lineItems: [item("Ladder", "1", "100")],
+    });
+    inquiryId = created.id;
+    await assignInquiryForUser(owner, ORG, inquiryId, noor.staffId);
+  });
+
+  test("a job stays with someone who only leaves another department", async () => {
+    await move(["admin"]);
+    assert.equal((await job()).assignedStaffId, noor.staffId);
+  });
+
+  test("a job goes back to its department when its handler leaves that department", async () => {
+    await move(["accounts"]);
+    const inquiry = await job();
+    assert.equal(inquiry.assignedStaffId, null);
+    assert.equal(
+      inquiry.activityLogs.at(-1)!.label,
+      "Unassigned: Noor no longer works in Admin",
+    );
+    assert.ok(
+      (await listInquiryTasksForUser(noor.userId, ORG)).every(
+        (task) => task.inquiry.id !== inquiryId,
+      ),
+    );
+    // The others in the department take it from there.
+    const taken = await assignInquiryForUser(
+      people.adam.userId,
+      ORG,
+      inquiryId,
+      people.adam.staffId,
+    );
+    assert.equal(taken.assignedStaffId, people.adam.staffId);
+  });
+
+  test("a job goes back to its department when its handler is made inactive", async () => {
+    await move(["admin"]);
+    await assignInquiryForUser(owner, ORG, inquiryId, noor.staffId);
+    await move(["admin"], "inactive");
+    const inquiry = await job();
+    assert.equal(inquiry.assignedStaffId, null);
+    // What they did before stays on record as theirs.
+    assert.match(
+      inquiry.activityLogs.map((log) => log.label).join(" | "),
+      /Assigned to Noor/,
+    );
+  });
+
+  test("a finished job is left as it is", async () => {
+    await move(["admin"]);
+    await assignInquiryForUser(owner, ORG, inquiryId, noor.staffId);
+    await closeInquiryForUser(noor.userId, ORG, inquiryId, "Customer withdrew");
+    await move(["admin"], "inactive");
+    const inquiry = await job();
+    assert.equal(inquiry.status, "cancelled");
+    assert.equal(inquiry.assignedStaffId, noor.staffId);
   });
 });

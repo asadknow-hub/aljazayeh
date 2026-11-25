@@ -59,7 +59,7 @@ export function LogoField({
             if (file) void save(() => imageFileToDataUrl(file, 600));
             event.target.value = "";
           }}
-          className="text-sm"
+          className="w-full max-w-xs min-w-0 text-sm"
         />
         {logo ? (
           <button

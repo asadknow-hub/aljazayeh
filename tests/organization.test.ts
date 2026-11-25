@@ -693,3 +693,34 @@ describe("departments the company has", () => {
     );
   });
 });
+
+describe("a person who holds a position", () => {
+  test("stays active until someone else is put in the position", async () => {
+    const held = (await chartPositions(owner, ORG)).filter(
+      (position) => position.staffId === people.tina.staffId,
+    );
+    assert.ok(held.length > 0, "Tina holds a position");
+    const tina = (await getStaffForUser(owner, ORG, people.tina.staffId))!;
+    await refused(
+      updateStaffProfileForUser(owner, ORG, people.tina.staffId, {
+        ...tina,
+        status: "inactive",
+      }),
+      /Tina holds Accountant.* on the Organization chart/,
+    );
+
+    for (const position of held) {
+      await updatePositionForUser(owner, ORG, position.id, {
+        title: position.title,
+        staffId: "",
+      });
+    }
+    const left = await updateStaffProfileForUser(
+      owner,
+      ORG,
+      people.tina.staffId,
+      { ...tina, status: "inactive" },
+    );
+    assert.equal(left.status, "inactive");
+  });
+});

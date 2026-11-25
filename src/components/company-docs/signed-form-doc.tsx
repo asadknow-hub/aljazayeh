@@ -129,12 +129,16 @@ export function SignedFormDoc({
           <div className="flex flex-col gap-5 px-4 py-4">
             <dl className="divide-y divide-slate-100">
               <Fact label="Raised in">
-                <Link
-                  href={form.raisedHref}
-                  className="font-medium text-primary hover:underline"
-                >
-                  {form.raisedIn}
-                </Link>
+                {form.raisedHref ? (
+                  <Link
+                    href={form.raisedHref}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {form.raisedIn}
+                  </Link>
+                ) : (
+                  form.raisedIn
+                )}
               </Fact>
               <Fact label="Number">
                 {form.numberExample ? (
