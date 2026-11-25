@@ -2,6 +2,7 @@
  * A made-up job, so Company Docs can show every paper filled in the way it
  * will print. Nothing here is saved anywhere.
  */
+import { overtimePay } from "@/lib/forms/overtime";
 import { addDays } from "@/lib/datetime/calendar";
 import type { FormType } from "@/lib/forms/definitions";
 import { stagesForJob, type InquiryStageKey } from "@/lib/inquiries/stages";
@@ -413,5 +414,41 @@ export function sampleFormAnswers(
           },
         ],
       };
+    case "overtime":
+      return {
+        fields: { date: today, food: "30" },
+        lines: [
+          {
+            name: "Anik",
+            employeeId: "EMP-0023",
+            startTime: "18:00",
+            endTime: "21:00",
+            hours: "3",
+            jobProgress: "Welding the staircase stringers",
+            clientName: CUSTOMER.name,
+            ...samplePay(1800, 3),
+          },
+          {
+            name: "Jubair",
+            employeeId: "EMP-0021",
+            startTime: "18:00",
+            endTime: "20:00",
+            hours: "2",
+            jobProgress: "Grinding and primer",
+            clientName: CUSTOMER.name,
+            ...samplePay(1500, 2),
+          },
+        ],
+      };
   }
+}
+
+/** A sample line's pay, written the way a filed sheet keeps it. */
+function samplePay(salary: number, hours: number): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(overtimePay(salary, hours)).map(([key, value]) => [
+      key,
+      value.toFixed(2),
+    ]),
+  );
 }

@@ -68,6 +68,13 @@ export const DOCUMENT_CHAINS = {
     { signer: "accountant", label: "Verified by Account" },
     OWNERS_APPROVE,
   ],
+  // Whoever files the day's sheet, the owners who approve it, and the
+  // accountant who pays it out.
+  overtime: [
+    { signer: "preparer", label: "Prepared By" },
+    OWNERS_APPROVE,
+    { signer: "accountant", label: "Cleared by Accountant" },
+  ],
 } as const satisfies Record<string, readonly ChainStep[]>;
 
 export type DocumentType = keyof typeof DOCUMENT_CHAINS;

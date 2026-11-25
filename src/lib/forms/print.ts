@@ -31,6 +31,14 @@ const num = (value: string | undefined) => Number(value) || 0;
 const typed = (value: string | undefined) =>
   value?.trim() ? money(num(value)) : "";
 
+/** A time of day as it is written: 6:30 PM. */
+function clock(value: string | undefined): string {
+  const match = /^(\d{2}):(\d{2})$/.exec(value ?? "");
+  if (!match) return "";
+  const hour = Number(match[1]);
+  return `${hour % 12 || 12}:${match[2]} ${hour < 12 ? "AM" : "PM"}`;
+}
+
 export function printedForm(form: ApprovalFormDocument): PrintedForm {
   const { fields, lines } = form;
   const date = (key: string) => formatFormDate(fields[key] ?? "");
@@ -231,6 +239,71 @@ export function printedForm(form: ApprovalFormDocument): PrintedForm {
         employeeBox: null,
         managingRemarks: true,
       };
+
+    case "overtime": {
+      // What people are paid is on the sheet only for those who may see it.
+      const paid = lines.some((line) => line.amount !== undefined);
+      const pay = (line: Record<string, string>, key: string) =>
+        num(line.salary) > 0
+          ? typed(line[key])
+          : key === "amount"
+            ? "NO SALARY ON RECORD"
+            : "";
+      const hours = lines.reduce((sum, line) => sum + num(line.hours), 0);
+      const blank = (count: number) => Array<string>(count).fill("");
+      return {
+        orientation: "landscape",
+        details: [...reference, ["OVERTIME WORKED ON", date("date")]],
+        detailsRight: [],
+        table: {
+          columns: [
+            "SL.NO",
+            "EMP ID",
+            "NAME",
+            "START TIME",
+            "END TIME",
+            "JOB PROGRESS",
+            "CLIENT NAME",
+            "TOTAL OVER TIME IN HR",
+            ...(paid
+              ? ["SALARY", "PER DAY SALARY", "PER HOUR SALARY", "AMOUNT"]
+              : []),
+          ],
+          rows: [
+            ...lines.map((line, index) => [
+              String(index + 1),
+              line.employeeId ?? "",
+              line.name ?? "",
+              clock(line.startTime),
+              clock(line.endTime),
+              line.jobProgress ?? "",
+              line.clientName ?? "",
+              line.hours ?? "",
+              ...(paid
+                ? [
+                    pay(line, "salary"),
+                    pay(line, "perDay"),
+                    pay(line, "perHour"),
+                    pay(line, "amount"),
+                  ]
+                : []),
+            ]),
+            ...(paid && num(fields.food) > 0
+              ? [["", "", "FOOD", ...blank(8), typed(fields.food)]]
+              : []),
+          ],
+          totals: [
+            "TOTAL",
+            ...blank(6),
+            lines.length > 0 ? String(Math.round(hours * 100) / 100) : "",
+            ...(paid ? [...blank(3), formatAmount(form.amount)] : []),
+          ],
+        },
+        letter: [],
+        employeeBox: null,
+        managingRemarks: false,
+      };
+    }
   }
 }
 

@@ -1,5 +1,6 @@
 import { isIsoDate } from "@/lib/datetime/calendar";
 import { UserError } from "@/lib/errors";
+import { isUuid } from "@/lib/ids";
 import {
   FORM_DEFINITIONS,
   type ApprovalFormInput,
@@ -20,6 +21,18 @@ function normalizeValue(field: FormField, raw: unknown, where: string): string {
   if (field.type === "date") {
     if (!isIsoDate(value)) {
       throw new UserError(`${where}: ${field.label} is not a valid date.`);
+    }
+    return value;
+  }
+  if (field.type === "time") {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+      throw new UserError(`${where}: ${field.label} is not a valid time.`);
+    }
+    return value;
+  }
+  if (field.type === "employee") {
+    if (!isUuid(value)) {
+      throw new UserError(`${where}: select an employee.`);
     }
     return value;
   }

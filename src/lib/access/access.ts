@@ -56,6 +56,13 @@ export const can = {
     companyHas(access, dept) &&
     (isLeadership(access) || inDepartment(access, dept)),
 
+  /**
+   * See what people are paid for overtime, which gives away their salary:
+   * Accounts, who pay it, and whoever keeps the staff records.
+   */
+  seeOvertimePay: (access: OrgAccess) =>
+    can.manageStaff(access) || can.openDepartment(access, "accounts"),
+
   /** Keep the company's bank accounts: whoever works in Accounts. */
   manageBankAccounts: (access: OrgAccess) =>
     can.openDepartment(access, "accounts"),
