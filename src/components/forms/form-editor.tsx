@@ -22,6 +22,7 @@ import {
   type FormField,
   type FormType,
 } from "@/lib/forms/definitions";
+import { hoursBetween } from "@/lib/forms/overtime";
 import { printedForm } from "@/lib/forms/print";
 import type {
   ApprovalFormDocument,
@@ -32,11 +33,32 @@ function FieldInput({
   field,
   value,
   onChange,
+  employees = [],
 }: {
   field: FormField;
   value: string;
   onChange: (value: string) => void;
+  /** The people an "employee" answer is chosen from. */
+  employees?: FormDraftContext["employees"];
 }) {
+  if (field.type === "employee") {
+    return (
+      <select
+        required={field.required}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="field w-full"
+      >
+        <option value="">Select an employee</option>
+        {employees.map((item) => (
+          <option key={item.id} value={item.id}>
+            {item.fullName}
+            {item.employeeCode ? ` · ${item.employeeCode}` : ""}
+          </option>
+        ))}
+      </select>
+    );
+  }
   if (field.type === "longtext") {
     return (
       <textarea
@@ -51,7 +73,9 @@ function FieldInput({
   const numeric = field.type === "amount" || field.type === "number";
   return (
     <input
-      type={field.type === "date" ? "date" : "text"}
+      type={
+        field.type === "date" ? "date" : field.type === "time" ? "time" : "text"
+      }
       inputMode={numeric ? "decimal" : undefined}
       required={field.required}
       value={value}
@@ -72,7 +96,9 @@ function FieldLabel({ field }: { field: FormField }) {
 
 /** Short fields sit two to a row; anything wordy takes the full width. */
 const isWide = (field: FormField) =>
-  field.type === "longtext" || field.type === "text";
+  field.type === "longtext" ||
+  field.type === "text" ||
+  field.type === "employee";
 
 /**
  * A new signed form: what is asked on the left, the form itself filling in on
@@ -134,11 +160,27 @@ export function FormEditor({
   };
   const approver = firstApprover(context.signoffs.steps);
 
-  const setLine = (index: number, key: string, value: string) =>
+  const setLine = (index: number, column: FormField, value: string) =>
     setLines((current) =>
-      current.map((line, lineIndex) =>
-        lineIndex === index ? { ...line, [key]: value } : line,
-      ),
+      current.map((line, lineIndex) => {
+        if (lineIndex !== index) return line;
+        const next = { ...line, [column.key]: value };
+        // The form beside it shows the person by name and employee ID.
+        if (column.type === "employee") {
+          const person = context.employees.find((item) => item.id === value);
+          next.name = person?.fullName ?? "";
+          next.employeeId = person?.employeeCode ?? "";
+        }
+        // Overtime: the hours follow the start and end time.
+        if (
+          formType === "overtime" &&
+          (column.key === "startTime" || column.key === "endTime")
+        ) {
+          const hours = hoursBetween(next.startTime ?? "", next.endTime ?? "");
+          if (hours) next.hours = hours;
+        }
+        return next;
+      }),
     );
 
   async function onSubmit(event: FormEvent) {
@@ -265,9 +307,8 @@ export function FormEditor({
                           <FieldInput
                             field={column}
                             value={line[column.key] ?? ""}
-                            onChange={(value) =>
-                              setLine(index, column.key, value)
-                            }
+                            employees={context.employees}
+                            onChange={(value) => setLine(index, column, value)}
                           />
                         </label>
                       ))}
@@ -284,6 +325,11 @@ export function FormEditor({
                   <PlusIcon />
                   Add another line
                 </button>
+                {definition.linesNote ? (
+                  <p className="text-xs text-slate-500">
+                    {definition.linesNote}
+                  </p>
+                ) : null}
               </div>
             ) : null}
           </div>

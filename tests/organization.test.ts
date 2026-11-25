@@ -173,7 +173,7 @@ describe("the chart", () => {
       [["Accountant"], ["Admin", "Purchaser"], [], [], [], ["Foreman"]],
     );
     // Each owner signs every form; the Foreman signs three of them.
-    assert.equal(chart.owners[0]!.signs.length, 6);
+    assert.equal(chart.owners[0]!.signs.length, 7);
     assert.deepEqual(chart.departments.at(-1)!.positions[0]!.signs, [
       "Leave Request",
       "Material Request Approval Form",

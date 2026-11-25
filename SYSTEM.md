@@ -259,7 +259,7 @@ to the system means adding its chain there.
 
 ### 6.5a Signed internal forms
 
-Five more of the company's paper forms use the same sign-off mechanism as leave requests:
+Six more of the company's paper forms use the same sign-off mechanism as leave requests:
 
 | Form | Raised in | Signed by, in order |
 | --- | --- | --- |
@@ -268,6 +268,7 @@ Five more of the company's paper forms use the same sign-off mechanism as leave 
 | Petty Cash Form | Accounts workspace | Prepared By, Accounts, every owner |
 | Material Request Approval Form | Engineering workspace | Foreman, Purchaser, Accounts, every owner |
 | Verbal Work Approval Form (adds 5% VAT) | Admin workspace | Foreman, Purchaser, Accounts, Managing Partner, Managing Director |
+| Over Time Payment Details (one sheet per day) | Reception | Prepared By, every owner, Accountant (clears it for payout) |
 
 Each is raised and followed on the same kind of screen as a leave request: fields on the left,
 the form filling in on the right, **Send for Approval** (`/{code}/forms/new/{type}`), then the
@@ -275,6 +276,16 @@ approval panel beside the form (`/{code}/forms/{id}`). Each gets a running refer
 year (`FN/2026/0001`) when it is sent, appears under My Tasks for whoever signs next, and
 prints like its paper version. Forms about an
 employee leave a box for that employee to sign on the printed copy.
+
+**Overtime** is filed by the day, because it is paid by the day. Reception files one sheet
+for a day: each person once, with start and end time (the hours fill in from them), the job
+and the client, plus a line for food. When it is sent, the system adds what each person is
+paid, from the salary on their staff record: salary ÷ 30 = per day, ÷ 9 = per hour, × hours
+(`src/lib/forms/overtime.ts`). The figures are kept with the sheet, so a later change of
+salary does not change a sheet already filed. Someone with no salary on record is pointed
+out on the sheet instead of being paid nothing. What people are paid gives away their
+salary, so those columns and the total are shown only to Accounts and to whoever keeps the
+staff records (`can.seeOvertimePay`); Reception sees names and hours.
 
 A form is **defined, not programmed**: what it asks is in
 [`src/lib/forms/definitions.ts`](src/lib/forms/definitions.ts), what it prints in

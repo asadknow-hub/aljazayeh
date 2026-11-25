@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { withTenantContext, type DbTransaction } from "@/db/client";
 import { approvalForms, organizationSettings, staffMembers } from "@/db/schema";
 import { assertCan, can, type OrgAccess } from "@/lib/access/access";
@@ -14,6 +14,7 @@ import {
   type FormAnswers,
   type FormType,
 } from "@/lib/forms/definitions";
+import { OVERTIME_PAY_KEYS, overtimePay } from "@/lib/forms/overtime";
 import { isUuid } from "@/lib/ids";
 import { normalizeFormAnswers } from "@/lib/forms/validate";
 import { requireOrg, resolveOrg, type ResolvedOrg } from "@/lib/org/resolve";
@@ -38,7 +39,34 @@ export function canRaise(access: OrgAccess, type: FormType): boolean {
     : can.openDepartment(access, place);
 }
 
-function toView(row: FormRow, staffName: string | null): ApprovalFormView {
+/**
+ * Whether a form's money is shown to the person. Only the overtime sheet
+ * holds money that is not everyone's to see: what people are paid for
+ * overtime gives away their salary.
+ */
+function showsMoney(access: OrgAccess, type: FormType): boolean {
+  return type !== "overtime" || can.seeOvertimePay(access);
+}
+
+/** A form's lines as the person may see them. */
+function linesFor(
+  access: OrgAccess,
+  type: FormType,
+  lines: Record<string, string>[],
+): Record<string, string>[] {
+  if (showsMoney(access, type)) return lines;
+  return lines.map((line) =>
+    Object.fromEntries(
+      Object.entries(line).filter(([key]) => !OVERTIME_PAY_KEYS.includes(key)),
+    ),
+  );
+}
+
+function toView(
+  access: OrgAccess,
+  row: FormRow,
+  staffName: string | null,
+): ApprovalFormView {
   const type = row.formType as FormType;
   const { fields, lines } = row;
   return {
@@ -47,11 +75,12 @@ function toView(row: FormRow, staffName: string | null): ApprovalFormView {
     referenceNo: row.referenceNo,
     staffName: staffName ?? "",
     summary:
+      FORM_DEFINITIONS[type].summary?.({ fields, lines }) ??
       staffName ??
       fields.projectName ??
       lines[0]?.description ??
       FORM_DEFINITIONS[type].title,
-    amount: row.amount,
+    amount: showsMoney(access, type) ? row.amount : null,
     status: row.status as ApprovalFormView["status"],
     createdAt: row.createdAt.toISOString(),
   };
@@ -59,7 +88,7 @@ function toView(row: FormRow, staffName: string | null): ApprovalFormView {
 
 async function loadForms(
   tx: DbTransaction,
-  organizationId: string,
+  org: ResolvedOrg,
   filter: { type?: FormType; status?: string } = {},
 ): Promise<ApprovalFormView[]> {
   const rows = await tx
@@ -68,7 +97,7 @@ async function loadForms(
     .leftJoin(staffMembers, eq(staffMembers.id, approvalForms.staffId))
     .where(
       and(
-        eq(approvalForms.organizationId, organizationId),
+        eq(approvalForms.organizationId, org.id),
         filter.type ? eq(approvalForms.formType, filter.type) : undefined,
         filter.status ? eq(approvalForms.status, filter.status) : undefined,
       ),
@@ -77,7 +106,7 @@ async function loadForms(
 
   return rows
     .filter((row) => isFormType(row.form.formType))
-    .map((row) => toView(row.form, row.staffName));
+    .map((row) => toView(org.access, row.form, row.staffName));
 }
 
 /** The forms of one kind, for the place they are raised from. */
@@ -89,7 +118,7 @@ export async function listApprovalFormsForUser(
   return withTenantContext(userId, async (tx) => {
     const org = await resolveOrg(tx, userId, orgCode);
     if (!org || !canRaise(org.access, type)) return [];
-    return loadForms(tx, org.id, { type });
+    return loadForms(tx, org, { type });
   });
 }
 
@@ -103,7 +132,7 @@ export async function listFormsAwaitingMySignature(
     if (!org) return [];
 
     const mine: ApprovalFormView[] = [];
-    for (const form of await loadForms(tx, org.id, { status: "pending" })) {
+    for (const form of await loadForms(tx, org, { status: "pending" })) {
       const state = await loadSignoffState(tx, org, form.formType, form.id, {
         finished: false,
       });
@@ -145,6 +174,10 @@ export async function createApprovalFormForUser(
       throw new UserError("Select an employee.");
     }
 
+    if (type === "overtime") {
+      answers.lines = await overtimeLines(tx, org, answers.lines);
+    }
+
     const amount = definition.amount(answers);
     const [created] = await tx
       .insert(approvalForms)
@@ -161,7 +194,60 @@ export async function createApprovalFormForUser(
       .returning();
     await signAsPreparer(tx, org, userId, type, created!.id);
 
-    return toView(created!, staff?.fullName ?? null);
+    return toView(org.access, created!, staff?.fullName ?? null);
+  });
+}
+
+/**
+ * The lines of an overtime sheet as they are kept: each with the person's
+ * name and employee ID, and what the overtime comes to at the salary on
+ * record today. The figures stay as they are once the sheet is filed.
+ */
+async function overtimeLines(
+  tx: DbTransaction,
+  org: ResolvedOrg,
+  lines: Record<string, string>[],
+): Promise<Record<string, string>[]> {
+  const ids = lines.map((line) => line.staffId!);
+  if (new Set(ids).size !== ids.length) {
+    throw new UserError(
+      "Someone is on the sheet twice. Put all of a person's overtime for the day on one line.",
+    );
+  }
+  const people = await tx
+    .select({
+      id: staffMembers.id,
+      fullName: staffMembers.fullName,
+      employeeCode: staffMembers.employeeCode,
+      salaryAmount: staffMembers.salaryAmount,
+    })
+    .from(staffMembers)
+    .where(
+      and(
+        eq(staffMembers.organizationId, org.id),
+        inArray(staffMembers.id, ids),
+      ),
+    );
+
+  return lines.map((line, index) => {
+    const person = people.find((item) => item.id === line.staffId);
+    if (!person) throw new UserError(`Line ${index + 1}: select an employee.`);
+    const hours = Number(line.hours);
+    if (!(hours > 0) || hours > 24) {
+      throw new UserError(
+        `Line ${index + 1}: enter how many hours of overtime ${person.fullName} worked.`,
+      );
+    }
+    const pay = overtimePay(Number(person.salaryAmount) || 0, hours);
+    return {
+      ...line,
+      name: person.fullName,
+      employeeId: person.employeeCode,
+      salary: pay.salary.toFixed(2),
+      perDay: pay.perDay.toFixed(2),
+      perHour: pay.perHour.toFixed(2),
+      amount: pay.amount.toFixed(2),
+    };
   });
 }
 
@@ -251,9 +337,9 @@ export async function getApprovalFormDocumentForUser(
       .limit(1);
 
     return {
-      ...toView(form, employee?.fullName ?? null),
+      ...toView(org.access, form, employee?.fullName ?? null),
       fields: form.fields,
-      lines: form.lines,
+      lines: linesFor(org.access, form.formType, form.lines),
       company: {
         name: org.name,
         nameArabic: settings?.nameArabic ?? "",
@@ -280,7 +366,12 @@ export type FormDraftContext = Pick<
   ApprovalFormDocument,
   "company" | "raisedBy" | "signoffs"
 > & {
-  employees: { id: string; fullName: string; jobTitle: string }[];
+  employees: {
+    id: string;
+    fullName: string;
+    jobTitle: string;
+    employeeCode: string;
+  }[];
 };
 
 export async function getFormDraftContextForUser(
@@ -300,12 +391,16 @@ export async function getFormDraftContextForUser(
       .from(staffMembers)
       .where(eq(staffMembers.id, org.access.staffId))
       .limit(1);
-    const employees = FORM_DEFINITIONS[formType].aboutEmployee
+    const definition = FORM_DEFINITIONS[formType];
+    const employees =
+      definition.aboutEmployee ||
+      definition.lineColumns.some((column) => column.type === "employee")
       ? await tx
           .select({
             id: staffMembers.id,
             fullName: staffMembers.fullName,
             jobTitle: staffMembers.jobTitle,
+            employeeCode: staffMembers.employeeCode,
           })
           .from(staffMembers)
           .where(

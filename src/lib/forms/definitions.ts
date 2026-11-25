@@ -6,6 +6,7 @@
  * printing are the same for all of them; who signs is in
  * src/lib/signoffs/chains.ts.
  */
+import { formatFormDate } from "@/lib/datetime/format";
 import type { InquiryWorkflowDepartmentKey } from "@/lib/inquiries/stages";
 
 export const FORM_TYPES = [
@@ -14,6 +15,7 @@ export const FORM_TYPES = [
   "petty_cash",
   "material_request",
   "verbal_work_approval",
+  "overtime",
 ] as const;
 
 export type FormType = (typeof FORM_TYPES)[number];
@@ -25,7 +27,15 @@ export function isFormType(value: string): value is FormType {
 export type FormField = {
   key: string;
   label: string;
-  type: "text" | "longtext" | "date" | "amount" | "number";
+  /** "employee" is one of the company's people, chosen from a list. */
+  type:
+    | "text"
+    | "longtext"
+    | "date"
+    | "time"
+    | "amount"
+    | "number"
+    | "employee";
   required?: boolean;
   defaultValue?: string;
 };
@@ -53,6 +63,10 @@ export type FormDefinition = {
   lineColumns: FormField[];
   /** Headline amount in AED, for forms that have one. */
   amount: (answers: FormAnswers) => number | null;
+  /** One line saying what a form of this kind is, for lists. */
+  summary?: (answers: FormAnswers) => string;
+  /** Said under the lines while the form is being filled in. */
+  linesNote?: string;
 };
 
 export const VAT_RATE = 0.05;
@@ -264,6 +278,46 @@ export const FORM_DEFINITIONS: Record<FormType, FormDefinition> = {
           total + number(line.qty) * number(line.jobPrice) * (1 + VAT_RATE),
         0,
       ),
+  },
+  overtime: {
+    title: "Over Time Payment Details",
+    listLabel: "Overtime",
+    itemLabel: "overtime sheet",
+    counterKey: "OT",
+    raisedIn: "reception",
+    aboutEmployee: false,
+    fields: [
+      {
+        key: "date",
+        label: "Day the overtime was worked",
+        type: "date",
+        required: true,
+      },
+      { key: "food", label: "Food (AED)", type: "amount" },
+    ],
+    lineColumns: [
+      { key: "staffId", label: "Employee", type: "employee", required: true },
+      { key: "startTime", label: "Start time", type: "time" },
+      { key: "endTime", label: "End time", type: "time" },
+      {
+        key: "hours",
+        label: "Overtime (hours)",
+        type: "number",
+        required: true,
+      },
+      { key: "jobProgress", label: "Job progress", type: "text" },
+      { key: "clientName", label: "Client name", type: "text" },
+    ],
+    // What each person is paid is added to the lines when the sheet is
+    // filed (src/lib/forms/overtime.ts); until then there is no total.
+    amount: ({ fields, lines }) =>
+      lines.some((line) => line.amount)
+        ? sum(lines, "amount") + number(fields.food)
+        : null,
+    summary: ({ fields, lines }) =>
+      `${formatFormDate(fields.date ?? "")} · ${lines.length} ${lines.length === 1 ? "person" : "people"}`,
+    linesNote:
+      "The hours fill in from the start and end time. What each person is paid is worked out from their salary when the sheet is sent, and is shown to Accounts and the owners.",
   },
 };
 

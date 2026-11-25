@@ -1,7 +1,7 @@
 /**
  * The signed internal forms: fine notice, medical amount, petty cash,
- * material request and verbal work approval. They share one mechanism, so
- * each test checks what is particular to a form.
+ * material request, verbal work approval and the daily overtime sheet. They
+ * share one mechanism, so each test checks what is particular to a form.
  */
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
@@ -12,6 +12,7 @@ import { authenticateUser } from "@/lib/auth/authenticate";
 import { appDateValue } from "@/lib/datetime/format";
 import type { StaffRoleKey } from "@/lib/departments/catalog";
 import type { ApprovalFormInput, FormType } from "@/lib/forms/definitions";
+import { hoursBetween } from "@/lib/forms/overtime";
 import { printedForm } from "@/lib/forms/print";
 import {
   createApprovalFormForUser,
@@ -25,6 +26,7 @@ import { setApprovalPinForUser } from "@/lib/signoffs/credentials";
 import {
   createStaffForUser,
   createStaffLoginForUser,
+  updateStaffSalaryForUser,
 } from "@/lib/staff/queries";
 
 const run = Date.now().toString(36);
@@ -380,5 +382,168 @@ describe("verbal work approval", () => {
       "35.00",
       "735.00",
     ]);
+  });
+});
+
+describe("daily overtime sheet", () => {
+  let formId: string;
+  let helperId: string;
+  const salary = (staffId: string, salaryAmount: string) =>
+    updateStaffSalaryForUser(owner, ORG, staffId, {
+      salaryAmount,
+      salaryCurrency: "AED",
+      payFrequency: "monthly",
+      lastSalaryPaidOn: "",
+      salaryNotes: "",
+    });
+
+  before(async () => {
+    helperId = await addStaff("Jubair", ["workers"]);
+    await salary(welderId, "1800");
+    // The helper has no salary on record yet.
+  });
+
+  test("the hours follow the start and end time, also past midnight", () => {
+    assert.equal(hoursBetween("18:00", "21:00"), "3");
+    assert.equal(hoursBetween("17:30", "19:00"), "1.5");
+    assert.equal(hoursBetween("22:00", "01:30"), "3.5");
+    assert.equal(hoursBetween("18:00", ""), "");
+  });
+
+  test("reception files one sheet for the day; a person is on it once, with hours", async () => {
+    const line = { staffId: welderId, hours: "3" };
+    await refused(
+      raise(people.sam, "overtime", {
+        fields: { date: "2026-11-24" },
+        lines: [line],
+      }),
+      /permission/,
+    );
+    await refused(
+      raise(people.rita, "overtime", { fields: {}, lines: [line] }),
+      /Day the overtime was worked is required/,
+    );
+    await refused(
+      raise(people.rita, "overtime", {
+        fields: { date: "2026-11-24" },
+        lines: [line, { ...line, hours: "1" }],
+      }),
+      /on the sheet twice/,
+    );
+    await refused(
+      raise(people.rita, "overtime", {
+        fields: { date: "2026-11-24" },
+        lines: [{ staffId: welderId, hours: "0" }],
+      }),
+      /how many hours of overtime Khairul Islam worked/,
+    );
+    await refused(
+      raise(people.rita, "overtime", {
+        fields: { date: "2026-11-24" },
+        lines: [{ staffId: welderId, hours: "2", startTime: "6pm" }],
+      }),
+      /Start time is not a valid time/,
+    );
+
+    const created = await raise(people.rita, "overtime", {
+      fields: { date: "2026-11-24", food: "30" },
+      lines: [
+        {
+          staffId: welderId,
+          startTime: "18:00",
+          endTime: "21:00",
+          hours: "3",
+          jobProgress: "Welding stringers",
+          clientName: "Barton Engineering",
+          // What the form shows while typing is not taken at its word.
+          name: "Someone Else",
+          amount: "9999",
+        },
+        { staffId: helperId, hours: "2" },
+      ],
+    });
+    formId = created.id;
+    assert.equal(created.referenceNo, `OT/${YEAR}/0001`);
+    assert.match(created.summary, /2 people$/);
+    // Reception files it but is not shown what people earn.
+    assert.equal(created.amount, null);
+  });
+
+  test("pay is the salary over 30 days and 9 hours, shown to Accounts and the owners only", async () => {
+    // 1800 / 30 = 60 a day, / 9 = 6.67 an hour, x 3 hours = 20.01.
+    const forAccounts = await document(people.tina, formId);
+    assert.equal(forAccounts.amount, "50.01");
+    assert.deepEqual(
+      forAccounts.lines.map((line) => [
+        line.name,
+        line.salary,
+        line.perDay,
+        line.perHour,
+        line.amount,
+      ]),
+      [
+        ["Khairul Islam", "1800.00", "60.00", "6.67", "20.01"],
+        ["Jubair", "0.00", "0.00", "0.00", "0.00"],
+      ],
+    );
+    const printed = printedForm(forAccounts);
+    assert.equal(printed.table?.columns.length, 12);
+    assert.deepEqual(printed.table?.rows[0]?.slice(1, 5), [
+      forAccounts.lines[0]!.employeeId,
+      "Khairul Islam",
+      "6:00 PM",
+      "9:00 PM",
+    ]);
+    // Someone with no salary on record is pointed out, not paid nothing.
+    assert.equal(printed.table?.rows[1]?.at(-1), "NO SALARY ON RECORD");
+    assert.deepEqual(printed.table?.rows[2]?.slice(2, 3), ["FOOD"]);
+    assert.equal(printed.table?.rows[2]?.at(-1), "30.00");
+    assert.equal(printed.table?.totals?.at(-1), "50.01");
+    assert.equal(printed.table?.totals?.[7], "5");
+
+    const forReception = await document(people.rita, formId);
+    assert.equal(forReception.amount, null);
+    assert.ok(forReception.lines.every((line) => line.amount === undefined));
+    assert.ok(forReception.lines.every((line) => line.salary === undefined));
+    assert.equal(forReception.lines[0]!.hours, "3");
+    assert.equal(printedForm(forReception).table?.columns.length, 8);
+    const listed = await listApprovalFormsForUser(
+      people.rita.userId,
+      ORG,
+      "overtime",
+    );
+    assert.deepEqual(
+      listed.map((form) => form.amount),
+      [null],
+    );
+  });
+
+  test("the owners approve it, then the accountant clears it for payout", async () => {
+    const start = await document(people.abu, formId);
+    assert.deepEqual(
+      start.signoffs.steps.map((step) => step.label),
+      [
+        "Prepared By",
+        "Approved by CEO & Managing Partner",
+        "Approved by Managing Director",
+        "Cleared by Accountant",
+      ],
+    );
+    await refused(
+      approve(people.tina, formId),
+      /not your turn|cannot sign|turn/i,
+    );
+    assert.equal(await approve(people.abu, formId), "pending");
+    assert.equal(await approve(people.didar, formId), "pending");
+    const waiting = await listFormsAwaitingMySignature(people.tina.userId, ORG);
+    assert.ok(waiting.some((form) => form.id === formId));
+    assert.equal(
+      await approve(people.tina, formId, "Paid in cash"),
+      "approved",
+    );
+
+    // A later change of salary does not change a sheet already filed.
+    await salary(welderId, "3600");
+    assert.equal((await document(people.tina, formId)).amount, "50.01");
   });
 });
