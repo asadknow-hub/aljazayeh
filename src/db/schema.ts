@@ -472,6 +472,33 @@ export const bankAccounts = pgTable(
 );
 
 /**
+ * The other names a company prints its papers under, each with its own
+ * logo: a workshop name beside an engineering name, say. The company's own
+ * name and logo are in `organizations` and `organization_settings`; these
+ * are the extra ones a paper can choose instead. One that is no longer used
+ * is switched off, not deleted, so papers that carry it keep printing it.
+ */
+export const letterheads = pgTable(
+  "letterheads",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    nameArabic: text("name_arabic").notNull().default(""),
+    /** Its logo, as an image data URL. */
+    logoImage: text("logo_image"),
+    active: boolean("active").notNull().default(true),
+    ...timestamps,
+  },
+  (table) => [
+    index("letterheads_org_idx").on(table.organizationId),
+    ...orgMemberRecords("letterheads"),
+  ],
+);
+
+/**
  * A company's own version of a paper of the inquiry process: its wording,
  * which details are asked and required, and the code in its numbers. What
  * can be changed, and the built-in version, are in

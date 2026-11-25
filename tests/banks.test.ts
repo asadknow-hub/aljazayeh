@@ -1,6 +1,7 @@
 /**
- * The company's bank accounts, kept by Accounts, and the papers that print
- * one of them. Also the employee IDs, which every employee has.
+ * What a paper prints about the company beyond its fixed details: one of
+ * its bank accounts, kept by Accounts, and one of the names it trades
+ * under. Also the employee IDs, which every employee has.
  */
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
@@ -16,6 +17,11 @@ import {
   updateBankAccountForUser,
 } from "@/lib/banks/queries";
 import type { BankAccountInput } from "@/lib/banks/types";
+import {
+  getCompanyLetterheadForUser,
+  removeLetterheadForUser,
+  saveLetterheadForUser,
+} from "@/lib/company-settings/queries";
 import type { StaffRoleKey } from "@/lib/departments/catalog";
 import {
   assignInquiryForUser,
@@ -362,6 +368,150 @@ describe("the bank account on a paper", () => {
       setDefaultBankAccountForUser(people.tina.userId, ORG, secondId),
       /no longer there/,
     );
+  });
+});
+
+describe("the name a paper is printed under", () => {
+  let inquiryId: string;
+  let workshopId: string;
+  const quotation = (fields: Record<string, string>, notes?: unknown) =>
+    saveInquiryStageForUser(
+      people.adam.userId,
+      ORG,
+      inquiryId,
+      {
+        fields: {
+          quotationDate: "2026-11-25",
+          vatPercent: "5",
+          termPayment: "Cash",
+          ...fields,
+        },
+        lineItems: [],
+        tables: notes
+          ? { notes: notes as Record<string, string>[] }
+          : undefined,
+      },
+      { complete: false },
+    );
+
+  before(async () => {
+    const created = await createInquiryForUser(people.adam.userId, ORG, {
+      fields: { customerName: "Two Names LLC", title: "Canopy", contact: "1" },
+      lineItems: [],
+    });
+    inquiryId = created.id;
+    await assignInquiryForUser(owner, ORG, inquiryId, people.adam.staffId);
+    await saveInquiryStageForUser(
+      people.adam.userId,
+      ORG,
+      inquiryId,
+      { fields: step(created, "inquiry").fields, lineItems: [] },
+      { complete: true },
+    );
+    await assignInquiryForUser(owner, ORG, inquiryId, people.adam.staffId);
+  });
+
+  test("whoever sets the company up adds its other names", async () => {
+    const name = {
+      name: "Bank Works Workshop",
+      nameArabic: "",
+      logoImage: null,
+    };
+    await refused(
+      saveLetterheadForUser(people.tina.userId, ORG, null, name),
+      /permission/,
+    );
+    await refused(
+      saveLetterheadForUser(owner, ORG, null, { ...name, name: "bank works" }),
+      /already prints under/,
+    );
+    await refused(
+      saveLetterheadForUser(owner, ORG, null, {
+        ...name,
+        logoImage: "data:text/html;base64,AAAA",
+      }),
+      /PNG or JPG/,
+    );
+
+    const names = await saveLetterheadForUser(owner, ORG, null, name);
+    assert.deepEqual(
+      names.map((item) => item.name),
+      ["Bank Works Workshop"],
+    );
+    workshopId = names[0]!.id;
+    await refused(
+      saveLetterheadForUser(owner, ORG, null, name),
+      /already prints under/,
+    );
+
+    // Everyone who prepares papers is offered it.
+    const company = await getCompanyLetterheadForUser(people.adam.userId, ORG);
+    assert.deepEqual(
+      company!.others.map((item) => [item.name, item.active]),
+      [["Bank Works Workshop", true]],
+    );
+  });
+
+  test("a paper is printed under the company's own name or another of its names", async () => {
+    const own = await quotation({});
+    assert.equal(step(own, "quotation").fields.letterhead, "");
+
+    const other = await quotation({ letterhead: workshopId });
+    assert.equal(step(other, "quotation").fields.letterhead, workshopId);
+
+    await refused(
+      quotation({ letterhead: crypto.randomUUID() }),
+      /no longer in use/,
+    );
+  });
+
+  test("a name the company stops using stays on the papers that carry it", async () => {
+    const extra = await saveLetterheadForUser(owner, ORG, null, {
+      name: "Bank Works Trading",
+      nameArabic: "",
+      logoImage: null,
+    });
+    const tradingId = extra.find((item) => item.name.endsWith("Trading"))!.id;
+    assert.deepEqual(
+      (await removeLetterheadForUser(owner, ORG, workshopId)).map(
+        (item) => item.name,
+      ),
+      ["Bank Works Trading"],
+    );
+
+    // The quotation that carries it is saved again without complaint.
+    const kept = await quotation({ letterhead: workshopId, discount: "1" });
+    assert.equal(step(kept, "quotation").fields.letterhead, workshopId);
+    const company = await getCompanyLetterheadForUser(people.adam.userId, ORG);
+    assert.deepEqual(
+      company!.others.map((item) => [item.name, item.active]),
+      [
+        ["Bank Works Trading", true],
+        ["Bank Works Workshop", false],
+      ],
+    );
+
+    // Once the paper moves to another name, the old one cannot come back.
+    await quotation({ letterhead: tradingId });
+    await refused(quotation({ letterhead: workshopId }), /no longer in use/);
+  });
+
+  test("the quotation keeps the notes typed under its terms, heading by heading", async () => {
+    const saved = await quotation({}, [
+      {
+        heading: "Police Permission",
+        text: "By the client.\nNot in our scope.",
+      },
+      { heading: "", text: "" },
+      { heading: "Transportation", text: "" },
+    ]);
+    assert.deepEqual(step(saved, "quotation").tables.notes, [
+      {
+        heading: "Police Permission",
+        text: "By the client.\nNot in our scope.",
+      },
+      { heading: "Transportation", text: "" },
+    ]);
   });
 });
 

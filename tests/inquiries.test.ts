@@ -314,8 +314,19 @@ describe("one job from inquiry to payment", () => {
     assert.equal(again.steps[2]?.fields.customerLpoNumber, "LPO-7781");
   });
 
-  test("our own LPO is prepared on the step, under the step's number", async () => {
-    const lpo = { lpoType: "own" };
+  test("a job confirmed verbally has no LPO to upload, but says who confirmed it", async () => {
+    await refused(
+      workStep(people.adam, inquiryId, { lpoType: "verbal" }, { complete: true }),
+      /Still needed: Who confirmed it/,
+    );
+  });
+
+  test("our own LPO is an extra paper of the step, under the step's number", async () => {
+    const lpo = {
+      lpoType: "verbal",
+      verbalBy: "Mr Didar to Rubel",
+      ownLpo: "yes",
+    };
     await refused(
       workStep(people.adam, inquiryId, lpo, { complete: true }),
       /Still needed: Supplier/,

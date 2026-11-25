@@ -92,6 +92,16 @@ const ANSWERS: Record<string, string> = {
 };
 
 const TABLES: StageTables = {
+  notes: [
+    {
+      heading: "Additional Work",
+      text: "Any work outside this quotation is quoted and approved separately before it starts.",
+    },
+    {
+      heading: "Project Completion Period",
+      text: "Three weeks from the LPO and the advance payment.",
+    },
+  ],
   poLines: [
     {
       description: "MS plate 10 mm, 1220 x 2440",
